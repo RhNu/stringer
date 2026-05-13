@@ -5,10 +5,12 @@ use crate::{
     PexFunction, PexHeader, PexInstruction, PexLocal, PexObject, PexOpcode, PexParameter,
     PexProperty, PexState, PexStringId, PexUserFlag, PexValue, PexVariable,
 };
+use tracing::{debug, instrument, trace};
 
 const SKYRIM_GAME_ID: u16 = 1;
 
 impl PexFile {
+    #[instrument(skip(bytes), fields(bytes = bytes.len()), err)]
     pub fn read_from_slice(bytes: &[u8]) -> Result<Self, PexError> {
         let mut reader = BinaryReader::new(bytes);
         let magic = reader.read_magic()?;
@@ -60,7 +62,7 @@ impl PexFile {
             });
         }
 
-        Ok(Self::from_parts(
+        let file = Self::from_parts(
             PexHeader::read(
                 PexVersion::new(major, minor),
                 compilation_time,
@@ -72,9 +74,17 @@ impl PexFile {
             debug_info,
             user_flags,
             objects,
-        ))
+        );
+        debug!(
+            strings = file.string_table().len(),
+            user_flags = file.user_flags.len(),
+            objects = file.objects.len(),
+            "read pex model"
+        );
+        Ok(file)
     }
 
+    #[instrument(skip(self), fields(strings = self.string_table().len(), objects = self.objects.len()), err)]
     pub fn write_to_vec(&self) -> Result<Vec<u8>, PexError> {
         validate_for_write(self)?;
         let mut writer = BinaryWriter::big_endian();
@@ -109,7 +119,9 @@ impl PexFile {
         for object in &self.objects {
             write_object(&mut writer, object, self.string_table().len())?;
         }
-        Ok(writer.into_bytes())
+        let bytes = writer.into_bytes();
+        debug!(bytes = bytes.len(), "wrote pex model");
+        Ok(bytes)
     }
 }
 
@@ -353,6 +365,7 @@ fn read_instruction(
         offset,
         opcode: opcode_byte,
     })?;
+    trace!(offset, opcode = opcode.name(), "read pex instruction");
     let mut arguments = Vec::with_capacity(opcode.fixed_arg_count());
     for _ in 0..opcode.fixed_arg_count() {
         arguments.push(read_value(reader, string_table_len)?);

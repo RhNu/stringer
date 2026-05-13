@@ -4,6 +4,7 @@ use stringer_core::{
     PexOperandPath, PexStringMetadata, StringEntry, StringEntryBundle, StringEntryContext,
     StringEntrySource,
 };
+use tracing::{debug, instrument, trace};
 
 use crate::{PexError, PexFile, PexFunction, PexInstruction, PexOpcode, PexStringId, PexValue};
 
@@ -108,6 +109,7 @@ struct ConcatGroup {
     parts: Vec<PexConcatPart>,
 }
 
+#[instrument(skip(asset), fields(path = %asset.path()), err)]
 pub fn parse_pex_file(asset: &FileAsset) -> Result<ParsedPex, PexError> {
     if asset.role() != FileRole::Pex {
         return Err(PexError::unsupported_file(
@@ -115,24 +117,34 @@ pub fn parse_pex_file(asset: &FileAsset) -> Result<ParsedPex, PexError> {
             "expected .pex script",
         ));
     }
+    let file = PexFile::read_from_slice(asset.bytes())?;
+    debug!(
+        strings = file.string_table().len(),
+        objects = file.objects.len(),
+        "parsed pex file"
+    );
     Ok(ParsedPex {
         original: asset.clone(),
-        file: PexFile::read_from_slice(asset.bytes())?,
+        file,
         dirty: false,
     })
 }
 
+#[instrument(skip(parsed), fields(path = parsed.path()), err)]
 pub fn write_pex_file(parsed: &ParsedPex) -> Result<FileAsset, PexError> {
     if !parsed.dirty {
+        trace!("preserving unmodified pex bytes");
         return Ok(parsed.original.clone());
     }
     let bytes = parsed.file.write_to_vec()?;
+    debug!(bytes = bytes.len(), "wrote pex file");
     Ok(FileAsset::new(
         parsed.original.path().to_owned(),
         Bytes::from(bytes),
     ))
 }
 
+#[instrument(skip(asset), fields(path = %asset.path()), err)]
 pub fn read_pex_strings(
     asset: FileAsset,
     _options: ReadPexOptions,
@@ -141,6 +153,11 @@ pub fn read_pex_strings(
     let mut entries = Vec::new();
     let mut bindings = Vec::new();
     extract_entries(parsed.path(), parsed.file(), &mut entries, &mut bindings);
+    debug!(
+        entries = entries.len(),
+        bindings = bindings.len(),
+        "read pex strings"
+    );
     Ok(PexStringBundle {
         parsed,
         entries,
@@ -148,11 +165,18 @@ pub fn read_pex_strings(
     })
 }
 
+#[instrument(skip(bundle), err)]
 pub fn write_pex_strings(mut bundle: PexStringBundle) -> Result<FileAsset, PexError> {
     if !bundle.entries.iter().any(StringEntry::is_dirty) {
+        trace!("preserving unmodified pex string bundle");
         return write_pex_file(&bundle.parsed);
     }
 
+    let dirty_entries = bundle
+        .entries
+        .iter()
+        .filter(|entry| entry.is_dirty())
+        .count();
     for entry in bundle.entries.iter_mut().filter(|entry| entry.is_dirty()) {
         let binding = bundle
             .bindings
@@ -169,6 +193,10 @@ pub fn write_pex_strings(mut bundle: PexStringBundle) -> Result<FileAsset, PexEr
                 .parsed
                 .file_mut()
                 .replace_string(binding.string_id, replacement)?;
+            trace!(
+                string_id = binding.string_id.index(),
+                "replaced unique pex string"
+            );
         } else {
             let new_id = bundle.parsed.file_mut().intern(&replacement)?;
             let operand =
@@ -181,9 +209,16 @@ pub fn write_pex_strings(mut bundle: PexStringBundle) -> Result<FileAsset, PexEr
             if let StringEntrySource::Pex(metadata) = entry.source_mut() {
                 metadata.string_id = new_id.index();
             }
+            trace!(
+                old_string_id = binding.string_id.index(),
+                new_string_id = new_id.index(),
+                reference_count,
+                "interned replacement for shared pex string"
+            );
         }
     }
 
+    debug!(dirty_entries, "wrote pex string edits");
     write_pex_file(&bundle.parsed)
 }
 

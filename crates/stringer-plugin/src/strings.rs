@@ -62,7 +62,7 @@ impl StringsFile {
     }
 }
 
-#[instrument(skip(asset), fields(path = %asset.path()))]
+#[instrument(skip(asset), fields(path = %asset.path()), err)]
 pub fn parse_strings_file(
     asset: &FileAsset,
     release: GameRelease,
@@ -130,7 +130,7 @@ pub fn parse_strings_file(
     Ok(strings)
 }
 
-#[instrument(skip(file), fields(path = %path.as_ref()))]
+#[instrument(skip(file), fields(path = %path.as_ref()), err)]
 pub fn write_strings_file(
     path: impl AsRef<str>,
     file: &StringsFile,

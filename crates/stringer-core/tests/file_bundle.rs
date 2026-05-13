@@ -26,6 +26,33 @@ fn identifies_plugin_and_strings_files_from_logical_paths() {
 }
 
 #[test]
+fn identifies_scaleform_translation_files_only_in_translation_folder() {
+    let scaleform = FileAsset::new(
+        "Data/Interface/Translations/MyMod_ENGLISH.txt",
+        Bytes::from_static(b"$Key\tText"),
+    );
+    let ordinary_text = FileAsset::new("readme.txt", Bytes::from_static(b"readme"));
+
+    assert_eq!(scaleform.role(), FileRole::Scaleform);
+    assert_eq!(scaleform.format(), FileFormat::ScaleformTranslation);
+    assert_eq!(ordinary_text.role(), FileRole::Unknown);
+    assert_eq!(ordinary_text.format(), FileFormat::Unknown);
+}
+
+#[test]
+fn filters_scaleform_files_from_bundle() {
+    let bundle = FileBundle::new(vec![
+        FileAsset::new(
+            "Data/Interface/Translations/MyMod_ENGLISH.txt",
+            Bytes::from_static(b"one"),
+        ),
+        FileAsset::new("Data/Scripts/QuestScript.pex", Bytes::from_static(b"two")),
+    ]);
+
+    assert_eq!(bundle.scaleform().count(), 1);
+}
+
+#[test]
 fn normalizes_bundle_lookup_paths_case_insensitively() {
     let bundle = FileBundle::new(vec![
         FileAsset::new(

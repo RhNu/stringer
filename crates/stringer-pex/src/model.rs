@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{PexError, PexInstruction, PexValue};
+use tracing::{instrument, trace};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PexStringId(u16);
@@ -162,9 +163,11 @@ impl PexFile {
         &self.header
     }
 
+    #[instrument(level = "trace", skip(self, text), fields(text_len = text.as_ref().len()))]
     pub fn intern(&mut self, text: impl AsRef<str>) -> Result<PexStringId, PexError> {
         let text = text.as_ref();
         if let Some(id) = self.string_lookup.get(text) {
+            trace!(string_id = id.index(), "reused pex string id");
             return Ok(*id);
         }
         ensure_u16("string table", self.strings.len() + 1)?;
@@ -172,6 +175,7 @@ impl PexFile {
         let id = PexStringId::new(self.strings.len() as u16);
         self.strings.push(text.to_string());
         self.string_lookup.insert(text.to_string(), id);
+        trace!(string_id = id.index(), "interned pex string");
         Ok(id)
     }
 
@@ -224,6 +228,7 @@ impl PexFile {
             self.string_lookup.remove(&old);
         }
         self.string_lookup.entry(text).or_insert(id);
+        trace!(string_id = id.index(), "replaced pex string table entry");
         Ok(())
     }
 }

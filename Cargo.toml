@@ -3,6 +3,7 @@ members = [
     "crates/stringer-core",
     "crates/stringer-pex",
     "crates/stringer-plugin",
+    "crates/stringer-scaleform",
 ]
 resolver = "3"
 

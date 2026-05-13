@@ -107,6 +107,7 @@ dependencies = [
  "bytes",
  "camino",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -116,6 +117,7 @@ dependencies = [
  "bytes",
  "stringer-core",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -129,6 +131,17 @@ dependencies = [
  "stringer-core",
  "thiserror",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "stringer-scaleform"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "camino",
+ "stringer-core",
+ "thiserror",
  "tracing",
 ]
 

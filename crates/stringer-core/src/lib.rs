@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use bytes::Bytes;
 use camino::{Utf8Path, Utf8PathBuf};
 use thiserror::Error;
+use tracing::{debug, instrument, trace};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FileFormat {
@@ -15,13 +16,15 @@ pub enum FileFormat {
     DlStrings,
     IlStrings,
     Pex,
+    ScaleformTranslation,
     Unknown,
 }
 
 impl FileFormat {
+    #[instrument(level = "trace", skip(path), fields(path = %path.as_ref()))]
     pub fn from_path(path: impl AsRef<Utf8Path>) -> Self {
-        match path
-            .as_ref()
+        let path = path.as_ref();
+        let format = match path
             .extension()
             .map(|extension| extension.to_ascii_lowercase())
             .as_deref()
@@ -33,8 +36,11 @@ impl FileFormat {
             Some("dlstrings") => Self::DlStrings,
             Some("ilstrings") => Self::IlStrings,
             Some("pex") => Self::Pex,
+            Some("txt") if is_scaleform_translation_path(path) => Self::ScaleformTranslation,
             _ => Self::Unknown,
-        }
+        };
+        trace!(?format, "classified file format");
+        format
     }
 }
 
@@ -43,17 +49,22 @@ pub enum FileRole {
     Plugin,
     Strings,
     Pex,
+    Scaleform,
     Unknown,
 }
 
 impl FileRole {
+    #[instrument(level = "trace", fields(?format))]
     pub fn from_format(format: FileFormat) -> Self {
-        match format {
+        let role = match format {
             FileFormat::Esp | FileFormat::Esm | FileFormat::Esl => Self::Plugin,
             FileFormat::Strings | FileFormat::DlStrings | FileFormat::IlStrings => Self::Strings,
             FileFormat::Pex => Self::Pex,
+            FileFormat::ScaleformTranslation => Self::Scaleform,
             FileFormat::Unknown => Self::Unknown,
-        }
+        };
+        trace!(?role, "classified file role");
+        role
     }
 }
 
@@ -66,10 +77,12 @@ pub struct FileAsset {
 }
 
 impl FileAsset {
+    #[instrument(level = "trace", skip(path, bytes))]
     pub fn new(path: impl Into<Utf8PathBuf>, bytes: Bytes) -> Self {
         let path = path.into();
         let format = FileFormat::from_path(&path);
         let role = FileRole::from_format(format);
+        trace!(?format, ?role, len = bytes.len(), "created file asset");
         Self {
             path,
             bytes,
@@ -78,9 +91,15 @@ impl FileAsset {
         }
     }
 
+    #[instrument(level = "trace", skip(path, bytes), fields(?role))]
     pub fn with_role(path: impl Into<Utf8PathBuf>, bytes: Bytes, role: FileRole) -> Self {
         let path = path.into();
         let format = FileFormat::from_path(&path);
+        trace!(
+            ?format,
+            len = bytes.len(),
+            "created file asset with explicit role"
+        );
         Self {
             path,
             bytes,
@@ -117,10 +136,12 @@ pub struct FileBundle {
 }
 
 impl FileBundle {
+    #[instrument(skip(files), fields(files = files.len()))]
     pub fn new(files: Vec<FileAsset>) -> Self {
         Self::try_new(files).expect("file bundle contains duplicate logical paths")
     }
 
+    #[instrument(skip(files), fields(files = files.len()))]
     pub fn try_new(files: Vec<FileAsset>) -> Result<Self, StringerCoreError> {
         let mut lookup = HashMap::with_capacity(files.len());
         for (index, file) in files.iter().enumerate() {
@@ -131,6 +152,7 @@ impl FileBundle {
                 });
             }
         }
+        debug!(files = files.len(), "created file bundle");
         Ok(Self { files, lookup })
     }
 
@@ -164,6 +186,95 @@ impl FileBundle {
         self.files
             .iter()
             .filter(|asset| asset.role() == FileRole::Pex)
+    }
+
+    pub fn scaleform(&self) -> impl Iterator<Item = &FileAsset> {
+        self.files
+            .iter()
+            .filter(|asset| asset.role() == FileRole::Scaleform)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Language {
+    English,
+    German,
+    Italian,
+    Spanish,
+    SpanishMexico,
+    French,
+    Polish,
+    PortugueseBrazil,
+    Chinese,
+    Russian,
+    Japanese,
+    Czech,
+    Hungarian,
+    Danish,
+    Finnish,
+    Greek,
+    Norwegian,
+    Swedish,
+    Turkish,
+    Arabic,
+    Korean,
+    Thai,
+    ChineseSimplified,
+}
+
+impl Language {
+    pub const ALL: [Self; 23] = [
+        Self::English,
+        Self::German,
+        Self::Italian,
+        Self::Spanish,
+        Self::SpanishMexico,
+        Self::French,
+        Self::Polish,
+        Self::PortugueseBrazil,
+        Self::Chinese,
+        Self::Russian,
+        Self::Japanese,
+        Self::Czech,
+        Self::Hungarian,
+        Self::Danish,
+        Self::Finnish,
+        Self::Greek,
+        Self::Norwegian,
+        Self::Swedish,
+        Self::Turkish,
+        Self::Arabic,
+        Self::Korean,
+        Self::Thai,
+        Self::ChineseSimplified,
+    ];
+
+    pub fn full_name(self) -> &'static str {
+        match self {
+            Self::English => "English",
+            Self::German => "German",
+            Self::Italian => "Italian",
+            Self::Spanish => "Spanish",
+            Self::SpanishMexico => "Spanish_Mexico",
+            Self::French => "French",
+            Self::Polish => "Polish",
+            Self::PortugueseBrazil => "Portuguese_Brazil",
+            Self::Chinese => "Chinese",
+            Self::Russian => "Russian",
+            Self::Japanese => "Japanese",
+            Self::Czech => "Czech",
+            Self::Hungarian => "Hungarian",
+            Self::Danish => "Danish",
+            Self::Finnish => "Finnish",
+            Self::Greek => "Greek",
+            Self::Norwegian => "Norwegian",
+            Self::Swedish => "Swedish",
+            Self::Turkish => "Turkish",
+            Self::Arabic => "Arabic",
+            Self::Korean => "Korean",
+            Self::Thai => "Thai",
+            Self::ChineseSimplified => "ChineseSimplified",
+        }
     }
 }
 
@@ -260,7 +371,7 @@ impl StringEntryContext {
 pub enum StringEntrySource {
     Plugin(PluginStringMetadata),
     Pex(PexStringMetadata),
-    Mcm(McmStringMetadata),
+    Scaleform(ScaleformStringMetadata),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -331,7 +442,7 @@ pub enum PexConcatPart {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct McmStringMetadata {
+pub struct ScaleformStringMetadata {
     pub path: Utf8PathBuf,
     pub key: Option<String>,
 }
@@ -452,4 +563,12 @@ fn normalize_lookup_key(path: &Utf8Path) -> String {
 
 fn normalize_lookup_str(path: &str) -> String {
     path.replace('\\', "/").to_ascii_lowercase()
+}
+
+fn is_scaleform_translation_path(path: &Utf8Path) -> bool {
+    let normalized = normalize_lookup_key(path);
+    let Some(rest) = normalized.strip_prefix("data/interface/translations/") else {
+        return false;
+    };
+    !rest.is_empty() && !rest.contains('/')
 }

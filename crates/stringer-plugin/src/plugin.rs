@@ -183,7 +183,7 @@ impl PluginLocalizationEntry {
     }
 }
 
-#[instrument(skip(asset), fields(path = %asset.path()))]
+#[instrument(skip(asset), fields(path = %asset.path()), err)]
 pub fn parse_plugin_file(
     asset: &FileAsset,
     options: ParsePluginOptions,
@@ -219,8 +219,10 @@ pub fn parse_plugin_file(
     })
 }
 
+#[instrument(skip(plugin), fields(path = plugin.path()), err)]
 pub fn write_plugin_file(plugin: &ParsedPlugin) -> Result<FileAsset, PluginError> {
     if !plugin.entries.iter().any(PluginLocalizationEntry::is_dirty) {
+        debug!("preserving unmodified plugin bytes");
         return Ok(plugin.original().clone());
     }
 

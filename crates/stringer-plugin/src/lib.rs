@@ -18,5 +18,6 @@ pub use plugin::{
     write_plugin_file,
 };
 pub use registry::{LocalizedField, skyrim_localized_fields};
+pub use stringer_core::Language;
 pub use strings::{StringsFile, parse_strings_file, write_strings_file};
-pub use types::{GameRelease, Language, LocalizedFieldSource, StringsKind};
+pub use types::{GameRelease, LocalizedFieldSource, StringsKind};

@@ -137,7 +137,7 @@ struct PluginEntryBinding {
     string_id: Option<u32>,
 }
 
-#[instrument(skip(files))]
+#[instrument(skip(files), err)]
 pub async fn read_localization(
     files: FileBundle,
     options: ReadOptions,
@@ -251,7 +251,7 @@ pub async fn read_localization(
     })
 }
 
-#[instrument(skip(bundle))]
+#[instrument(skip(bundle), err)]
 pub async fn write_localization(
     mut bundle: LocalizationBundle,
     options: WriteOptions,
@@ -359,7 +359,7 @@ fn strings_asset_info(path: &str) -> Option<StringsAssetInfo> {
         "ilstrings" => StringsKind::Il,
         _ => return None,
     };
-    let mut languages = all_languages();
+    let mut languages = Language::ALL.to_vec();
     languages.sort_by_key(|language| std::cmp::Reverse(language.full_name().len()));
     for language in languages {
         let suffix = format!("_{}", language.full_name());
@@ -376,32 +376,4 @@ fn strings_asset_info(path: &str) -> Option<StringsAssetInfo> {
         }
     }
     None
-}
-
-fn all_languages() -> Vec<Language> {
-    vec![
-        Language::English,
-        Language::German,
-        Language::Italian,
-        Language::Spanish,
-        Language::SpanishMexico,
-        Language::French,
-        Language::Polish,
-        Language::PortugueseBrazil,
-        Language::Chinese,
-        Language::Russian,
-        Language::Japanese,
-        Language::Czech,
-        Language::Hungarian,
-        Language::Danish,
-        Language::Finnish,
-        Language::Greek,
-        Language::Norwegian,
-        Language::Swedish,
-        Language::Turkish,
-        Language::Arabic,
-        Language::Korean,
-        Language::Thai,
-        Language::ChineseSimplified,
-    ]
 }
