@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/stringer-core",
+    "crates/stringer-pex",
     "crates/stringer-plugin",
 ]
 resolver = "3"

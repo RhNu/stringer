@@ -110,6 +110,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "stringer-pex"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "stringer-core",
+ "thiserror",
+]
+
+[[package]]
 name = "stringer-plugin"
 version = "0.1.0"
 dependencies = [
