@@ -1,0 +1,15 @@
+# Ignore
+
+# Editor
+.vscode/
+.idea/
+*.code-workspace
+*.iml
+
+# Temp
+*.log
+*.tmp
+/temp/
+
+# Rust
+/target/
