@@ -4,6 +4,7 @@ mod binary;
 mod codec;
 mod constants;
 mod error;
+mod filter;
 mod high_level;
 mod model;
 mod opcode;

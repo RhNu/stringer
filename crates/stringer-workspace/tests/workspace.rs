@@ -712,6 +712,60 @@ async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugi
 }
 
 #[tokio::test]
+async fn export_omits_pex_files_with_only_filtered_sources() {
+    let root = TempRoot::new("pex-export-filtered");
+    write_pex_fixture_with_literals(
+        &root.path().join("Data/Scripts/Example.pex"),
+        &["", "SomeIdentifier", "tag,tag,tag"],
+    );
+    let export_path = root.path().join("translations");
+
+    let summary = export_translations(ExportTranslationsOptions {
+        root: utf8(root.path()),
+        out: utf8(&export_path),
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(summary.entries, 0);
+    let manifest = json_file(&export_path.join("manifest.json"));
+    assert!(
+        manifest["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|file| file["kind"] != "pex")
+    );
+}
+
+#[tokio::test]
+async fn export_keeps_only_unfiltered_pex_sources() {
+    let root = TempRoot::new("pex-export-mixed");
+    write_pex_fixture_with_literals(
+        &root.path().join("Data/Scripts/Example.pex"),
+        &["SomeIdentifier", "Open Door", "tag,tag,tag", "Hello world"],
+    );
+    let export_path = root.path().join("translations");
+
+    let summary = export_translations(ExportTranslationsOptions {
+        root: utf8(root.path()),
+        out: utf8(&export_path),
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(summary.entries, 2);
+    let rows = entry_rows(&export_path, "pex", None);
+    let sources = rows
+        .iter()
+        .map(|row| row["source"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(sources, ["Open Door", "Hello world"]);
+}
+
+#[tokio::test]
 async fn import_updates_pex_literals_into_override_script() {
     let root = TempRoot::new("pex-import");
     let source = root.path().join("Data/Scripts/Example.pex");

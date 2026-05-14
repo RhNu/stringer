@@ -6,6 +6,7 @@ use stringer_core::{
 };
 use tracing::{debug, instrument, trace};
 
+use crate::filter::{PexStringFilter, PexStringFilterInput};
 use crate::{PexError, PexFile, PexFunction, PexInstruction, PexOpcode, PexStringId, PexValue};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -228,6 +229,7 @@ fn extract_entries(
     entries: &mut Vec<StringEntry>,
     bindings: &mut Vec<PexStringBinding>,
 ) {
+    let filter = PexStringFilter::default_rules();
     for (object_index, object) in file.objects.iter().enumerate() {
         for (property_index, property) in object.properties.iter().enumerate() {
             if let Some(function) = &property.read_function {
@@ -247,6 +249,7 @@ fn extract_entries(
                     function,
                     entries,
                     bindings,
+                    &filter,
                 );
             }
             if let Some(function) = &property.write_function {
@@ -266,6 +269,7 @@ fn extract_entries(
                     function,
                     entries,
                     bindings,
+                    &filter,
                 );
             }
         }
@@ -288,6 +292,7 @@ fn extract_entries(
                     function,
                     entries,
                     bindings,
+                    &filter,
                 );
             }
         }
@@ -309,6 +314,7 @@ fn extract_function(
     function: &PexFunction,
     entries: &mut Vec<StringEntry>,
     bindings: &mut Vec<PexStringBinding>,
+    filter: &PexStringFilter,
 ) {
     let mut state = FunctionExtractionState::default();
     for (instruction_index, instruction) in function.instructions.iter().enumerate() {
@@ -327,6 +333,7 @@ fn extract_function(
                 entries,
                 bindings,
                 &mut state,
+                filter,
             );
         }
         for (argument_index, value) in instruction.variadic_arguments.iter().enumerate() {
@@ -342,6 +349,7 @@ fn extract_function(
                 entries,
                 bindings,
                 &mut state,
+                filter,
             );
         }
     }
@@ -362,6 +370,7 @@ fn extract_value(
     entries: &mut Vec<StringEntry>,
     bindings: &mut Vec<PexStringBinding>,
     state: &mut FunctionExtractionState,
+    filter: &PexStringFilter,
 ) {
     let PexValue::String(string_id) = value else {
         add_concat_operand_part(input, value, state);
@@ -373,6 +382,29 @@ fn extract_value(
     }
 
     let text = string(input.function_input.file, string_id).to_string();
+    let call_context = call_context(input.function_input.file, input.instruction);
+    let filter_input = PexStringFilterInput {
+        text: &text,
+        path: input.function_input.path,
+        object_name: input.function_input.object_name,
+        state_name: input.function_input.state_name,
+        function_name: input.function_input.function_name,
+        function_kind: input.function_input.function_kind,
+        opcode: input.instruction.opcode,
+        operand: input.operand,
+        string_id,
+        call_context: call_context.as_ref(),
+        in_concat: input.concat_group.is_some(),
+    };
+    if let Some(reason) = filter.evaluate(&filter_input) {
+        add_concat_operand_part(input, value, state);
+        trace!(
+            ?reason,
+            string_id = string_id.index(),
+            "filtered pex string"
+        );
+        return;
+    }
     let entry_id = pex_entry_id(
         input.function_input.path,
         input.function_input.object_name,
@@ -413,7 +445,7 @@ fn extract_value(
             opcode: input.instruction.opcode.name().to_string(),
             operand: input.operand,
             string_id: string_id.index(),
-            call_context: call_context(input.function_input.file, input.instruction),
+            call_context,
             concat,
         }),
         StringEntryContext::default(),

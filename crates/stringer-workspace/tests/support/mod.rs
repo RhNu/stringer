@@ -166,6 +166,13 @@ pub fn write_pex_fixture(path: &Path) {
     write_bytes(path, &pex_fixture_bytes());
 }
 
+pub fn write_pex_fixture_with_literals(path: &Path, texts: &[&str]) {
+    write_bytes(
+        path,
+        &pex_fixture_with_literals(texts).write_to_vec().unwrap(),
+    );
+}
+
 pub fn pex_fixture_bytes() -> Vec<u8> {
     pex_fixture().write_to_vec().unwrap()
 }
@@ -181,6 +188,10 @@ pub fn pex_entry_text(path: &Path) -> String {
 }
 
 fn pex_fixture() -> PexFile {
+    pex_fixture_with_literals(&["Hello world"])
+}
+
+fn pex_fixture_with_literals(texts: &[&str]) -> PexFile {
     let mut file = PexFile::new(PexHeader::new_skyrim(0, "Example.psc", "tester", "builder"));
     let empty = file.intern("").unwrap();
     let object = file.intern("Example").unwrap();
@@ -188,7 +199,17 @@ fn pex_fixture() -> PexFile {
     let none = file.intern("None").unwrap();
     let tmp = file.intern("tmp").unwrap();
     let string_type = file.intern("String").unwrap();
-    let hello = file.intern("hello").unwrap();
+    let instructions = texts
+        .iter()
+        .map(|text| {
+            let id = file.intern(*text).unwrap();
+            PexInstruction::new(
+                PexOpcode::Assign,
+                vec![PexValue::Identifier(tmp), PexValue::String(id)],
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
     file.objects.push(PexObject {
         name: object,
         parent_class_name: empty,
@@ -211,13 +232,7 @@ fn pex_fixture() -> PexFile {
                     name: tmp,
                     type_name: string_type,
                 }],
-                instructions: vec![
-                    PexInstruction::new(
-                        PexOpcode::Assign,
-                        vec![PexValue::Identifier(tmp), PexValue::String(hello)],
-                    )
-                    .unwrap(),
-                ],
+                instructions,
             }],
         }],
     });

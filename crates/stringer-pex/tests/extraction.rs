@@ -20,10 +20,10 @@ fn extractable_file() -> PexFile {
     let none = file.intern("None").unwrap();
     let local = file.intern("tmp").unwrap();
     let string_type = file.intern("String").unwrap();
-    let hello = file.intern("hello").unwrap();
+    let hello = file.intern("Hello world").unwrap();
     let debug = file.intern("Debug").unwrap();
     let notification = file.intern("Notification").unwrap();
-    let shown = file.intern("shown").unwrap();
+    let shown = file.intern("Quest updated").unwrap();
     let prop = file.intern("Title").unwrap();
 
     file.objects.push(PexObject {
@@ -92,7 +92,7 @@ fn extracts_literals_but_skips_call_and_property_symbol_positions() {
         .iter()
         .map(|entry| entry.text())
         .collect::<Vec<_>>();
-    assert_eq!(texts, ["hello", "shown"]);
+    assert_eq!(texts, ["Hello world", "Quest updated"]);
     let StringEntrySource::Pex(PexStringMetadata {
         object,
         state,
@@ -133,7 +133,7 @@ fn groups_traceable_string_concatenation_literals() {
     let name = file.intern("name").unwrap();
     let string_type = file.intern("String").unwrap();
     let first = file.intern("Hello ").unwrap();
-    let second = file.intern("world").unwrap();
+    let second = file.intern("wide world").unwrap();
     file.objects.push(PexObject {
         name: object,
         parent_class_name: empty,
@@ -202,6 +202,115 @@ fn groups_traceable_string_concatenation_literals() {
 }
 
 #[test]
+fn filters_empty_identifier_like_and_tag_list_sources() {
+    let file = filter_fixture([
+        "",
+        "SomeCamelCase",
+        "someCamelCase",
+        "some_id",
+        "SOME_ID",
+        "Namespace.Member",
+        "queststage01",
+        "tag,tag,tag",
+        "foo_bar,baz-1",
+        "Open Door",
+        "Hello world",
+    ]);
+    let asset = FileAsset::new(
+        "Data/Scripts/Example.pex",
+        Bytes::from(file.write_to_vec().unwrap()),
+    );
+
+    let bundle = read_pex_strings(asset, ReadPexOptions::default()).unwrap();
+
+    let texts = bundle
+        .string_entries()
+        .iter()
+        .map(|entry| entry.text())
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Open Door", "Hello world"]);
+}
+
+#[test]
+fn keeps_filtered_concat_sources_as_context_operands() {
+    let mut file = PexFile::new(header());
+    let empty = file.intern("").unwrap();
+    let object = file.intern("Example").unwrap();
+    let function = file.intern("Run").unwrap();
+    let none = file.intern("None").unwrap();
+    let tmp = file.intern("tmp").unwrap();
+    let name = file.intern("name").unwrap();
+    let string_type = file.intern("String").unwrap();
+    let filtered = file.intern("InternalName").unwrap();
+    let translatable = file.intern(" opened").unwrap();
+    file.objects.push(PexObject {
+        name: object,
+        parent_class_name: empty,
+        documentation_string: empty,
+        user_flags: 0,
+        auto_state_name: empty,
+        variables: Vec::new(),
+        properties: Vec::new(),
+        states: vec![PexState {
+            name: empty,
+            functions: vec![PexFunction {
+                name: function,
+                return_type_name: none,
+                documentation_string: empty,
+                user_flags: 0,
+                is_global: false,
+                is_native: false,
+                parameters: Vec::new(),
+                locals: vec![PexLocal {
+                    name: tmp,
+                    type_name: string_type,
+                }],
+                instructions: vec![
+                    PexInstruction::new(
+                        PexOpcode::StrCat,
+                        vec![
+                            PexValue::Identifier(tmp),
+                            PexValue::String(filtered),
+                            PexValue::Identifier(name),
+                        ],
+                    )
+                    .unwrap(),
+                    PexInstruction::new(
+                        PexOpcode::StrCat,
+                        vec![
+                            PexValue::Identifier(tmp),
+                            PexValue::Identifier(tmp),
+                            PexValue::String(translatable),
+                        ],
+                    )
+                    .unwrap(),
+                ],
+            }],
+        }],
+    });
+    let asset = FileAsset::new(
+        "Data/Scripts/Example.pex",
+        Bytes::from(file.write_to_vec().unwrap()),
+    );
+
+    let bundle = read_pex_strings(asset, ReadPexOptions::default()).unwrap();
+
+    assert_eq!(bundle.string_entries().len(), 1);
+    assert_eq!(bundle.string_entries()[0].text(), " opened");
+    let concat = pex_metadata(&bundle.string_entries()[0])
+        .concat
+        .as_ref()
+        .unwrap();
+    assert_eq!(concat.part_index, 0);
+    assert!(concat.parts.iter().any(|part| {
+        matches!(
+            part,
+            stringer_core::PexConcatPart::Operand { label } if label == "InternalName"
+        )
+    }));
+}
+
+#[test]
 fn editing_shared_literal_interns_replacement_without_renaming_metadata_strings() {
     let mut file = PexFile::new(header());
     let empty = file.intern("").unwrap();
@@ -210,7 +319,7 @@ fn editing_shared_literal_interns_replacement_without_renaming_metadata_strings(
     let none = file.intern("None").unwrap();
     let tmp = file.intern("tmp").unwrap();
     let string_type = file.intern("String").unwrap();
-    let shared = file.intern("same").unwrap();
+    let shared = file.intern("Same text").unwrap();
     file.objects.push(PexObject {
         name: object,
         parent_class_name: empty,
@@ -257,7 +366,7 @@ fn editing_shared_literal_interns_replacement_without_renaming_metadata_strings(
 
     assert_eq!(
         reparsed.string(object.documentation_string).unwrap(),
-        "same"
+        "Same text"
     );
     assert_eq!(string_operand(&reparsed, instruction, 1), "changed");
 }
@@ -268,7 +377,7 @@ fn editing_literal_shared_with_debug_info_or_user_flag_does_not_rename_metadata(
     let shared = file
         .string_table()
         .iter()
-        .position(|text| text == "same")
+        .position(|text| text == "Same text")
         .map(|index| stringer_pex::PexStringId::new(index as u16))
         .unwrap();
     file.debug_info = Some(PexDebugInfo {
@@ -299,16 +408,19 @@ fn editing_literal_shared_with_debug_info_or_user_flag_does_not_rename_metadata(
 
     assert_eq!(
         reparsed.string(debug.functions[0].function_name),
-        Some("same")
+        Some("Same text")
     );
-    assert_eq!(reparsed.string(reparsed.user_flags[0].name), Some("same"));
+    assert_eq!(
+        reparsed.string(reparsed.user_flags[0].name),
+        Some("Same text")
+    );
     assert_eq!(string_operand(&reparsed, instruction, 1), "changed");
 }
 
 #[test]
 fn writes_reordered_pex_entries_to_their_original_instruction_operands() {
     let mut file = shared_metadata_file();
-    let second = file.intern("second").unwrap();
+    let second = file.intern("Second text").unwrap();
     let local_name = file.objects[0].states[0].functions[0].locals[0].name;
     file.objects[0].states[0].functions[0].instructions.push(
         PexInstruction::new(
@@ -329,7 +441,7 @@ fn writes_reordered_pex_entries_to_their_original_instruction_operands() {
     let second_entry = bundle
         .string_entries_mut()
         .iter_mut()
-        .find(|entry| entry.text() == "second")
+        .find(|entry| entry.text() == "Second text")
         .expect("second entry should exist");
     second_entry.set_text("changed-second");
 
@@ -337,7 +449,7 @@ fn writes_reordered_pex_entries_to_their_original_instruction_operands() {
     let reparsed = PexFile::read_from_slice(written.bytes()).unwrap();
     let instructions = &reparsed.objects[0].states[0].functions[0].instructions;
 
-    assert_eq!(string_operand(&reparsed, &instructions[0], 1), "same");
+    assert_eq!(string_operand(&reparsed, &instructions[0], 1), "Same text");
     assert_eq!(
         string_operand(&reparsed, &instructions[1], 1),
         "changed-second"
@@ -352,7 +464,7 @@ fn shared_metadata_file() -> PexFile {
     let none = file.intern("None").unwrap();
     let tmp = file.intern("tmp").unwrap();
     let string_type = file.intern("String").unwrap();
-    let shared = file.intern("same").unwrap();
+    let shared = file.intern("Same text").unwrap();
     file.objects.push(PexObject {
         name: object,
         parent_class_name: empty,
@@ -382,6 +494,54 @@ fn shared_metadata_file() -> PexFile {
                     )
                     .unwrap(),
                 ],
+            }],
+        }],
+    });
+    file
+}
+
+fn filter_fixture<const N: usize>(texts: [&str; N]) -> PexFile {
+    let mut file = PexFile::new(header());
+    let empty = file.intern("").unwrap();
+    let object = file.intern("Example").unwrap();
+    let function = file.intern("Run").unwrap();
+    let none = file.intern("None").unwrap();
+    let tmp = file.intern("tmp").unwrap();
+    let string_type = file.intern("String").unwrap();
+    let instructions = texts
+        .into_iter()
+        .map(|text| {
+            let id = file.intern(text).unwrap();
+            PexInstruction::new(
+                PexOpcode::Assign,
+                vec![PexValue::Identifier(tmp), PexValue::String(id)],
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+    file.objects.push(PexObject {
+        name: object,
+        parent_class_name: empty,
+        documentation_string: empty,
+        user_flags: 0,
+        auto_state_name: empty,
+        variables: Vec::new(),
+        properties: Vec::new(),
+        states: vec![PexState {
+            name: empty,
+            functions: vec![PexFunction {
+                name: function,
+                return_type_name: none,
+                documentation_string: empty,
+                user_flags: 0,
+                is_global: false,
+                is_native: false,
+                parameters: Vec::new(),
+                locals: vec![PexLocal {
+                    name: tmp,
+                    type_name: string_type,
+                }],
+                instructions,
             }],
         }],
     });
