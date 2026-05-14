@@ -436,3 +436,51 @@ async fn edits_non_localized_embedded_strings_through_high_level_api() {
     );
     assert_eq!(output.strings().count(), 0);
 }
+
+#[tokio::test]
+async fn writes_utf8_strings_for_skyrim_se_english_when_text_needs_unicode() {
+    let plugin = build_plugin(
+        localized_header(),
+        vec![build_major(
+            "WEAP",
+            0x800,
+            0,
+            vec![build_subrecord("FULL", &1u32.to_le_bytes())],
+        )],
+    );
+    let mut strings = StringsFile::new(StringsKind::Normal, Language::English);
+    strings.insert(1, "Iron Sword");
+    let bundle = FileBundle::new(vec![
+        FileAsset::new("Data/MyMod.esp", Bytes::from(plugin)),
+        write_strings_file(
+            "Data/Strings/MyMod_English.STRINGS",
+            &strings,
+            GameRelease::SkyrimSe,
+        )
+        .unwrap(),
+    ]);
+    let mut localization = read_localization(
+        bundle,
+        ReadOptions::new(GameRelease::SkyrimSe, Language::English),
+    )
+    .await
+    .unwrap();
+    localization.entries_mut()[0].set_text("钢剑");
+
+    let output = write_localization(
+        localization,
+        WriteOptions::new(GameRelease::SkyrimSe, Language::English),
+    )
+    .await
+    .unwrap();
+    let parsed = stringer_plugin::parse_strings_file(
+        output
+            .get("Data/Strings/MyMod_English.STRINGS")
+            .expect("strings output"),
+        GameRelease::SkyrimSe,
+        Language::English,
+    )
+    .unwrap();
+
+    assert_eq!(parsed.get(1), Some("钢剑"));
+}

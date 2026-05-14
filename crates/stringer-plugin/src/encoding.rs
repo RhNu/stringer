@@ -97,10 +97,7 @@ fn skyrim_se_encoding(language: Language) -> EncodingChoice {
             utf8_with_fallback(WINDOWS_1250)
         }
         Language::Russian => utf8_with_fallback(WINDOWS_1251),
-        Language::English => EncodingChoice {
-            primary: WINDOWS_1252,
-            fallback: None,
-        },
+        Language::English => utf8_with_fallback(WINDOWS_1252),
         Language::French
         | Language::German
         | Language::Italian

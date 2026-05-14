@@ -1,0 +1,78 @@
+use std::io;
+
+use camino::Utf8PathBuf;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum WorkspaceError {
+    #[error("failed to read `{path}`: {source}")]
+    ReadFile {
+        path: Utf8PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("failed to write `{path}`: {source}")]
+    WriteFile {
+        path: Utf8PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("failed to resolve current directory: {source}")]
+    CurrentDirectory {
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("failed to parse TOML config `{path}`: {source}")]
+    ConfigToml {
+        path: Utf8PathBuf,
+        #[source]
+        source: toml::de::Error,
+    },
+
+    #[error("missing workspace setting `{name}`")]
+    MissingSetting { name: &'static str },
+
+    #[error("invalid workspace setting `{name}` value `{value}`")]
+    InvalidSetting { name: &'static str, value: String },
+
+    #[error("failed to parse JSONL `{path}` line {line}: {source}")]
+    JsonLine {
+        path: Utf8PathBuf,
+        line: usize,
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("duplicate translation id `{id}` in `{path}`")]
+    DuplicateTranslationId { path: Utf8PathBuf, id: String },
+
+    #[error("translation id `{id}` does not match any exported entry")]
+    UnknownTranslationId { id: String },
+
+    #[error("duplicate output logical path `{path}`")]
+    DuplicateOutputPath { path: String },
+
+    #[error("invalid override logical path `{path}`: {message}")]
+    InvalidLogicalPath { path: String, message: String },
+
+    #[error("invalid override root `{root}`: {message}")]
+    InvalidOverrideRoot { root: Utf8PathBuf, message: String },
+
+    #[error(transparent)]
+    Reader(#[from] stringer_reader::ReaderError),
+
+    #[error(transparent)]
+    Plugin(#[from] stringer_plugin::PluginError),
+
+    #[error(transparent)]
+    Pex(#[from] stringer_pex::PexError),
+
+    #[error(transparent)]
+    Scaleform(#[from] stringer_scaleform::ScaleformError),
+
+    #[error(transparent)]
+    Bundle(#[from] stringer_core::StringerCoreError),
+}

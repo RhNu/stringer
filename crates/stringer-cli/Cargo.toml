@@ -1,0 +1,17 @@
+[package]
+name = "stringer-cli"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "stringer"
+path = "src/main.rs"
+
+[dependencies]
+camino.workspace = true
+clap = { workspace = true, features = ["derive"] }
+miette = { workspace = true, features = ["fancy"] }
+stringer-workspace = { path = "../stringer-workspace" }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
