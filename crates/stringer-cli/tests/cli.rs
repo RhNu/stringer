@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use stringer_cli::{Cli, Command, KnowledgeCommand, KnowledgeIndexCommand};
 
 #[test]
@@ -242,4 +242,44 @@ fn knowledge_index_rebuild_command_uses_root_settings_and_knowledge_roots() {
         command.override_knowledge_root.as_deref(),
         Some("override".into())
     );
+}
+
+#[test]
+fn root_help_explains_agent_workflow() {
+    let help = Cli::command().render_long_help().to_string();
+
+    assert!(help.contains("典型流程"));
+    assert!(help.contains("knowledge annotate"));
+    assert!(help.contains("entries/**/*.jsonl"));
+}
+
+#[test]
+fn export_help_explains_translation_package_output() {
+    let mut command = Cli::command();
+    let help = command
+        .find_subcommand_mut("export")
+        .expect("export subcommand exists")
+        .render_long_help()
+        .to_string();
+
+    assert!(help.contains("manifest.json"));
+    assert!(help.contains("--game-release"));
+    assert!(help.contains("source-locale"));
+}
+
+#[test]
+fn lookup_help_explains_machine_readable_usage() {
+    let mut command = Cli::command();
+    let knowledge = command
+        .find_subcommand_mut("knowledge")
+        .expect("knowledge subcommand exists");
+    let help = knowledge
+        .find_subcommand_mut("lookup")
+        .expect("lookup subcommand exists")
+        .render_long_help()
+        .to_string();
+
+    assert!(help.contains("--json"));
+    assert!(help.contains("plugin"));
+    assert!(help.contains("record-type"));
 }
