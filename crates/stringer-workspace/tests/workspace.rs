@@ -92,7 +92,8 @@ async fn exports_scaleform_package_with_manifest_and_clean_entry_rows() {
         rows[0]["id"],
         "scaleform:Interface/Translations/MyMod_English.txt:$Title"
     );
-    assert_eq!(rows[0]["source_text"], "Iron Sword");
+    assert_eq!(rows[0]["source"], "Iron Sword");
+    assert_eq!(rows[0]["context"]["key"], "$Title");
     assert!(rows[0].get("schema_version").is_none());
     assert!(rows[0].get("kind").is_none());
     assert!(rows[0].get("asset_path").is_none());
@@ -119,7 +120,7 @@ async fn import_writes_only_changed_override_files_and_leaves_source_unchanged()
     write_entry_rows(
         &translations,
         "scaleform",
-        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translated_text":"钢剑"}"#,
+        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translation":"钢剑"}"#,
     );
     let override_root = TempRoot::new("import-scaleform-override");
 
@@ -169,7 +170,7 @@ async fn import_uses_asset_language_from_manifest() {
     write_entry_rows(
         &translations,
         "scaleform",
-        r#"{"id":"scaleform:Interface/Translations/MyMod_French.txt:$Title","translated_text":"铁剑"}"#,
+        r#"{"id":"scaleform:Interface/Translations/MyMod_French.txt:$Title","translation":"铁剑"}"#,
     );
     let override_root = TempRoot::new("manifest-language-override");
 
@@ -215,8 +216,8 @@ async fn import_rejects_duplicate_translated_ids() {
         &translations,
         "scaleform",
         concat!(
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"translated_text\":\"A\"}\n",
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"translated_text\":\"B\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"translation\":\"A\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"translation\":\"B\"}\n",
         ),
     );
 
@@ -234,7 +235,7 @@ async fn import_rejects_duplicate_translated_ids() {
 }
 
 #[tokio::test]
-async fn import_rejects_duplicate_ids_even_when_only_one_row_has_translated_text() {
+async fn import_rejects_duplicate_ids_even_when_only_one_row_has_translation() {
     let root = TempRoot::new("duplicate-id-missing-text");
     write_text(
         &root
@@ -255,7 +256,7 @@ async fn import_rejects_duplicate_ids_even_when_only_one_row_has_translated_text
         "scaleform",
         concat!(
             "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\"}\n",
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"translated_text\":\"Steel Sword\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"translation\":\"Steel Sword\"}\n",
         ),
     );
 
@@ -292,7 +293,7 @@ async fn import_rejects_override_root_that_is_the_source_root() {
     write_entry_rows(
         &translations,
         "scaleform",
-        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translated_text":"Steel Sword"}"#,
+        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translation":"Steel Sword"}"#,
     );
 
     let error = import_translations(ImportTranslationsOptions {
@@ -336,7 +337,7 @@ async fn import_rejects_unknown_translation_ids() {
     write_entry_rows(
         &translations,
         "scaleform",
-        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Missing","translated_text":"Steel Sword"}"#,
+        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Missing","translation":"Steel Sword"}"#,
     );
 
     let error = import_translations(ImportTranslationsOptions {
@@ -457,7 +458,7 @@ async fn import_ignores_unlisted_translation_package_entry_files() {
     .unwrap();
     write_text(
         &translations.join("entries/scaleform/unlisted.jsonl"),
-        r#"{"id":"scaleform:Missing.txt:$Title","translated_text":"Bad"}"#,
+        r#"{"id":"scaleform:Missing.txt:$Title","translation":"Bad"}"#,
     );
     let override_root = TempRoot::new("ignore-unlisted-override");
 
@@ -476,7 +477,7 @@ async fn import_ignores_unlisted_translation_package_entry_files() {
 }
 
 #[tokio::test]
-async fn import_skips_missing_and_null_translated_text_without_writing_files() {
+async fn import_skips_missing_and_null_translation_without_writing_files() {
     let root = TempRoot::new("skip-null");
     write_text(
         &root
@@ -497,7 +498,7 @@ async fn import_skips_missing_and_null_translated_text_without_writing_files() {
         "scaleform",
         concat!(
             "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\"}\n",
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"translated_text\":null}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"translation\":null}\n",
         ),
     );
     let override_root = TempRoot::new("skip-null-override");
@@ -537,7 +538,7 @@ async fn import_applies_empty_string_translations() {
     write_entry_rows(
         &translations,
         "scaleform",
-        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translated_text":""}"#,
+        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translation":""}"#,
     );
     let override_root = TempRoot::new("empty-string-override");
 
@@ -582,7 +583,7 @@ async fn import_same_text_translation_does_not_write_override_files() {
     write_entry_rows(
         &translations,
         "scaleform",
-        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translated_text":"Iron Sword"}"#,
+        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translation":"Iron Sword"}"#,
     );
     let override_root = TempRoot::new("same-text-override");
 
@@ -683,7 +684,7 @@ async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugi
         &export_path,
         "plugin",
         &format!(
-            "{{\"id\":{},\"translated_text\":\"钢剑\"}}\n",
+            "{{\"id\":{},\"translation\":\"钢剑\"}}\n",
             serde_json::to_string(plugin_row["id"].as_str().unwrap()).unwrap()
         ),
     );
@@ -746,7 +747,7 @@ async fn import_updates_pex_literals_into_override_script() {
         &export_path,
         "pex",
         &format!(
-            "{{\"id\":{},\"translated_text\":\"你好\"}}\n",
+            "{{\"id\":{},\"translation\":\"你好\"}}\n",
             serde_json::to_string(pex_row["id"].as_str().unwrap()).unwrap()
         ),
     );

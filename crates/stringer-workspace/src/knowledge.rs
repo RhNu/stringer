@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::fs;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use serde_json::Value;
 use stringer_pipeline::{
     BasicValidationProcessor, KnowledgeBase, KnowledgeLayer, Pipeline, PipelineAnnotation,
     PipelineDiagnostic, PipelineDiagnosticSeverity, PipelineEntry, PipelineEntryKind,
@@ -496,50 +495,26 @@ fn entry_from_record(
     let mut entry = PipelineEntry::new(
         record.id.clone(),
         kind,
-        record.source_text.clone(),
+        record.source.clone(),
         settings.source_locale.clone(),
         settings.target_locale.clone(),
         asset_path.to_string(),
     );
-    if let Some(translated_text) = &record.translated_text {
-        entry.set_translated_text(translated_text.clone());
+    if let Some(translation) = &record.translation {
+        entry.set_translated_text(translation.clone());
     }
     entry.insert_context("game", game_release_name(settings.game_release));
     for (key, value) in &record.context {
         entry.insert_context(key.clone(), value.clone());
     }
-    merge_source_context(&mut entry, &record.source);
-    entry.set_annotations(record.annotations.clone());
+    entry.set_annotations(record.hints.clone());
     entry.set_diagnostics(record.diagnostics.clone());
     Ok(entry)
 }
 
-fn merge_source_context(entry: &mut PipelineEntry, source: &Option<Value>) {
-    let Some(Value::Object(values)) = source else {
-        return;
-    };
-    for (key, value) in values {
-        if entry.context().contains_key(key) {
-            continue;
-        }
-        match value {
-            Value::String(text) => {
-                entry.insert_context(key.clone(), text.clone());
-            }
-            Value::Number(number) => {
-                entry.insert_context(key.clone(), number.to_string());
-            }
-            Value::Bool(flag) => {
-                entry.insert_context(key.clone(), flag.to_string());
-            }
-            _ => {}
-        }
-    }
-}
-
 fn write_entry_result(record: &mut TranslationRecord, entry: PipelineEntry) {
-    let (translated_text, annotations, diagnostics) = entry.into_annotations_and_diagnostics();
-    record.translated_text = translated_text;
-    record.annotations = annotations;
+    let (translation, hints, diagnostics) = entry.into_annotations_and_diagnostics();
+    record.translation = translation;
+    record.hints = hints;
     record.diagnostics = diagnostics;
 }

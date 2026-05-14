@@ -52,6 +52,7 @@ pub struct PipelineAnnotation {
     confidence: f32,
     #[serde(rename = "match")]
     match_kind: String,
+    #[serde(default, skip_serializing)]
     processor: String,
     #[serde(default = "empty_payload")]
     payload: Value,
@@ -130,6 +131,7 @@ pub struct PipelineDiagnostic {
     severity: PipelineDiagnosticSeverity,
     code: String,
     message: String,
+    #[serde(default, skip_serializing)]
     entry_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     layer: Option<String>,
@@ -304,7 +306,7 @@ impl PipelineEntry {
 
     pub fn clear_annotations_from_processors(&mut self, processors: &[&str]) {
         self.annotations
-            .retain(|annotation| !processors.contains(&annotation.processor()));
+            .retain(|annotation| !annotation_processor_matches(annotation, processors));
     }
 
     pub fn into_annotations_and_diagnostics(
@@ -373,4 +375,22 @@ pub(crate) fn annotation_payload(pairs: &[(&str, &str)]) -> Value {
 
 fn empty_payload() -> Value {
     Value::Object(serde_json::Map::new())
+}
+
+fn annotation_processor_matches(annotation: &PipelineAnnotation, processors: &[&str]) -> bool {
+    if processors.contains(&annotation.processor()) {
+        return true;
+    }
+    annotation.processor().is_empty()
+        && inferred_builtin_processor(annotation.kind())
+            .is_some_and(|processor| processors.contains(&processor))
+}
+
+fn inferred_builtin_processor(kind: &str) -> Option<&'static str> {
+    match kind {
+        "term" => Some("stringer.term"),
+        "memory" => Some("stringer.memory"),
+        "replacement" | "replacement_rule" => Some("stringer.replacement"),
+        _ => None,
+    }
 }

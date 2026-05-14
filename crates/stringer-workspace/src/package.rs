@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use stringer_core::{
     PexOperandPath, PluginStringStorage, StringEntry, StringEntryContext, StringEntrySource,
     StringEntryView,
@@ -43,15 +43,14 @@ pub struct TranslationManifestFile {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslationRecord {
     pub id: String,
-    pub source_text: String,
+    pub source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translated_text: Option<String>,
+    pub translation: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub context: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<Value>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub annotations: Vec<PipelineAnnotation>,
+    #[serde(rename = "hints")]
+    pub hints: Vec<PipelineAnnotation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<PipelineDiagnostic>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -88,7 +87,7 @@ pub struct TranslationFileKey {
 struct TranslationPatchRecord {
     id: String,
     #[serde(default)]
-    translated_text: Option<String>,
+    translation: Option<String>,
 }
 
 pub fn packaged_record_from_entry(
@@ -96,16 +95,19 @@ pub fn packaged_record_from_entry(
     _settings: &WorkspaceSettings,
 ) -> PackagedTranslationRecord {
     let entry = entry.string_entry();
-    let (file, source) = source_fields(entry.source());
+    let (file, source_context) = source_fields(entry.source());
+    let mut context = context_values(entry.context());
+    for (key, value) in source_context {
+        context.entry(key).or_insert(value);
+    }
     PackagedTranslationRecord {
         file,
         record: TranslationRecord {
             id: external_entry_id(entry),
-            source_text: entry.text().to_string(),
-            translated_text: None,
-            context: context_values(entry.context()),
-            source,
-            annotations: Vec::new(),
+            source: entry.text().to_string(),
+            translation: None,
+            context,
+            hints: Vec::new(),
             diagnostics: Vec::new(),
             extra: BTreeMap::new(),
         },
@@ -346,10 +348,10 @@ fn read_patch_file(
                 id: patch.id,
             });
         }
-        let Some(translated_text) = patch.translated_text else {
+        let Some(translation) = patch.translation else {
             continue;
         };
-        patches.insert(patch.id, translated_text);
+        patches.insert(patch.id, translation);
     }
     Ok(())
 }
@@ -438,51 +440,70 @@ fn required_manifest_setting(value: String, name: &'static str) -> Result<String
     Ok(value)
 }
 
-fn source_fields(source: &StringEntrySource) -> (TranslationFileKey, Option<Value>) {
+fn source_fields(source: &StringEntrySource) -> (TranslationFileKey, BTreeMap<String, String>) {
     match source {
-        StringEntrySource::Plugin(metadata) => (
-            TranslationFileKey {
-                kind: "plugin".to_string(),
-                asset_path: external_asset_path(metadata.path.as_str()),
-                group: Some(metadata.record_type.clone()),
-            },
-            Some(json!({
-                "record_type": metadata.record_type,
-                "form_id": format!("{:#010X}", metadata.form_id),
-                "subrecord": metadata.subrecord,
-                "strings_kind": metadata.strings_kind,
-                "field_source": metadata.field_source,
-                "storage": plugin_storage_name(metadata.storage),
-                "string_id": metadata.string_id,
-            })),
-        ),
-        StringEntrySource::Pex(metadata) => (
-            TranslationFileKey {
-                kind: "pex".to_string(),
-                asset_path: external_asset_path(metadata.path.as_str()),
-                group: None,
-            },
-            Some(json!({
-                "object": metadata.object,
-                "state": metadata.state,
-                "function": metadata.function,
-                "function_kind": format!("{:?}", metadata.function_kind),
-                "instruction_index": metadata.instruction_index,
-                "opcode": metadata.opcode,
-                "operand": pex_operand_name(metadata.operand),
-                "string_id": metadata.string_id,
-            })),
-        ),
-        StringEntrySource::Scaleform(metadata) => (
-            TranslationFileKey {
-                kind: "scaleform".to_string(),
-                asset_path: external_asset_path(metadata.path.as_str()),
-                group: None,
-            },
-            Some(json!({
-                "key": metadata.key,
-            })),
-        ),
+        StringEntrySource::Plugin(metadata) => {
+            let mut context = BTreeMap::new();
+            context.insert("record_type".to_string(), metadata.record_type.clone());
+            context.insert("form_id".to_string(), format!("{:#010X}", metadata.form_id));
+            context.insert("subrecord".to_string(), metadata.subrecord.clone());
+            context.insert("strings_kind".to_string(), metadata.strings_kind.clone());
+            context.insert("field_source".to_string(), metadata.field_source.clone());
+            context.insert(
+                "storage".to_string(),
+                plugin_storage_name(metadata.storage).to_string(),
+            );
+            if let Some(string_id) = metadata.string_id {
+                context.insert("string_id".to_string(), string_id.to_string());
+            }
+            (
+                TranslationFileKey {
+                    kind: "plugin".to_string(),
+                    asset_path: external_asset_path(metadata.path.as_str()),
+                    group: Some(metadata.record_type.clone()),
+                },
+                context,
+            )
+        }
+        StringEntrySource::Pex(metadata) => {
+            let mut context = BTreeMap::new();
+            context.insert("object".to_string(), metadata.object.clone());
+            context.insert("state".to_string(), metadata.state.clone());
+            context.insert("function".to_string(), metadata.function.clone());
+            context.insert(
+                "function_kind".to_string(),
+                format!("{:?}", metadata.function_kind),
+            );
+            context.insert(
+                "instruction_index".to_string(),
+                metadata.instruction_index.to_string(),
+            );
+            context.insert("opcode".to_string(), metadata.opcode.clone());
+            context.insert("operand".to_string(), pex_operand_name(metadata.operand));
+            context.insert("string_id".to_string(), metadata.string_id.to_string());
+            (
+                TranslationFileKey {
+                    kind: "pex".to_string(),
+                    asset_path: external_asset_path(metadata.path.as_str()),
+                    group: None,
+                },
+                context,
+            )
+        }
+        StringEntrySource::Scaleform(metadata) => {
+            let mut context = BTreeMap::new();
+            if let Some(key) = &metadata.key {
+                context.insert("key".to_string(), key.clone());
+            }
+            (
+                TranslationFileKey {
+                    kind: "scaleform".to_string(),
+                    asset_path: external_asset_path(metadata.path.as_str()),
+                    group: None,
+                },
+                context,
+            )
+        }
     }
 }
 

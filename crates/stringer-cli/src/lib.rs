@@ -195,7 +195,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), WorkspaceError> 
                 ),
             })?;
             println!(
-                "annotated {} entries, added {} annotations, wrote {} diagnostics, auto-filled {} entries",
+                "annotated {} entries, added {} hints, wrote {} diagnostics, auto-filled {} entries",
                 summary.entries, summary.annotations, summary.diagnostics, summary.auto_filled
             );
             Ok(())
@@ -242,7 +242,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), WorkspaceError> 
                     "{}",
                     serde_json::to_string_pretty(&serde_json::json!({
                         "index_used": lookup.index_used,
-                        "annotations": lookup.annotations,
+                        "hints": lookup.annotations,
                         "diagnostics": lookup.diagnostics,
                     }))
                     .map_err(|source| WorkspaceError::Json {
@@ -252,7 +252,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), WorkspaceError> 
                 );
             } else {
                 println!(
-                    "found {} annotations and {} diagnostics",
+                    "found {} hints and {} diagnostics",
                     lookup.annotations.len(),
                     lookup.diagnostics.len()
                 );

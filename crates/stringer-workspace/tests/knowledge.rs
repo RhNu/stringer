@@ -57,9 +57,10 @@ scope = { game = "SkyrimSe" }
     let manifest = json_file(&translations.join("manifest.json"));
     assert_eq!(manifest["schema_version"], 2);
     let rows = entry_rows(&translations, "scaleform", None);
-    assert!(rows[0].get("translated_text").is_none());
-    assert_eq!(rows[0]["annotations"][0]["kind"], "term");
-    assert_eq!(rows[0]["annotations"][0]["payload"]["target"], "铁剑");
+    assert!(rows[0].get("translation").is_none());
+    assert_eq!(rows[0]["hints"][0]["kind"], "term");
+    assert!(rows[0]["hints"][0].get("processor").is_none());
+    assert_eq!(rows[0]["hints"][0]["payload"]["target"], "铁剑");
 }
 
 #[tokio::test]
@@ -84,8 +85,8 @@ async fn annotate_translations_removes_stale_diagnostics() {
         "scaleform",
         concat!(
             "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",",
-            "\"source_text\":\"Iron Sword\",",
-            "\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"stale\",\"message\":\"old\",\"entry_id\":\"old\"}]}\n",
+            "\"source\":\"Iron Sword\",",
+            "\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"stale\",\"message\":\"old\"}]}\n",
         ),
     );
 
@@ -130,8 +131,8 @@ async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_
         &translations,
         "scaleform",
         concat!(
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source_text\":\"Iron Sword\",\"translated_text\":\"手工铁剑\"}\n",
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source_text\":\"Steel Sword\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Iron Sword\",\"translation\":\"手工铁剑\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source\":\"Steel Sword\"}\n",
         ),
     );
 
@@ -153,8 +154,8 @@ async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_
         &rows,
         "scaleform:Interface/Translations/MyMod_English.txt:$Desc",
     );
-    assert_eq!(title["translated_text"], "手工铁剑");
-    assert_eq!(desc["translated_text"], "钢剑");
+    assert_eq!(title["translation"], "手工铁剑");
+    assert_eq!(desc["translation"], "钢剑");
 }
 
 #[tokio::test]
@@ -195,9 +196,9 @@ status = "forbidden"
         "scaleform",
         concat!(
             "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",",
-            "\"source_text\":\"Dragonborn\",",
-            "\"translated_text\":\"抓根宝\",",
-            "\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"stale\",\"message\":\"old\",\"entry_id\":\"old\"}]}\n",
+            "\"source\":\"Dragonborn\",",
+            "\"translation\":\"抓根宝\",",
+            "\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"stale\",\"message\":\"old\"}]}\n",
         ),
     );
 
@@ -222,7 +223,7 @@ status = "forbidden"
 }
 
 #[tokio::test]
-async fn validate_translations_reports_missing_translated_text() {
+async fn validate_translations_reports_missing_translation() {
     let root = TempRoot::new("validate-missing-translation");
     write_text(
         &root
@@ -249,6 +250,7 @@ async fn validate_translations_reports_missing_translated_text() {
     assert_eq!(summary.diagnostics, 1);
     let rows = entry_rows(&translations, "scaleform", None);
     assert_eq!(rows[0]["diagnostics"][0]["code"], "translation.empty");
+    assert!(rows[0]["diagnostics"][0].get("entry_id").is_none());
 }
 
 #[tokio::test]
@@ -271,9 +273,9 @@ async fn import_ignores_annotations_and_diagnostics() {
         "scaleform",
         concat!(
             "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",",
-            "\"translated_text\":\"铁剑\",",
-            "\"annotations\":[{\"kind\":\"term\",\"id\":\"x\",\"layer\":\"project\",\"confidence\":1.0,\"match\":\"source\",\"processor\":\"stringer.term\"}],",
-            "\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"term.preferred_missing\",\"message\":\"x\",\"entry_id\":\"x\"}]}\n",
+            "\"translation\":\"铁剑\",",
+            "\"hints\":[{\"kind\":\"term\",\"id\":\"x\",\"layer\":\"project\",\"confidence\":1.0,\"match\":\"source\"}],",
+            "\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"term.preferred_missing\",\"message\":\"x\"}]}\n",
         ),
     );
     let override_root = TempRoot::new("import-ignore-pipeline-metadata-override");
@@ -529,8 +531,8 @@ target_locale = "zh-Hans"
 
     assert_eq!(summary.annotations, 1);
     let rows = entry_rows(&translations, "scaleform", None);
-    assert_eq!(rows[0]["annotations"][0]["layer"], "library");
-    assert_eq!(rows[0]["annotations"][0]["payload"]["target"], "库铁剑");
+    assert_eq!(rows[0]["hints"][0]["layer"], "library");
+    assert_eq!(rows[0]["hints"][0]["payload"]["target"], "库铁剑");
 }
 
 #[test]

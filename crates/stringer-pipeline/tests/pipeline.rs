@@ -1,7 +1,7 @@
 use stringer_pipeline::{
-    BasicValidationProcessor, KnowledgeBase, KnowledgeLayer, Pipeline, PipelineDiagnostic,
-    PipelineEntry, PipelineEntryKind, PipelineOptions, PipelineProcessor, PipelineStage,
-    ReplacementRuleProcessor, TerminologyProcessor, TranslationMemoryProcessor,
+    BasicValidationProcessor, KnowledgeBase, KnowledgeLayer, Pipeline, PipelineAnnotation,
+    PipelineDiagnostic, PipelineEntry, PipelineEntryKind, PipelineOptions, PipelineProcessor,
+    PipelineStage, ReplacementRuleProcessor, TerminologyProcessor, TranslationMemoryProcessor,
 };
 
 fn plugin_entry(source_text: &str) -> PipelineEntry {
@@ -311,6 +311,40 @@ scope = { kind = ["plugin"] }
             && annotation.id() == "protect.numbered_token"
             && annotation.match_kind() == "regex"
     }));
+}
+
+#[test]
+fn clears_reloaded_replacement_rule_hints_without_serialized_processor() {
+    let mut layer = KnowledgeLayer::new("project");
+    layer
+        .add_rules_toml(
+            "knowledge/rules/replacements.toml",
+            r#"
+[[rules]]
+id = "protect.player_name"
+stage = "pre_translate"
+pattern = "{PLAYER_NAME}"
+replacement = "__STRINGER_TOKEN_PLAYER_NAME__"
+mode = "literal"
+enabled = true
+scope = { kind = ["plugin"] }
+"#,
+        )
+        .unwrap();
+    let knowledge = KnowledgeBase::from_layers(vec![layer]).unwrap();
+    let mut annotated = plugin_entry("Hello {PLAYER_NAME}");
+
+    run_stage(PipelineStage::PreTranslate, &mut annotated, &knowledge);
+
+    let encoded = serde_json::to_string(annotated.annotations()).unwrap();
+    assert!(!encoded.contains("processor"));
+    let reloaded: Vec<PipelineAnnotation> = serde_json::from_str(&encoded).unwrap();
+    let mut entry = plugin_entry("Hello {PLAYER_NAME}");
+    entry.set_annotations(reloaded);
+
+    entry.clear_annotations_from_processors(&["stringer.replacement"]);
+
+    assert!(entry.annotations().is_empty());
 }
 
 #[test]
