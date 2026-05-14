@@ -3,7 +3,10 @@ use std::io::{Read, Write};
 
 use bytes::Bytes;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
-use stringer_core::{FileAsset, FileRole};
+use stringer_core::{
+    FileAsset, FileRole,
+    binary::{Endian, read_u16_at, read_u32_at},
+};
 use tracing::{debug, instrument};
 
 use crate::encoding::{decode_text, encode_text};
@@ -704,9 +707,9 @@ fn fourcc(bytes: &[u8]) -> String {
 }
 
 fn read_u16(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes(bytes[offset..offset + 2].try_into().expect("u16 slice"))
+    read_u16_at(bytes, offset, Endian::Little, "u16 field").expect("checked u16 field")
 }
 
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("u32 slice"))
+    read_u32_at(bytes, offset, Endian::Little, "u32 field").expect("checked u32 field")
 }

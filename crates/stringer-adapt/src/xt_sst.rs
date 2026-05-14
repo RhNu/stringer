@@ -2,10 +2,11 @@ use std::{collections::BTreeMap, fs};
 
 use camino::Utf8Path;
 use serde_json::json;
+use stringer_core::binary::{BinaryReader, Endian};
 
 use crate::{
-    AdaptCatalog, AdaptError, AdaptImportOptions, AdaptQuality, ParsedEntry, binary::BinaryReader,
-    catalog_from_entries, insert_non_empty, malformed,
+    AdaptCatalog, AdaptError, AdaptImportOptions, AdaptQuality, ParsedEntry,
+    binary_ext::AdaptBinaryReaderExt, catalog_from_entries, insert_non_empty, malformed,
 };
 
 pub(crate) fn read(
@@ -16,9 +17,9 @@ pub(crate) fn read(
         path: path.to_owned(),
         source,
     })?;
-    let mut reader = BinaryReader::new(&bytes);
+    let mut reader = BinaryReader::new(&bytes, Endian::Little);
     let header = reader
-        .read_u32()
+        .read_u32("header")
         .map_err(|message| malformed(path, "XT SST", message))?;
     let version = version(header).ok_or_else(|| {
         malformed(
@@ -29,7 +30,7 @@ pub(crate) fn read(
     })?;
     if version > 3 {
         let _flag = reader
-            .read_u8()
+            .read_u8("version flag")
             .map_err(|message| malformed(path, "XT SST", message))?;
     }
     let masters = read_masters(path, &mut reader, version)?;
@@ -63,12 +64,12 @@ fn read_masters(
     let mut masters = Vec::new();
     if version >= 8 {
         let count = reader
-            .read_i32()
+            .read_i32("master count")
             .map_err(|message| malformed(path, "XT SST", message))?;
         for _ in 0..count {
             masters.push(
                 reader
-                    .read_utf16_i32_string()
+                    .read_utf16_i32_string("master name")
                     .map_err(|message| malformed(path, "XT SST", message))?,
             );
         }
@@ -84,14 +85,14 @@ fn read_colab_labels(
     let mut labels = BTreeMap::<String, String>::new();
     if version >= 7 {
         let count = reader
-            .read_i32()
+            .read_i32("collaboration label count")
             .map_err(|message| malformed(path, "XT SST", message))?;
         for _ in 0..count {
             let id = reader
-                .read_i32()
+                .read_i32("collaboration label id")
                 .map_err(|message| malformed(path, "XT SST", message))?;
             let label = reader
-                .read_utf16_i32_string()
+                .read_utf16_i32_string("collaboration label")
                 .map_err(|message| malformed(path, "XT SST", message))?;
             labels.insert(id.to_string(), label);
         }
@@ -108,26 +109,26 @@ fn read_row(
     colab_labels: &BTreeMap<String, String>,
 ) -> Result<ParsedEntry, AdaptError> {
     let list_index = reader
-        .read_u8()
+        .read_u8("strings list index")
         .map_err(|message| malformed(path, "XT SST", message))?;
     let pointer = read_pointer(path, reader, version)?;
     let colab_id = if version > 5 {
         Some(
             reader
-                .read_u8()
+                .read_u8("collaboration id")
                 .map_err(|message| malformed(path, "XT SST", message))?,
         )
     } else {
         None
     };
     let params = reader
-        .read_u8()
+        .read_u8("row params")
         .map_err(|message| malformed(path, "XT SST", message))?;
     let source = reader
-        .read_utf16_i32_string()
+        .read_utf16_i32_string("source text")
         .map_err(|message| malformed(path, "XT SST", message))?;
     let target = reader
-        .read_utf16_i32_string()
+        .read_utf16_i32_string("target text")
         .map_err(|message| malformed(path, "XT SST", message))?;
     let mut context = pointer.context;
     context.insert(
@@ -160,35 +161,35 @@ fn read_pointer(
     let mut context = BTreeMap::new();
     if version > 1 {
         let string_id = reader
-            .read_i32()
+            .read_i32("string id")
             .map_err(|message| malformed(path, "XT SST", message))?;
         let form_id = reader
-            .read_u32()
+            .read_u32("form id")
             .map_err(|message| malformed(path, "XT SST", message))?;
         if version > 4 {
             let record_type = reader
-                .read_ascii(4)
+                .read_ascii(4, "record type")
                 .map_err(|message| malformed(path, "XT SST", message))?;
             insert_non_empty(&mut context, "record_type", trim_sig(&record_type));
         }
         let subrecord = reader
-            .read_ascii(4)
+            .read_ascii(4, "subrecord")
             .map_err(|message| malformed(path, "XT SST", message))?;
         insert_non_empty(&mut context, "subrecord", trim_sig(&subrecord));
         context.insert("form_id".to_string(), format!("{form_id:#010X}"));
         context.insert("string_id".to_string(), string_id.to_string());
         if version > 2 {
             let index = reader
-                .read_u16()
+                .read_u16("field index")
                 .map_err(|message| malformed(path, "XT SST", message))?;
             context.insert("field_index".to_string(), index.to_string());
         }
         if version > 3 {
             let index_max = reader
-                .read_u16()
+                .read_u16("max field index")
                 .map_err(|message| malformed(path, "XT SST", message))?;
             let record_hash = reader
-                .read_u32()
+                .read_u32("record hash")
                 .map_err(|message| malformed(path, "XT SST", message))?;
             context.insert("field_index_max".to_string(), index_max.to_string());
             context.insert("record_hash".to_string(), format!("{record_hash:#010X}"));

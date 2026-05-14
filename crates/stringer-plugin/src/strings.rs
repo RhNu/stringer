@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 
 use bytes::Bytes;
-use stringer_core::{FileAsset, FileFormat};
+use stringer_core::{
+    FileAsset, FileFormat,
+    binary::{Endian, read_u32_at},
+};
 use tracing::{debug, instrument};
 
 use crate::encoding::{decode_text, encode_text};
@@ -244,5 +247,5 @@ fn extract_raw_string<'a>(
 }
 
 fn read_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("u32 slice"))
+    read_u32_at(bytes, offset, Endian::Little, "u32 field").expect("checked u32 field")
 }

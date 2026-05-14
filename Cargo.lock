@@ -771,6 +771,7 @@ dependencies = [
  "quick-xml",
  "serde",
  "serde_json",
+ "stringer-core",
  "stringer-pipeline",
  "thiserror 2.0.18",
 ]

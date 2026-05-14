@@ -2,10 +2,12 @@ use std::{collections::BTreeMap, fs};
 
 use camino::Utf8Path;
 use serde_json::{Value, json};
+use stringer_core::binary::{BinaryReader, Endian};
 
 use crate::{
-    AdaptCatalog, AdaptError, AdaptImportOptions, AdaptQuality, ParsedEntry, binary::BinaryReader,
-    catalog_from_entries, insert_non_empty, malformed, xml::xml_rows,
+    AdaptCatalog, AdaptError, AdaptImportOptions, AdaptQuality, ParsedEntry,
+    binary_ext::AdaptBinaryReaderExt, catalog_from_entries, insert_non_empty, malformed,
+    xml::xml_rows,
 };
 
 pub(crate) fn read_binary(
@@ -16,29 +18,29 @@ pub(crate) fn read_binary(
         path: path.to_owned(),
         source,
     })?;
-    let mut reader = BinaryReader::new(&bytes);
+    let mut reader = BinaryReader::new(&bytes, Endian::Little);
     let magic = reader
-        .read_bytes(4)
+        .take(4, "EET header")
         .map_err(|message| malformed(path, "EET", message))?;
     if magic != b"EET_" {
         return Err(malformed(path, "EET", "missing EET_ header"));
     }
     let table_type = reader
-        .read_i32()
+        .read_i32("table type")
         .map_err(|message| malformed(path, "EET", message))?;
     let version = reader
-        .read_u32()
+        .read_u32("version")
         .map_err(|message| malformed(path, "EET", message))?;
     let mut game = options.game.clone();
     let mut parsed = Vec::new();
     while !reader.is_empty() {
         let tag = reader
-            .read_ascii(4)
+            .read_ascii(4, "chunk tag")
             .map_err(|message| malformed(path, "EET", message))?;
         match tag.as_str() {
             "GAME" => {
                 let value = reader
-                    .read_utf8_u16_string()
+                    .read_utf8_u16_string("game name")
                     .map_err(|message| malformed(path, "EET", message))?;
                 if game.is_none() && !value.is_empty() {
                     game = Some(value);
@@ -46,7 +48,7 @@ pub(crate) fn read_binary(
             }
             "LINE" => {
                 let count = reader
-                    .read_u32()
+                    .read_u32("line count")
                     .map_err(|message| malformed(path, "EET", message))?;
                 for row_index in 0..count {
                     parsed.push(read_binary_row(
@@ -135,48 +137,48 @@ fn read_binary_row(
     let mut payload_reader;
     let source = if version >= 2 {
         let size = reader
-            .read_u32()
+            .read_u32("row payload size")
             .map_err(|message| malformed(path, "EET", message))?;
         let payload = reader
-            .read_bytes(size as usize)
+            .take(size as usize, "row payload")
             .map_err(|message| malformed(path, "EET", message))?;
-        payload_reader = BinaryReader::new(payload);
+        payload_reader = BinaryReader::new(payload, Endian::Little);
         &mut payload_reader
     } else {
         reader
     };
     let grup = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("record type")
         .map_err(|message| malformed(path, "EET", message))?;
     let id = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("form id")
         .map_err(|message| malformed(path, "EET", message))?;
     let edid = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("editor id")
         .map_err(|message| malformed(path, "EET", message))?;
     let champ = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("subrecord")
         .map_err(|message| malformed(path, "EET", message))?;
     let original = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("source text")
         .map_err(|message| malformed(path, "EET", message))?;
     let traduit = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("target text")
         .map_err(|message| malformed(path, "EET", message))?;
     let perso = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("personal text")
         .map_err(|message| malformed(path, "EET", message))?;
     let index = source
-        .read_i32()
+        .read_i32("field index")
         .map_err(|message| malformed(path, "EET", message))?;
     let status = source
-        .read_i16()
+        .read_i16("status")
         .map_err(|message| malformed(path, "EET", message))?;
     let text_id = source
-        .read_i32()
+        .read_i32("text id")
         .map_err(|message| malformed(path, "EET", message))?;
     let comment = source
-        .read_utf8_u32_string()
+        .read_utf8_u32_string("comment")
         .map_err(|message| malformed(path, "EET", message))?;
     let mut context = BTreeMap::new();
     insert_non_empty(&mut context, "record_type", grup);
@@ -211,18 +213,18 @@ fn read_dictionary(
 ) -> Result<(), AdaptError> {
     if version >= 2 {
         let _byte_len = reader
-            .read_u32()
+            .read_u32("dictionary byte length")
             .map_err(|message| malformed(path, "EET", message))?;
     }
     let count = reader
-        .read_u32()
+        .read_u32("dictionary entry count")
         .map_err(|message| malformed(path, "EET", message))?;
     for _ in 0..count {
         let _ = reader
-            .read_utf8_u16_string()
+            .read_utf8_u16_string("dictionary source")
             .map_err(|message| malformed(path, "EET", message))?;
         let _ = reader
-            .read_utf8_u16_string()
+            .read_utf8_u16_string("dictionary target")
             .map_err(|message| malformed(path, "EET", message))?;
     }
     Ok(())

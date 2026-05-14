@@ -1,5 +1,7 @@
 //! Shared foundations for Stringer crates.
 
+pub mod binary;
+
 use std::collections::{BTreeMap, HashMap};
 
 use bytes::Bytes;

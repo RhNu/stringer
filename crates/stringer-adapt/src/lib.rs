@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
 
-mod binary;
+mod binary_ext;
 mod eet;
 mod hash;
 mod xml;
@@ -285,11 +285,11 @@ fn canonical_game_context(value: &str) -> Option<String> {
 pub(crate) fn malformed(
     path: &Utf8Path,
     format: &'static str,
-    message: impl Into<String>,
+    message: impl ToString,
 ) -> AdaptError {
     AdaptError::Malformed {
         path: path.to_owned(),
         format,
-        message: message.into(),
+        message: message.to_string(),
     }
 }

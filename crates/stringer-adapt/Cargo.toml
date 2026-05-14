@@ -10,6 +10,7 @@ camino.workspace = true
 quick-xml.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+stringer-core = { path = "../stringer-core" }
 thiserror.workspace = true
 
 [dev-dependencies]
