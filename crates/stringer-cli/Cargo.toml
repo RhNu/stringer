@@ -14,5 +14,7 @@ camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
 miette = { workspace = true, features = ["fancy"] }
 serde_json.workspace = true
+stringer-adapt = { path = "../stringer-adapt" }
 stringer-workspace = { path = "../stringer-workspace" }
+thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

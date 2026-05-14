@@ -344,12 +344,13 @@ fn apply_memory(
         return;
     }
 
+    let candidates = best_memory_candidates(candidates);
     let mut targets = BTreeMap::<String, MemoryCandidate>::new();
     for candidate in candidates {
         targets
             .entry(candidate.target.clone())
             .and_modify(|current| {
-                if candidate.confidence > current.confidence {
+                if compare_memory_candidates(&candidate, current).is_gt() {
                     *current = candidate.clone();
                 }
             })
@@ -404,6 +405,8 @@ struct MemoryCandidate {
     confidence: f32,
     match_kind: &'static str,
     quality: MemoryQuality,
+    context_matches: usize,
+    context_size: usize,
 }
 
 fn memory_candidate(
@@ -427,7 +430,8 @@ fn memory_candidate(
         return None;
     };
 
-    if context_conflicts(entry, item.context()) {
+    let context = context_match(entry, item.context());
+    if context.conflicts {
         confidence = confidence.min(0.90);
     }
     if item.quality() == MemoryQuality::Machine {
@@ -441,6 +445,8 @@ fn memory_candidate(
         confidence,
         match_kind,
         quality: item.quality(),
+        context_matches: context.matches,
+        context_size: context.size,
     })
 }
 
@@ -459,10 +465,57 @@ fn memory_annotation(candidate: &MemoryCandidate, processor: &str) -> PipelineAn
     )
 }
 
-fn context_conflicts(entry: &PipelineEntry, context: &BTreeMap<String, String>) -> bool {
-    context
-        .iter()
-        .any(|(key, value)| entry.entry_value(key).is_some_and(|actual| actual != value))
+#[derive(Debug, Clone, Copy)]
+struct ContextMatch {
+    matches: usize,
+    size: usize,
+    conflicts: bool,
+}
+
+fn context_match(entry: &PipelineEntry, context: &BTreeMap<String, String>) -> ContextMatch {
+    let mut matches = 0usize;
+    let mut conflicts = false;
+    for (key, value) in context {
+        if let Some(actual) = entry.entry_value(key) {
+            if actual == value {
+                matches += 1;
+            } else {
+                conflicts = true;
+            }
+        }
+    }
+    ContextMatch {
+        matches,
+        size: context.len(),
+        conflicts,
+    }
+}
+
+fn best_memory_candidates(candidates: Vec<MemoryCandidate>) -> Vec<MemoryCandidate> {
+    let mut best = Vec::<MemoryCandidate>::new();
+    for candidate in candidates {
+        match best.first() {
+            Some(current) if compare_memory_candidates(&candidate, current).is_lt() => {}
+            Some(current) if compare_memory_candidates(&candidate, current).is_eq() => {
+                best.push(candidate);
+            }
+            _ => {
+                best.clear();
+                best.push(candidate);
+            }
+        }
+    }
+    best
+}
+
+fn compare_memory_candidates(
+    left: &MemoryCandidate,
+    right: &MemoryCandidate,
+) -> std::cmp::Ordering {
+    left.confidence
+        .total_cmp(&right.confidence)
+        .then(left.context_matches.cmp(&right.context_matches))
+        .then(left.context_size.cmp(&right.context_size))
 }
 
 fn normalize_source(value: &str) -> String {
