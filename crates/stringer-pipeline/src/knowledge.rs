@@ -152,6 +152,13 @@ impl KnowledgeBase {
             }
             memory.extend(layer.memory);
         }
+        for rule in &rules {
+            if rule.mode() == RuleMode::Regex
+                && let Err(error) = regex::Regex::new(rule.pattern())
+            {
+                merge_diagnostics.push(invalid_regex_diagnostic(rule, error.to_string()));
+            }
+        }
 
         Ok(Self {
             terms,
@@ -175,6 +182,10 @@ impl KnowledgeBase {
 
     pub fn merge_diagnostics(&self) -> &[PipelineDiagnostic] {
         &self.merge_diagnostics
+    }
+
+    pub fn add_diagnostic(&mut self, diagnostic: PipelineDiagnostic) {
+        self.merge_diagnostics.push(diagnostic);
     }
 }
 
@@ -205,8 +216,28 @@ impl Term {
         &self.target
     }
 
+    pub fn aliases(&self) -> &[String] {
+        &self.aliases
+    }
+
+    pub fn case_sensitive(&self) -> bool {
+        self.case_sensitive
+    }
+
     pub fn status(&self) -> TermStatus {
         self.status
+    }
+
+    pub fn scope_values(&self) -> &BTreeMap<String, Vec<String>> {
+        self.scope.values()
+    }
+
+    pub fn tags(&self) -> &[String] {
+        &self.tags
+    }
+
+    pub fn note(&self) -> Option<&str> {
+        self.note.as_deref()
     }
 
     pub fn layer(&self) -> &str {
@@ -238,6 +269,16 @@ pub enum TermStatus {
     Preferred,
     Allowed,
     Forbidden,
+}
+
+impl TermStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Preferred => "preferred",
+            Self::Allowed => "allowed",
+            Self::Forbidden => "forbidden",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -290,6 +331,18 @@ impl TranslationMemoryEntry {
         self.quality
     }
 
+    pub fn origin(&self) -> &serde_json::Value {
+        &self.origin
+    }
+
+    pub fn created_at(&self) -> Option<&str> {
+        self.created_at.as_deref()
+    }
+
+    pub fn updated_at(&self) -> Option<&str> {
+        self.updated_at.as_deref()
+    }
+
     pub fn layer(&self) -> &str {
         &self.layer
     }
@@ -306,6 +359,15 @@ pub enum MemoryQuality {
 }
 
 impl MemoryQuality {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Confirmed => "confirmed",
+            Self::Imported => "imported",
+            Self::Machine => "machine",
+            Self::Rejected => "rejected",
+        }
+    }
+
     pub fn can_auto_fill(self) -> bool {
         matches!(self, Self::Confirmed | Self::Imported)
     }
@@ -353,15 +415,27 @@ impl ReplacementRule {
         self.enabled
     }
 
+    pub fn scope_values(&self) -> &BTreeMap<String, Vec<String>> {
+        self.scope.values()
+    }
+
+    pub fn note(&self) -> Option<&str> {
+        self.note.as_deref()
+    }
+
     pub fn layer(&self) -> &str {
         &self.layer
     }
 
     pub fn matches_entry(&self, entry: &PipelineEntry) -> bool {
-        self.enabled
-            && self.scope.matches(entry)
-            && self.mode == RuleMode::Literal
-            && entry.source_text().contains(&self.pattern)
+        if !self.enabled || !self.scope.matches(entry) {
+            return false;
+        }
+        match self.mode {
+            RuleMode::Literal => entry.source_text().contains(&self.pattern),
+            RuleMode::Regex => regex::Regex::new(&self.pattern)
+                .is_ok_and(|pattern| pattern.is_match(entry.source_text())),
+        }
     }
 }
 
@@ -372,11 +446,29 @@ pub enum RuleStage {
     PostTranslate,
 }
 
+impl RuleStage {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PreTranslate => "pre_translate",
+            Self::PostTranslate => "post_translate",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RuleMode {
     Literal,
     Regex,
+}
+
+impl RuleMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Literal => "literal",
+            Self::Regex => "regex",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -471,6 +563,10 @@ impl Scope {
                 .is_some_and(|actual| expected.iter().any(|value| value == actual))
         })
     }
+
+    fn values(&self) -> &BTreeMap<String, Vec<String>> {
+        &self.values
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -546,6 +642,20 @@ fn override_diagnostic(
     )
     .with_layer(new_layer)
     .with_rule_id(id)
+}
+
+fn invalid_regex_diagnostic(rule: &ReplacementRule, error: String) -> PipelineDiagnostic {
+    PipelineDiagnostic::new(
+        PipelineDiagnosticSeverity::Warning,
+        "replacement.regex_invalid",
+        format!(
+            "Replacement rule `{}` has an invalid regex: {error}",
+            rule.id()
+        ),
+        "",
+    )
+    .with_layer(rule.layer())
+    .with_rule_id(rule.id())
 }
 
 pub(crate) fn stage_matches_rule(stage: crate::PipelineStage, rule: &ReplacementRule) -> bool {

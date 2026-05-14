@@ -167,6 +167,7 @@ pub fn read_translation_package(
         asset_language: parse_language_name(&manifest.asset_language)?,
         source_locale: required_manifest_setting(manifest.source_locale, "source_locale")?,
         target_locale: required_manifest_setting(manifest.target_locale, "target_locale")?,
+        global_knowledge_root: None,
     };
 
     let mut seen_files = BTreeSet::new();
@@ -274,6 +275,7 @@ fn settings_from_manifest(
         asset_language: parse_language_name(&manifest.asset_language)?,
         source_locale: required_manifest_setting(manifest.source_locale.clone(), "source_locale")?,
         target_locale: required_manifest_setting(manifest.target_locale.clone(), "target_locale")?,
+        global_knowledge_root: None,
     })
 }
 

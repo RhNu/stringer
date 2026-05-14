@@ -1,7 +1,7 @@
 use stringer_pipeline::{
-    BasicValidationProcessor, KnowledgeBase, KnowledgeLayer, Pipeline, PipelineEntry,
-    PipelineEntryKind, PipelineOptions, PipelineStage, ReplacementRuleProcessor,
-    TerminologyProcessor, TranslationMemoryProcessor,
+    BasicValidationProcessor, KnowledgeBase, KnowledgeLayer, Pipeline, PipelineDiagnostic,
+    PipelineEntry, PipelineEntryKind, PipelineOptions, PipelineProcessor, PipelineStage,
+    ReplacementRuleProcessor, TerminologyProcessor, TranslationMemoryProcessor,
 };
 
 fn plugin_entry(source_text: &str) -> PipelineEntry {
@@ -279,4 +279,179 @@ scope = { kind = ["plugin"] }
             && annotation.id() == "protect.player_name"
             && annotation.payload()["replacement"] == "__STRINGER_TOKEN_PLAYER_NAME__"
     }));
+}
+
+#[test]
+fn regex_replacement_rules_annotate_without_changing_text() {
+    let mut layer = KnowledgeLayer::new("project");
+    layer
+        .add_rules_toml(
+            "knowledge/rules/replacements.toml",
+            r#"
+[[rules]]
+id = "protect.numbered_token"
+stage = "pre_translate"
+pattern = "\\{PLAYER_[0-9]+\\}"
+replacement = "__STRINGER_TOKEN_PLAYER__"
+mode = "regex"
+enabled = true
+scope = { kind = ["plugin"] }
+"#,
+        )
+        .unwrap();
+    let knowledge = KnowledgeBase::from_layers(vec![layer]).unwrap();
+    let mut entry = plugin_entry("Hello {PLAYER_12}");
+
+    run_stage(PipelineStage::PreTranslate, &mut entry, &knowledge);
+
+    assert_eq!(entry.source_text(), "Hello {PLAYER_12}");
+    assert!(entry.translated_text().is_none());
+    assert!(entry.annotations().iter().any(|annotation| {
+        annotation.kind() == "replacement_rule"
+            && annotation.id() == "protect.numbered_token"
+            && annotation.match_kind() == "regex"
+    }));
+}
+
+#[test]
+fn invalid_regex_replacement_rules_report_knowledge_diagnostic() {
+    let mut layer = KnowledgeLayer::new("project");
+    layer
+        .add_rules_toml(
+            "knowledge/rules/replacements.toml",
+            r#"
+[[rules]]
+id = "bad.regex"
+stage = "pre_translate"
+pattern = "["
+replacement = "__TOKEN__"
+mode = "regex"
+enabled = true
+"#,
+        )
+        .unwrap();
+    let knowledge = KnowledgeBase::from_layers(vec![layer]).unwrap();
+
+    assert!(
+        knowledge
+            .merge_diagnostics()
+            .iter()
+            .any(
+                |diagnostic| diagnostic.code() == "replacement.regex_invalid"
+                    && diagnostic.rule_id() == Some("bad.regex")
+            )
+    );
+}
+
+#[test]
+fn stage_report_includes_merge_diagnostics() {
+    let mut base = KnowledgeLayer::new("base");
+    base.add_terms_toml(
+        "knowledge/terms/base.toml",
+        r#"
+[[terms]]
+id = "skyrim.weapon.iron_sword"
+source = "Iron Sword"
+target = "铁剑"
+"#,
+    )
+    .unwrap();
+    let mut project = KnowledgeLayer::new("project");
+    project
+        .add_terms_toml(
+            "knowledge/terms/project.toml",
+            r#"
+[[terms]]
+id = "skyrim.weapon.iron_sword"
+source = "Iron Sword"
+target = "熟铁剑"
+"#,
+        )
+        .unwrap();
+    let knowledge = KnowledgeBase::from_layers(vec![base, project]).unwrap();
+    let mut entry = plugin_entry("Iron Sword");
+    let pipeline = default_pipeline();
+
+    let report = pipeline.run_stage(
+        PipelineStage::Annotate,
+        std::slice::from_mut(&mut entry),
+        &knowledge,
+        &PipelineOptions::default(),
+    );
+
+    assert!(report.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code() == "knowledge.override"
+            && diagnostic.rule_id() == Some("skyrim.weapon.iron_sword")
+    }));
+}
+
+#[test]
+fn stage_report_counts_entries_skipped_by_all_processors() {
+    let knowledge = KnowledgeBase::empty();
+    let mut entry = pex_entry("Debug.Notification");
+    let pipeline = default_pipeline();
+
+    let report = pipeline.run_stage(
+        PipelineStage::Annotate,
+        std::slice::from_mut(&mut entry),
+        &knowledge,
+        &PipelineOptions::default(),
+    );
+
+    assert_eq!(report.entries, 1);
+    assert_eq!(report.skipped, 1);
+}
+
+#[test]
+fn pipeline_reverts_unauthorized_processor_translation_mutation() {
+    #[derive(Default)]
+    struct UnauthorizedMutator;
+
+    impl PipelineProcessor for UnauthorizedMutator {
+        fn name(&self) -> &'static str {
+            "test.unauthorized"
+        }
+
+        fn process(
+            &self,
+            _stage: PipelineStage,
+            entry: &mut PipelineEntry,
+            _knowledge: &KnowledgeBase,
+            _options: &PipelineOptions,
+        ) {
+            entry.set_translated_text("mutated");
+        }
+    }
+
+    let knowledge = KnowledgeBase::empty();
+    let mut entry = plugin_entry("Iron Sword");
+    let pipeline = Pipeline::new(vec![Box::new(UnauthorizedMutator)]);
+
+    let report = pipeline.run_stage(
+        PipelineStage::Annotate,
+        std::slice::from_mut(&mut entry),
+        &knowledge,
+        &PipelineOptions::default(),
+    );
+
+    assert_eq!(entry.translated_text(), None);
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnostic: &PipelineDiagnostic| {
+                diagnostic.code() == "processor.unauthorized_mutation"
+                    && diagnostic.entry_id() == "plugin:MyMod.esp:WEAP:00001234:FULL:1"
+                    && diagnostic.rule_id() == Some("test.unauthorized")
+            })
+    );
+}
+
+fn default_pipeline() -> Pipeline {
+    Pipeline::new(vec![
+        Box::new(TerminologyProcessor),
+        Box::new(TranslationMemoryProcessor),
+        Box::new(BasicValidationProcessor),
+        Box::new(ReplacementRuleProcessor),
+    ])
 }

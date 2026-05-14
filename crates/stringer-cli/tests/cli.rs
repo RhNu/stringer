@@ -1,5 +1,5 @@
 use clap::Parser;
-use stringer_cli::{Cli, Command, KnowledgeCommand};
+use stringer_cli::{Cli, Command, KnowledgeCommand, KnowledgeIndexCommand};
 
 #[test]
 fn export_command_uses_root_and_out_paths() {
@@ -91,6 +91,10 @@ fn knowledge_annotate_command_uses_root_translations_and_auto_fill_flag() {
         "--translations",
         "translations",
         "--auto-fill-memory",
+        "--global-knowledge-root",
+        "global",
+        "--override-knowledge-root",
+        "override",
     ]);
 
     let Command::Knowledge { command } = cli.command else {
@@ -102,6 +106,14 @@ fn knowledge_annotate_command_uses_root_translations_and_auto_fill_flag() {
     assert_eq!(command.root.as_str(), "input");
     assert_eq!(command.translations.as_str(), "translations");
     assert!(command.auto_fill_memory);
+    assert_eq!(
+        command.global_knowledge_root.as_deref(),
+        Some("global".into())
+    );
+    assert_eq!(
+        command.override_knowledge_root.as_deref(),
+        Some("override".into())
+    );
 }
 
 #[test]
@@ -114,6 +126,10 @@ fn knowledge_validate_command_uses_root_and_translations() {
         "input",
         "--translations",
         "translations",
+        "--global-knowledge-root",
+        "global",
+        "--override-knowledge-root",
+        "override",
     ]);
 
     let Command::Knowledge { command } = cli.command else {
@@ -124,6 +140,14 @@ fn knowledge_validate_command_uses_root_and_translations() {
     };
     assert_eq!(command.root.as_str(), "input");
     assert_eq!(command.translations.as_str(), "translations");
+    assert_eq!(
+        command.global_knowledge_root.as_deref(),
+        Some("global".into())
+    );
+    assert_eq!(
+        command.override_knowledge_root.as_deref(),
+        Some("override".into())
+    );
 }
 
 #[test]
@@ -150,6 +174,10 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
         "en",
         "--target-locale",
         "zh-Hans",
+        "--global-knowledge-root",
+        "global",
+        "--override-knowledge-root",
+        "override",
         "--json",
     ]);
 
@@ -164,5 +192,54 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
     assert_eq!(command.kind, "plugin");
     assert_eq!(command.record_type.as_deref(), Some("WEAP"));
     assert_eq!(command.subrecord.as_deref(), Some("FULL"));
+    assert_eq!(
+        command.global_knowledge_root.as_deref(),
+        Some("global".into())
+    );
+    assert_eq!(
+        command.override_knowledge_root.as_deref(),
+        Some("override".into())
+    );
     assert!(command.json);
+}
+
+#[test]
+fn knowledge_index_rebuild_command_uses_root_settings_and_knowledge_roots() {
+    let cli = Cli::parse_from([
+        "stringer",
+        "knowledge",
+        "index",
+        "rebuild",
+        "--root",
+        "input",
+        "--game-release",
+        "SkyrimSe",
+        "--asset-language",
+        "English",
+        "--source-locale",
+        "en",
+        "--target-locale",
+        "zh-Hans",
+        "--global-knowledge-root",
+        "global",
+        "--override-knowledge-root",
+        "override",
+    ]);
+
+    let Command::Knowledge { command } = cli.command else {
+        panic!("expected knowledge command");
+    };
+    let KnowledgeCommand::Index { command } = command else {
+        panic!("expected knowledge index command");
+    };
+    let KnowledgeIndexCommand::Rebuild(command) = command;
+    assert_eq!(command.root.as_str(), "input");
+    assert_eq!(
+        command.global_knowledge_root.as_deref(),
+        Some("global".into())
+    );
+    assert_eq!(
+        command.override_knowledge_root.as_deref(),
+        Some("override".into())
+    );
 }

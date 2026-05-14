@@ -161,6 +161,7 @@ async fn import_uses_asset_language_from_manifest() {
             asset_language: Language::French,
             source_locale: "fr".to_string(),
             target_locale: "zh-Hans".to_string(),
+            global_knowledge_root: None,
         },
     })
     .await

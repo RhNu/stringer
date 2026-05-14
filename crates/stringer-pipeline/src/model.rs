@@ -246,6 +246,10 @@ impl PipelineEntry {
         self.translated_text = Some(text.into());
     }
 
+    pub(crate) fn replace_translated_text(&mut self, text: Option<String>) {
+        self.translated_text = text;
+    }
+
     pub fn source_locale(&self) -> &str {
         &self.source_locale
     }

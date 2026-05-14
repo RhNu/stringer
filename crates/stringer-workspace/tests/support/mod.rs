@@ -19,6 +19,7 @@ pub fn settings() -> WorkspaceSettings {
         asset_language: Language::English,
         source_locale: "en".to_string(),
         target_locale: "zh-Hans".to_string(),
+        global_knowledge_root: None,
     }
 }
 

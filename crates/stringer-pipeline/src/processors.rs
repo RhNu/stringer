@@ -14,6 +14,14 @@ use crate::model::{
 pub trait PipelineProcessor {
     fn name(&self) -> &'static str;
 
+    fn supports_entry(&self, _entry: &PipelineEntry) -> bool {
+        true
+    }
+
+    fn can_mutate_translation(&self) -> bool {
+        false
+    }
+
     fn process(
         &self,
         stage: PipelineStage,
@@ -41,21 +49,49 @@ impl Pipeline {
     ) -> PipelineReport {
         let mut report = PipelineReport {
             entries: entries.len(),
+            diagnostics: knowledge.merge_diagnostics().to_vec(),
             ..PipelineReport::default()
         };
         for entry in entries {
+            if !self
+                .processors
+                .iter()
+                .any(|processor| processor.supports_entry(entry))
+            {
+                report.skipped += 1;
+                continue;
+            }
             let before_annotations = entry.annotations().len();
             let before_diagnostics = entry.diagnostics().len();
-            let before_translated = entry.translated_text().map(str::to_string);
             for processor in &self.processors {
+                if !processor.supports_entry(entry) {
+                    continue;
+                }
+                let before_translated = entry.translated_text().map(str::to_string);
                 processor.process(stage, entry, knowledge, options);
+                if before_translated.as_deref() != entry.translated_text() {
+                    if processor.can_mutate_translation() {
+                        if entry.translated_text().is_some() {
+                            report.auto_filled += 1;
+                        }
+                    } else {
+                        entry.replace_translated_text(before_translated);
+                        entry.add_diagnostic(
+                            PipelineDiagnostic::new(
+                                PipelineDiagnosticSeverity::Warning,
+                                "processor.unauthorized_mutation",
+                                format!(
+                                    "Processor `{}` changed translated_text without mutation permission.",
+                                    processor.name()
+                                ),
+                                entry.id(),
+                            )
+                            .with_rule_id(processor.name()),
+                        );
+                    }
+                }
             }
             report.annotations += entry.annotations().len() - before_annotations;
-            if before_translated.as_deref() != entry.translated_text()
-                && entry.translated_text().is_some()
-            {
-                report.auto_filled += 1;
-            }
             report
                 .diagnostics
                 .extend(entry.diagnostics()[before_diagnostics..].iter().cloned());
@@ -72,6 +108,10 @@ impl PipelineProcessor for TerminologyProcessor {
         "stringer.term"
     }
 
+    fn supports_entry(&self, entry: &PipelineEntry) -> bool {
+        supported_knowledge_kind(entry.kind())
+    }
+
     fn process(
         &self,
         stage: PipelineStage,
@@ -79,10 +119,6 @@ impl PipelineProcessor for TerminologyProcessor {
         knowledge: &KnowledgeBase,
         _options: &PipelineOptions,
     ) {
-        if !supported_knowledge_kind(entry.kind()) {
-            return;
-        }
-
         match stage {
             PipelineStage::Annotate => annotate_terms(entry, knowledge.terms(), self.name()),
             PipelineStage::Validate => validate_terms(entry, knowledge.terms()),
@@ -99,6 +135,14 @@ impl PipelineProcessor for TranslationMemoryProcessor {
         "stringer.memory"
     }
 
+    fn supports_entry(&self, entry: &PipelineEntry) -> bool {
+        supported_knowledge_kind(entry.kind())
+    }
+
+    fn can_mutate_translation(&self) -> bool {
+        true
+    }
+
     fn process(
         &self,
         stage: PipelineStage,
@@ -106,10 +150,6 @@ impl PipelineProcessor for TranslationMemoryProcessor {
         knowledge: &KnowledgeBase,
         options: &PipelineOptions,
     ) {
-        if !supported_knowledge_kind(entry.kind()) {
-            return;
-        }
-
         match stage {
             PipelineStage::Annotate => annotate_memory(entry, knowledge.memory(), self.name()),
             PipelineStage::MemoryApply => {
@@ -129,6 +169,10 @@ impl PipelineProcessor for BasicValidationProcessor {
         "stringer.validation"
     }
 
+    fn supports_entry(&self, entry: &PipelineEntry) -> bool {
+        supported_knowledge_kind(entry.kind())
+    }
+
     fn process(
         &self,
         stage: PipelineStage,
@@ -137,9 +181,6 @@ impl PipelineProcessor for BasicValidationProcessor {
         _options: &PipelineOptions,
     ) {
         if stage != PipelineStage::Validate {
-            return;
-        }
-        if !supported_knowledge_kind(entry.kind()) {
             return;
         }
         validate_placeholders(entry);
@@ -156,6 +197,10 @@ impl PipelineProcessor for ReplacementRuleProcessor {
         "stringer.replacement"
     }
 
+    fn supports_entry(&self, entry: &PipelineEntry) -> bool {
+        supported_knowledge_kind(entry.kind())
+    }
+
     fn process(
         &self,
         stage: PipelineStage,
@@ -163,9 +208,6 @@ impl PipelineProcessor for ReplacementRuleProcessor {
         knowledge: &KnowledgeBase,
         _options: &PipelineOptions,
     ) {
-        if !supported_knowledge_kind(entry.kind()) {
-            return;
-        }
         if !matches!(
             stage,
             PipelineStage::PreTranslate | PipelineStage::PostTranslate
@@ -445,13 +487,20 @@ fn rule_annotation(rule: &ReplacementRule, processor: &str) -> PipelineAnnotatio
         rule.id(),
         rule.layer(),
         1.0,
-        "literal",
+        rule_mode_name(rule.mode()),
         processor,
         annotation_payload(&[
             ("pattern", rule.pattern()),
             ("replacement", rule.replacement()),
         ]),
     )
+}
+
+fn rule_mode_name(mode: crate::knowledge::RuleMode) -> &'static str {
+    match mode {
+        crate::knowledge::RuleMode::Literal => "literal",
+        crate::knowledge::RuleMode::Regex => "regex",
+    }
 }
 
 fn validate_placeholders(entry: &mut PipelineEntry) {

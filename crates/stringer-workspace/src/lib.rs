@@ -2,6 +2,7 @@
 
 mod error;
 mod knowledge;
+mod knowledge_index;
 mod operations;
 mod package;
 mod paths;
@@ -9,8 +10,10 @@ mod settings;
 
 pub use error::WorkspaceError;
 pub use knowledge::{
-    AnnotateTranslationsOptions, KnowledgeLookup, KnowledgeSummary, LookupKnowledgeOptions,
-    ValidateTranslationsOptions, annotate_translations, load_knowledge_layers, lookup_knowledge,
+    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexSummary,
+    KnowledgeLayerOverrides, KnowledgeLookup, KnowledgeSummary, LoadKnowledgeLayersOptions,
+    LoadedKnowledgeLayers, LookupKnowledgeOptions, ValidateTranslationsOptions,
+    annotate_translations, build_knowledge_index, load_knowledge_layers, lookup_knowledge,
     validate_translations,
 };
 pub use operations::{

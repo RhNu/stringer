@@ -32,6 +32,13 @@ pub enum WorkspaceError {
         source: toml::de::Error,
     },
 
+    #[error("failed to write TOML `{path}`: {source}")]
+    Toml {
+        path: Utf8PathBuf,
+        #[source]
+        source: toml::ser::Error,
+    },
+
     #[error("missing workspace setting `{name}`")]
     MissingSetting { name: &'static str },
 
@@ -51,6 +58,13 @@ pub enum WorkspaceError {
         path: Utf8PathBuf,
         #[source]
         source: serde_json::Error,
+    },
+
+    #[error("failed to process SQLite index `{path}`: {source}")]
+    Sqlite {
+        path: Utf8PathBuf,
+        #[source]
+        source: rusqlite::Error,
     },
 
     #[error("unsupported translation package schema version {version} in `{path}`")]
