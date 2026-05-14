@@ -1,9 +1,10 @@
 use crate::binary::{BinaryReader, BinaryWriter};
+use crate::constants::PEX_MAGIC;
 use crate::model::{PexVersion, ensure_u16, validate_counted_str};
 use crate::{
-    PEX_MAGIC, PexDebugFunctionInfo, PexDebugFunctionType, PexDebugInfo, PexError, PexFile,
-    PexFunction, PexHeader, PexInstruction, PexLocal, PexObject, PexOpcode, PexParameter,
-    PexProperty, PexState, PexStringId, PexUserFlag, PexValue, PexVariable,
+    PexDebugFunctionInfo, PexDebugFunctionType, PexDebugInfo, PexError, PexFile, PexFunction,
+    PexHeader, PexInstruction, PexLocal, PexObject, PexOpcode, PexParameter, PexProperty, PexState,
+    PexStringId, PexUserFlag, PexValue, PexVariable,
 };
 use tracing::{debug, instrument, trace};
 

@@ -2,6 +2,7 @@
 
 mod binary;
 mod codec;
+mod constants;
 mod error;
 mod high_level;
 mod model;
@@ -18,5 +19,3 @@ pub use model::{
     PexVariable,
 };
 pub use opcode::{PexInstruction, PexOpcode, PexValue};
-
-const PEX_MAGIC: u32 = 0xFA57_C0DE;

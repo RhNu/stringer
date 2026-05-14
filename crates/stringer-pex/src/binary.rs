@@ -2,7 +2,8 @@ use stringer_core::binary::{
     BinaryError, BinaryReader as CoreBinaryReader, BinaryWriter as CoreBinaryWriter, Endian,
 };
 
-use crate::{PEX_MAGIC, PexError, PexStringId};
+use crate::constants::PEX_MAGIC;
+use crate::{PexError, PexStringId};
 
 pub(crate) struct BinaryWriter {
     inner: CoreBinaryWriter,
