@@ -321,7 +321,8 @@ fn knowledge_index_rebuild_command_uses_root_settings_and_knowledge_roots() {
 fn root_help_explains_agent_workflow() {
     let help = Cli::command().render_long_help().to_string();
 
-    assert!(help.contains("典型流程"));
+    assert!(help.contains("Typical workflow"));
+    assert!(help.contains("adapt import"));
     assert!(help.contains("knowledge annotate"));
     assert!(help.contains("entries/**/*.jsonl"));
 }
@@ -338,6 +339,23 @@ fn export_help_explains_translation_package_output() {
     assert!(help.contains("manifest.json"));
     assert!(help.contains("--game-release"));
     assert!(help.contains("source-locale"));
+}
+
+#[test]
+fn adapt_import_help_explains_memory_conversion() {
+    let mut command = Cli::command();
+    let adapt = command
+        .find_subcommand_mut("adapt")
+        .expect("adapt subcommand exists");
+    let help = adapt
+        .find_subcommand_mut("import")
+        .expect("adapt import subcommand exists")
+        .render_long_help()
+        .to_string();
+
+    assert!(help.contains("translation memory JSONL"));
+    assert!(help.contains("xt-sst"));
+    assert!(help.contains("--source-locale"));
 }
 
 #[test]

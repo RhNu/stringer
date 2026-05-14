@@ -8,6 +8,7 @@ Stringer 是一个面向 Bethesda 模组本地化的命令行工具和 Rust work
 - PEX 脚本字符串：`.pex`。
 - Scaleform 翻译表：`Interface/Translations/*.txt`。
 - 知识层：术语表、翻译记忆、替换规则、派生 SQLite 索引。
+- Adapt：把 xTranslator / ESP-ESM Translator 旧翻译资源转换为 Stringer 翻译记忆。
 
 ## 构建与检查
 
@@ -195,6 +196,49 @@ cargo run -p stringer-cli -- knowledge index rebuild `
 
 普通 `annotate`、`validate` 和 `lookup` 会优先使用新鲜索引；索引缺失或过期时会回退到文件知识库，并报告 `knowledge.index_stale`。
 
+## 迁移旧翻译资源
+
+`adapt import` 用于把已有翻译资源导入为 Stringer 翻译记忆 JSONL。它不会改模组文件，也不会直接改翻译包；它只读取外部资源，输出可放进 `knowledge/memory/` 的记忆文件，随后由 `knowledge annotate` 和 `knowledge lookup` 使用。
+
+支持格式：
+
+- `eet`：ESP-ESM Translator / EET 二进制表。
+- `eet-xml`：EET XML 导出。
+- `eet-json`：EET JSON / DDS 风格导出。
+- `xt-sst`：xTranslator `.sst` 文件。
+
+示例：
+
+```powershell
+cargo run -p stringer-cli -- adapt import `
+  --format xt-sst `
+  --input path/to/old-translation.sst `
+  --out path/to/mod-root/knowledge/memory/old-translation.jsonl `
+  --source-locale en `
+  --target-locale zh-Hans `
+  --game SkyrimSe
+```
+
+输出行会包含 `id`、`source`、`target`、`source_locale`、`target_locale`、`context`、`origin` 和 `quality`。`context` 会尽量保留记录类型、子记录、Form ID、字符串 ID、字段索引等信息；`origin` 保存来源格式、行号、版本、状态等追踪信息。
+
+质量字段会转换为 Stringer 翻译记忆质量：
+
+- `confirmed`：EET 完成状态、xTranslator 锁定或验证状态。
+- `machine`：EET 机器翻译状态。
+- `rejected`：EET 拒绝状态。
+- `imported`：其他可用旧译文。
+
+空 source 或空 target 会被跳过并计入 diagnostics。导入后建议重建索引：
+
+```powershell
+cargo run -p stringer-cli -- knowledge index rebuild `
+  --root path/to/mod-root `
+  --game-release SkyrimSe `
+  --asset-language English `
+  --source-locale en `
+  --target-locale zh-Hans
+```
+
 ## CLI 速查
 
 查看总帮助：
@@ -207,6 +251,7 @@ cargo run -p stringer-cli -- --help
 
 ```powershell
 cargo run -p stringer-cli -- export --help
+cargo run -p stringer-cli -- adapt import --help
 cargo run -p stringer-cli -- knowledge annotate --help
 cargo run -p stringer-cli -- knowledge validate --help
 cargo run -p stringer-cli -- knowledge lookup --help
@@ -216,6 +261,7 @@ cargo run -p stringer-cli -- knowledge index rebuild --help
 常用命令：
 
 - `export`：扫描模组根目录，导出翻译包。
+- `adapt import`：把 EET、EET XML、EET JSON 或 xTranslator SST 转成翻译记忆 JSONL。
 - `knowledge annotate`：给翻译包写入术语、记忆和知识提示，可选自动填充高置信记忆。
 - `knowledge validate`：重算诊断信息，检查术语、禁用译法、占位符、空译文等风险。
 - `knowledge lookup`：查询单条文本的提示和诊断；加 `--json` 适合 Agent 读取。
@@ -228,6 +274,7 @@ cargo run -p stringer-cli -- knowledge index rebuild --help
 - `crates/stringer-plugin`：Bethesda plugin 和 STRINGS 读写。
 - `crates/stringer-pex`：PEX 字符串读写。
 - `crates/stringer-scaleform`：Scaleform 翻译表读写。
+- `crates/stringer-adapt`：旧翻译资源到翻译记忆的转换。
 - `crates/stringer-pipeline`：术语、记忆、规则和诊断管线。
 - `crates/stringer-workspace`：工作区 API、翻译包、知识层和导入导出流程。
 - `crates/stringer-cli`：命令行薄入口。
