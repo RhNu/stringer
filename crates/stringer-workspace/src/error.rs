@@ -46,6 +46,19 @@ pub enum WorkspaceError {
         source: serde_json::Error,
     },
 
+    #[error("failed to process JSON `{path}`: {source}")]
+    Json {
+        path: Utf8PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("unsupported translation package schema version {version} in `{path}`")]
+    UnsupportedTranslationSchema { path: Utf8PathBuf, version: u32 },
+
+    #[error("invalid translation package path `{path}`: {message}")]
+    InvalidTranslationPackagePath { path: String, message: String },
+
     #[error("duplicate translation id `{id}` in `{path}`")]
     DuplicateTranslationId { path: Utf8PathBuf, id: String },
 

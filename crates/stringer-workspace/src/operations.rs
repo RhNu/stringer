@@ -13,9 +13,9 @@ use stringer_scaleform::{
 use tracing::debug;
 
 use crate::WorkspaceError;
-use crate::jsonl::{
-    TranslationRecord, external_entry_id, read_translation_patches, record_from_entry,
-    write_records_jsonl,
+use crate::package::{
+    PackagedTranslationRecord, external_entry_id, packaged_record_from_entry,
+    read_translation_package, write_translation_package,
 };
 use crate::paths::{changed_assets, ensure_override_root_outside_source, write_override_assets};
 use crate::settings::WorkspaceSettings;
@@ -32,7 +32,6 @@ pub struct ImportTranslationsOptions {
     pub root: Utf8PathBuf,
     pub translations: Utf8PathBuf,
     pub target: WriteTarget,
-    pub settings: WorkspaceSettings,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,14 +57,18 @@ enum EditableBundle {
 }
 
 impl EditableBundle {
-    fn collect_records(&self, settings: &WorkspaceSettings, records: &mut Vec<TranslationRecord>) {
+    fn collect_records(
+        &self,
+        settings: &WorkspaceSettings,
+        records: &mut Vec<PackagedTranslationRecord>,
+    ) {
         match self {
             Self::Plugin(bundle) => {
                 records.extend(
                     bundle
                         .string_entries()
                         .iter()
-                        .map(|entry| record_from_entry(entry, settings)),
+                        .map(|entry| packaged_record_from_entry(entry, settings)),
                 );
             }
             Self::Pex(bundle) => {
@@ -73,7 +76,7 @@ impl EditableBundle {
                     bundle
                         .string_entries()
                         .iter()
-                        .map(|entry| record_from_entry(entry, settings)),
+                        .map(|entry| packaged_record_from_entry(entry, settings)),
                 );
             }
             Self::Scaleform(bundle) => {
@@ -81,7 +84,7 @@ impl EditableBundle {
                     bundle
                         .string_entries()
                         .iter()
-                        .map(|entry| record_from_entry(entry, settings)),
+                        .map(|entry| packaged_record_from_entry(entry, settings)),
                 );
             }
         }
@@ -111,7 +114,7 @@ impl EditableBundle {
     }
 }
 
-pub async fn export_translation_jsonl(
+pub async fn export_translations(
     options: ExportTranslationsOptions,
 ) -> Result<ExportSummary, WorkspaceError> {
     let read = read_mod_root(&options.root, ReadModOptions::default())?;
@@ -120,22 +123,21 @@ pub async fn export_translation_jsonl(
     for bundle in &bundles {
         bundle.collect_records(&options.settings, &mut records);
     }
-    records.sort_by(|left, right| {
-        (&left.kind, &left.asset_path, &left.id).cmp(&(&right.kind, &right.asset_path, &right.id))
-    });
-    write_records_jsonl(&options.out, &records)?;
-    debug!(entries = records.len(), "exported translation jsonl");
+    records
+        .sort_by(|left, right| (&left.file, &left.record.id).cmp(&(&right.file, &right.record.id)));
+    write_translation_package(&options.out, &options.settings, &records)?;
+    debug!(entries = records.len(), "exported translation package");
     Ok(ExportSummary {
         entries: records.len(),
     })
 }
 
-pub async fn import_translation_jsonl(
+pub async fn import_translations(
     options: ImportTranslationsOptions,
 ) -> Result<ImportSummary, WorkspaceError> {
+    let (settings, mut translations) = read_translation_package(&options.translations)?;
     let read = read_mod_root(&options.root, ReadModOptions::default())?;
-    let mut translations = read_translation_patches(&options.translations)?;
-    let mut bundles = read_editable_bundles(&read.files, &options.settings).await?;
+    let mut bundles = read_editable_bundles(&read.files, &settings).await?;
     let mut applied_entries = 0;
     for bundle in &mut bundles {
         applied_entries += bundle.apply_translations(&mut translations);
@@ -146,7 +148,7 @@ pub async fn import_translation_jsonl(
 
     let mut written_candidates = Vec::new();
     for bundle in bundles {
-        written_candidates.extend(bundle.write(&options.settings).await?);
+        written_candidates.extend(bundle.write(&settings).await?);
     }
     let changed = changed_assets(&read.files, written_candidates)?;
     let written_files = match options.target {
@@ -155,7 +157,10 @@ pub async fn import_translation_jsonl(
             write_override_assets(&root, &changed)?
         }
     };
-    debug!(applied_entries, written_files, "imported translation jsonl");
+    debug!(
+        applied_entries,
+        written_files, "imported translation package"
+    );
     Ok(ImportSummary {
         applied_entries,
         written_files,

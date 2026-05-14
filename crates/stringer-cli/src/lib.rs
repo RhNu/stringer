@@ -4,9 +4,8 @@ use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 use stringer_workspace::{
     ExportTranslationsOptions, ImportTranslationsOptions, LoadWorkspaceSettingsOptions,
-    WorkspaceError, WorkspaceSettingsOverrides, WriteTarget, export_translation_jsonl,
-    import_translation_jsonl, load_workspace_settings, parse_game_release_name,
-    parse_language_name,
+    WorkspaceError, WorkspaceSettingsOverrides, WriteTarget, export_translations,
+    import_translations, load_workspace_settings, parse_game_release_name, parse_language_name,
 };
 
 #[derive(Debug, Parser)]
@@ -46,14 +45,6 @@ pub struct ImportCommand {
     pub translations: Utf8PathBuf,
     #[arg(long)]
     pub override_root: Utf8PathBuf,
-    #[arg(long)]
-    pub game_release: Option<String>,
-    #[arg(long)]
-    pub asset_language: Option<String>,
-    #[arg(long)]
-    pub source_locale: Option<String>,
-    #[arg(long)]
-    pub target_locale: Option<String>,
 }
 
 pub async fn run(cli: Cli) -> Result<(), WorkspaceError> {
@@ -68,7 +59,7 @@ pub async fn run(cli: Cli) -> Result<(), WorkspaceError> {
                     command.target_locale,
                 )?,
             })?;
-            let summary = export_translation_jsonl(ExportTranslationsOptions {
+            let summary = export_translations(ExportTranslationsOptions {
                 root: command.root,
                 out: command.out,
                 settings,
@@ -78,22 +69,12 @@ pub async fn run(cli: Cli) -> Result<(), WorkspaceError> {
             Ok(())
         }
         Command::Import(command) => {
-            let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                config_path: None,
-                overrides: overrides(
-                    command.game_release,
-                    command.asset_language,
-                    command.source_locale,
-                    command.target_locale,
-                )?,
-            })?;
-            let summary = import_translation_jsonl(ImportTranslationsOptions {
+            let summary = import_translations(ImportTranslationsOptions {
                 root: command.root,
                 translations: command.translations,
                 target: WriteTarget::OverrideDirectory {
                     root: command.override_root,
                 },
-                settings,
             })
             .await?;
             println!(

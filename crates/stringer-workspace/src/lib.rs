@@ -1,16 +1,18 @@
 #![forbid(unsafe_code)]
 
 mod error;
-mod jsonl;
 mod operations;
+mod package;
 mod paths;
 mod settings;
 
 pub use error::WorkspaceError;
-pub use jsonl::{SCHEMA_VERSION, TranslationRecord};
 pub use operations::{
     ExportSummary, ExportTranslationsOptions, ImportSummary, ImportTranslationsOptions,
-    WriteTarget, export_translation_jsonl, import_translation_jsonl,
+    WriteTarget, export_translations, import_translations,
+};
+pub use package::{
+    SCHEMA_VERSION, TranslationManifest, TranslationManifestFile, TranslationRecord,
 };
 pub use settings::{
     LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
