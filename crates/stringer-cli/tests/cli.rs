@@ -1,5 +1,10 @@
+use std::fs;
+
 use clap::Parser;
-use stringer_cli::{Cli, Command, KnowledgeCommand, KnowledgeIndexCommand};
+use serde_json::Value;
+use stringer_cli::{
+    AdaptCommand, AdaptFormatArg, Cli, Command, KnowledgeCommand, KnowledgeIndexCommand,
+};
 
 #[test]
 fn export_command_uses_root_and_out_paths() {
@@ -78,6 +83,74 @@ fn import_command_does_not_define_settings_flags() {
             .to_string()
             .contains("unexpected argument '--game-release'")
     );
+}
+
+#[test]
+fn adapt_import_command_uses_format_input_output_and_locales() {
+    let cli = Cli::parse_from([
+        "stringer",
+        "adapt",
+        "import",
+        "--format",
+        "xt-sst",
+        "--input",
+        "source.sst",
+        "--out",
+        "knowledge/memory/source.jsonl",
+        "--source-locale",
+        "en",
+        "--target-locale",
+        "zh-Hans",
+        "--game",
+        "SkyrimSe",
+    ]);
+
+    let Command::Adapt { command } = cli.command else {
+        panic!("expected adapt command");
+    };
+    let AdaptCommand::Import(command) = command;
+    assert_eq!(command.format, AdaptFormatArg::XtSst);
+    assert_eq!(command.input.as_str(), "source.sst");
+    assert_eq!(command.out.as_str(), "knowledge/memory/source.jsonl");
+    assert_eq!(command.source_locale, "en");
+    assert_eq!(command.target_locale, "zh-Hans");
+    assert_eq!(command.game.as_deref(), Some("SkyrimSe"));
+}
+
+#[tokio::test]
+async fn adapt_import_command_writes_memory_jsonl() {
+    let input = test_path("cli-adapt.eet");
+    let output = test_path("cli-adapt-memory.jsonl");
+    fs::write(&input, eet_v1_fixture()).unwrap();
+
+    let cli = Cli::parse_from([
+        "stringer",
+        "adapt",
+        "import",
+        "--format",
+        "eet",
+        "--input",
+        input.as_str(),
+        "--out",
+        output.as_str(),
+        "--source-locale",
+        "en",
+        "--target-locale",
+        "zh-Hans",
+        "--game",
+        "skyrim-se",
+    ]);
+
+    stringer_cli::run(cli).await.unwrap();
+
+    let line = fs::read_to_string(output).unwrap();
+    let row: Value = serde_json::from_str(line.trim()).unwrap();
+    assert_eq!(row["source"], "Iron Sword");
+    assert_eq!(row["target"], "铁剑");
+    assert_eq!(row["source_locale"], "en");
+    assert_eq!(row["target_locale"], "zh-Hans");
+    assert_eq!(row["context"]["record_type"], "WEAP");
+    assert_eq!(row["context"]["game"], "SkyrimSe");
 }
 
 #[test]
@@ -242,4 +315,46 @@ fn knowledge_index_rebuild_command_uses_root_settings_and_knowledge_roots() {
         command.override_knowledge_root.as_deref(),
         Some("override".into())
     );
+}
+
+fn test_path(name: &str) -> camino::Utf8PathBuf {
+    camino::Utf8PathBuf::from_path_buf(
+        std::env::temp_dir().join(format!("stringer-cli-{}-{name}", std::process::id())),
+    )
+    .unwrap()
+}
+
+fn eet_v1_fixture() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"EET_");
+    push_i32(&mut bytes, 1);
+    push_u32(&mut bytes, 1);
+    bytes.extend_from_slice(b"LINE");
+    push_u32(&mut bytes, 1);
+    push_u32_string(&mut bytes, "WEAP");
+    push_u32_string(&mut bytes, "00001234");
+    push_u32_string(&mut bytes, "IronSword");
+    push_u32_string(&mut bytes, "FULL");
+    push_u32_string(&mut bytes, "Iron Sword");
+    push_u32_string(&mut bytes, "铁剑");
+    push_u32_string(&mut bytes, "");
+    push_i32(&mut bytes, 1);
+    bytes.extend_from_slice(&99i16.to_le_bytes());
+    push_i32(&mut bytes, 42);
+    push_u32_string(&mut bytes, "");
+    bytes
+}
+
+fn push_u32_string(bytes: &mut Vec<u8>, value: &str) {
+    let data = value.as_bytes();
+    push_u32(bytes, data.len() as u32);
+    bytes.extend_from_slice(data);
+}
+
+fn push_i32(bytes: &mut Vec<u8>, value: i32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
+fn push_u32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
 }

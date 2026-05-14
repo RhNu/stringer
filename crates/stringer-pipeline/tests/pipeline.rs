@@ -228,6 +228,30 @@ fn memory_exact_and_normalized_matches_auto_fill_high_confidence() {
 }
 
 #[test]
+fn memory_auto_fill_prefers_context_specific_target_over_generic_target() {
+    let mut layer = KnowledgeLayer::new("project");
+    layer
+        .add_memory_jsonl(
+            "knowledge/memory/project.jsonl",
+            r#"{"id":"tm:generic","source":"Iron Sword","target":"通用铁剑","source_locale":"en","target_locale":"zh-Hans","quality":"confirmed","created_at":"2026-05-14T00:00:00Z"}
+{"id":"tm:specific","source":"Iron Sword","target":"武器铁剑","source_locale":"en","target_locale":"zh-Hans","context":{"record_type":"WEAP","subrecord":"FULL"},"quality":"confirmed","created_at":"2026-05-14T00:00:00Z"}"#,
+        )
+        .unwrap();
+    let knowledge = KnowledgeBase::from_layers(vec![layer]).unwrap();
+    let mut entry = plugin_entry("Iron Sword");
+
+    run_stage(PipelineStage::MemoryApply, &mut entry, &knowledge);
+
+    assert_eq!(entry.translated_text(), Some("武器铁剑"));
+    assert!(entry.annotations().iter().any(|annotation| {
+        annotation.kind() == "memory"
+            && annotation.id() == "tm:specific"
+            && annotation.confidence() == 1.0
+    }));
+    assert!(entry.diagnostics().is_empty());
+}
+
+#[test]
 fn fuzzy_memory_matches_only_annotate_and_never_auto_fill() {
     let mut layer = KnowledgeLayer::new("project");
     layer

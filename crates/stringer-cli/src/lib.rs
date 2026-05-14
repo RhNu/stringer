@@ -1,15 +1,19 @@
 #![forbid(unsafe_code)]
 
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+use stringer_adapt::{
+    AdaptError, AdaptFormat, AdaptImportOptions, read_adapt_catalog, write_memory_jsonl,
+};
 use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ExportTranslationsOptions,
     ImportTranslationsOptions, KnowledgeLayerOverrides, LoadWorkspaceSettingsOptions,
     LookupKnowledgeOptions, PipelineEntryKind, ValidateTranslationsOptions, WorkspaceError,
     WorkspaceSettingsOverrides, WriteTarget, annotate_translations, build_knowledge_index,
-    export_translations, import_translations, load_workspace_settings, lookup_knowledge,
-    parse_game_release_name, parse_language_name, validate_translations,
+    export_translations, game_release_name, import_translations, load_workspace_settings,
+    lookup_knowledge, parse_game_release_name, parse_language_name, validate_translations,
 };
+use thiserror::Error;
 
 #[derive(Debug, Parser)]
 #[command(name = "stringer")]
@@ -22,6 +26,10 @@ pub struct Cli {
 pub enum Command {
     Export(ExportCommand),
     Import(ImportCommand),
+    Adapt {
+        #[command(subcommand)]
+        command: AdaptCommand,
+    },
     Knowledge {
         #[command(subcommand)]
         command: KnowledgeCommand,
@@ -52,6 +60,39 @@ pub struct ImportCommand {
     pub translations: Utf8PathBuf,
     #[arg(long)]
     pub override_root: Utf8PathBuf,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AdaptCommand {
+    Import(AdaptImportCommand),
+}
+
+#[derive(Debug, Parser)]
+pub struct AdaptImportCommand {
+    #[arg(long)]
+    pub format: AdaptFormatArg,
+    #[arg(long)]
+    pub input: Utf8PathBuf,
+    #[arg(long)]
+    pub out: Utf8PathBuf,
+    #[arg(long)]
+    pub source_locale: String,
+    #[arg(long)]
+    pub target_locale: String,
+    #[arg(long)]
+    pub game: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum AdaptFormatArg {
+    #[value(name = "eet")]
+    Eet,
+    #[value(name = "eet-xml")]
+    EetXml,
+    #[value(name = "eet-json")]
+    EetJson,
+    #[value(name = "xt-sst")]
+    XtSst,
 }
 
 #[derive(Debug, Subcommand)]
@@ -142,7 +183,16 @@ pub struct KnowledgeIndexRebuildCommand {
     pub override_knowledge_root: Option<Utf8PathBuf>,
 }
 
-pub async fn run(cli: Cli) -> Result<(), WorkspaceError> {
+#[derive(Debug, Error)]
+pub enum CliError {
+    #[error(transparent)]
+    Workspace(#[from] WorkspaceError),
+
+    #[error(transparent)]
+    Adapt(#[from] AdaptError),
+}
+
+pub async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Export(command) => {
             let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
@@ -178,11 +228,44 @@ pub async fn run(cli: Cli) -> Result<(), WorkspaceError> {
             );
             Ok(())
         }
+        Command::Adapt { command } => run_adapt(command).await,
         Command::Knowledge { command } => run_knowledge(command).await,
     }
 }
 
-async fn run_knowledge(command: KnowledgeCommand) -> Result<(), WorkspaceError> {
+async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
+    match command {
+        AdaptCommand::Import(command) => {
+            let game = command
+                .game
+                .as_deref()
+                .map(parse_game_release_name)
+                .transpose()?
+                .map(game_release_name)
+                .map(str::to_string);
+            let catalog = read_adapt_catalog(
+                &command.input,
+                AdaptImportOptions {
+                    source_locale: command.source_locale,
+                    target_locale: command.target_locale,
+                    game,
+                    format: command.format.into(),
+                },
+            )?;
+            let summary = write_memory_jsonl(&catalog, &command.out)?;
+            println!(
+                "adapted {} entries, wrote {} memory entries, skipped {} entries, reported {} diagnostics",
+                summary.total_entries,
+                summary.written_entries,
+                summary.skipped_entries,
+                summary.diagnostics
+            );
+            Ok(())
+        }
+    }
+}
+
+async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
     match command {
         KnowledgeCommand::Annotate(command) => {
             let summary = annotate_translations(AnnotateTranslationsOptions {
@@ -263,7 +346,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), WorkspaceError> 
     }
 }
 
-async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), WorkspaceError> {
+async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliError> {
     match command {
         KnowledgeIndexCommand::Rebuild(command) => {
             let config_path = project_config_path(&command.root);
@@ -298,6 +381,17 @@ fn parse_pipeline_kind(value: String) -> Result<PipelineEntryKind, WorkspaceErro
         name: "kind",
         value,
     })
+}
+
+impl From<AdaptFormatArg> for AdaptFormat {
+    fn from(value: AdaptFormatArg) -> Self {
+        match value {
+            AdaptFormatArg::Eet => Self::EetBinary,
+            AdaptFormatArg::EetXml => Self::EetXml,
+            AdaptFormatArg::EetJson => Self::EetJson,
+            AdaptFormatArg::XtSst => Self::XtSst,
+        }
+    }
 }
 
 fn lookup_context(record_type: Option<String>, subrecord: Option<String>) -> Vec<(String, String)> {
