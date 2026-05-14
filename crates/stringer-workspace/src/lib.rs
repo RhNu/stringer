@@ -3,6 +3,7 @@
 mod error;
 mod knowledge;
 mod knowledge_index;
+mod knowledge_lookup;
 mod operations;
 mod package;
 mod paths;
@@ -11,10 +12,13 @@ mod settings;
 pub use error::WorkspaceError;
 pub use knowledge::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexSummary,
-    KnowledgeLayerOverrides, KnowledgeLookup, KnowledgeSummary, LoadKnowledgeLayersOptions,
-    LoadedKnowledgeLayers, LookupKnowledgeOptions, ValidateTranslationsOptions,
-    annotate_translations, build_knowledge_index, load_knowledge_layers, lookup_knowledge,
-    validate_translations,
+    KnowledgeLayerOverrides, KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers,
+    LookupKnowledgeOptions, ValidateTranslationsOptions, annotate_translations,
+    build_knowledge_index, load_knowledge_layers, lookup_knowledge, validate_translations,
+};
+pub use knowledge_lookup::{
+    KnowledgeLookup, KnowledgeLookupResult, LookupKnowledgeField, LookupKnowledgeMode,
+    LookupKnowledgeSource,
 };
 pub use operations::{
     ExportSummary, ExportTranslationsOptions, ImportSummary, ImportTranslationsOptions,
@@ -25,7 +29,7 @@ pub use package::{
 };
 pub use settings::{
     LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
-    default_config_path, game_release_name, language_name, load_workspace_settings,
-    parse_game_release_name, parse_language_name,
+    default_config_path, game_release_name, language_name, load_global_knowledge_root,
+    load_workspace_settings, parse_game_release_name, parse_language_name,
 };
 pub use stringer_pipeline::PipelineEntryKind;

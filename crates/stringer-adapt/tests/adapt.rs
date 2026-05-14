@@ -3,7 +3,8 @@ use std::fs;
 use camino::Utf8PathBuf;
 use serde_json::Value;
 use stringer_adapt::{
-    AdaptFormat, AdaptImportOptions, AdaptQuality, read_adapt_catalog, write_memory_jsonl,
+    AdaptFormat, AdaptImportOptions, AdaptQuality, merge_memory_jsonl, read_adapt_catalog,
+    write_memory_jsonl,
 };
 use stringer_pipeline::KnowledgeLayer;
 
@@ -283,6 +284,80 @@ fn write_memory_jsonl_suffixes_duplicate_ids_so_memory_can_load() {
     layer
         .add_memory_jsonl("knowledge/memory/adapt.jsonl", &text)
         .unwrap();
+}
+
+#[test]
+fn merge_memory_jsonl_appends_new_entries_without_rewriting_existing_rows() {
+    let input = test_path("merge-new.eet");
+    let output = test_path("merge-new-memory.jsonl");
+    fs::write(&input, eet_v3_fixture()).unwrap();
+    fs::write(
+        &output,
+        r#"{"id":"manual:1","source":"Steel Sword","target":"钢剑","source_locale":"en","target_locale":"zh-Hans","quality":"confirmed"}"#,
+    )
+    .unwrap();
+    let catalog = read_adapt_catalog(&input, options(AdaptFormat::EetBinary)).unwrap();
+
+    merge_memory_jsonl(&catalog, &output).unwrap();
+
+    let text = fs::read_to_string(output).unwrap();
+    let rows = text
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["id"], "manual:1");
+    assert_eq!(rows[1]["source"], "Iron Sword");
+}
+
+#[test]
+fn merge_memory_jsonl_is_idempotent_for_same_catalog() {
+    let input = test_path("merge-idempotent.eet");
+    let output = test_path("merge-idempotent-memory.jsonl");
+    fs::write(&input, eet_v3_fixture()).unwrap();
+    let catalog = read_adapt_catalog(&input, options(AdaptFormat::EetBinary)).unwrap();
+
+    merge_memory_jsonl(&catalog, &output).unwrap();
+    merge_memory_jsonl(&catalog, &output).unwrap();
+
+    let text = fs::read_to_string(output).unwrap();
+    assert_eq!(text.lines().count(), 1);
+    let mut layer = KnowledgeLayer::new("project");
+    layer
+        .add_memory_jsonl("knowledge/memory/adapt/merge-idempotent.eet.jsonl", &text)
+        .unwrap();
+}
+
+#[test]
+fn merge_memory_jsonl_replaces_existing_row_with_same_id() {
+    let input = test_path("merge-replace.eet");
+    let output = test_path("merge-replace-memory.jsonl");
+    fs::write(&input, eet_v3_fixture()).unwrap();
+    let catalog = read_adapt_catalog(&input, options(AdaptFormat::EetBinary)).unwrap();
+    let entry = &catalog.entries[0];
+    fs::write(
+        &output,
+        format!(
+            r#"{{"id":"{}","source":"{}","target":"{}","source_locale":"en","target_locale":"zh-Hans","context":{},"quality":"machine"}}"#,
+            entry.id,
+            entry.source,
+            entry.target,
+            serde_json::to_string(&entry.context).unwrap()
+        ),
+    )
+    .unwrap();
+
+    merge_memory_jsonl(&catalog, &output).unwrap();
+
+    let text = fs::read_to_string(output).unwrap();
+    let rows = text
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["id"], entry.id);
+    assert_eq!(rows[0]["quality"], "confirmed");
+    assert_eq!(rows[0]["origin"]["format"], "eet");
 }
 
 #[test]

@@ -3,16 +3,19 @@ use std::fs;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use stringer_pipeline::{
-    BasicValidationProcessor, KnowledgeBase, KnowledgeLayer, Pipeline, PipelineAnnotation,
-    PipelineDiagnostic, PipelineDiagnosticSeverity, PipelineEntry, PipelineEntryKind,
-    PipelineOptions, PipelineStage, ReplacementRuleProcessor, TerminologyProcessor,
-    TranslationMemoryProcessor,
+    BasicValidationProcessor, KnowledgeBase, KnowledgeLayer, Pipeline, PipelineDiagnostic,
+    PipelineDiagnosticSeverity, PipelineEntry, PipelineEntryKind, PipelineOptions, PipelineStage,
+    ReplacementRuleProcessor, TerminologyProcessor, TranslationMemoryProcessor,
 };
 
 use crate::WorkspaceError;
 use crate::knowledge_index::{
     KnowledgeFileKind, KnowledgeSourceFile, fingerprint, index_is_fresh, knowledge_index_path,
     read_knowledge_index, write_knowledge_index,
+};
+use crate::knowledge_lookup::{
+    KnowledgeLookup, KnowledgeSearchOptions, LookupKnowledgeField, LookupKnowledgeMode,
+    LookupKnowledgeSource, search_knowledge,
 };
 use crate::package::{
     TranslationRecord, read_translation_package_records, write_translation_package_records,
@@ -49,6 +52,11 @@ pub struct LookupKnowledgeOptions {
     pub kind: PipelineEntryKind,
     pub context: Vec<(String, String)>,
     pub knowledge: KnowledgeLayerOverrides,
+    pub mode: LookupKnowledgeMode,
+    pub source: LookupKnowledgeSource,
+    pub field: LookupKnowledgeField,
+    pub limit: usize,
+    pub case_sensitive: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -95,13 +103,6 @@ pub struct KnowledgeSummary {
     pub diagnostics: usize,
     pub auto_filled: usize,
     pub knowledge_diagnostics: Vec<PipelineDiagnostic>,
-    pub index_used: bool,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct KnowledgeLookup {
-    pub annotations: Vec<PipelineAnnotation>,
-    pub diagnostics: Vec<PipelineDiagnostic>,
     pub index_used: bool,
 }
 
@@ -212,37 +213,47 @@ pub fn validate_translations(
 pub fn lookup_knowledge(
     options: LookupKnowledgeOptions,
 ) -> Result<KnowledgeLookup, WorkspaceError> {
+    let query = options.text.clone();
     let settings =
         settings_with_project_knowledge_defaults(&options.root, options.settings.clone())?;
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
         root: options.root.clone(),
-        settings,
+        settings: settings.clone(),
         knowledge: options.knowledge,
         prefer_index: true,
     })?;
-    let pipeline = default_pipeline();
-    let mut entry = PipelineEntry::new(
-        "lookup",
-        options.kind,
-        options.text,
-        options.settings.source_locale,
-        options.settings.target_locale,
-        "",
+    let mut context = BTreeMap::new();
+    context.insert(
+        "game".to_string(),
+        game_release_name(settings.game_release).to_string(),
     );
-    entry.insert_context("game", game_release_name(options.settings.game_release));
+    context.insert("kind".to_string(), options.kind.as_str().to_string());
+    context.insert("source_locale".to_string(), settings.source_locale.clone());
+    context.insert("target_locale".to_string(), settings.target_locale.clone());
     for (key, value) in options.context {
-        entry.insert_context(key, value);
+        context.insert(key, value);
     }
-    let report = pipeline.run_stage(
-        PipelineStage::Annotate,
-        std::slice::from_mut(&mut entry),
+    let search = search_knowledge(
         &loaded.knowledge,
-        &PipelineOptions::default(),
-    );
+        &KnowledgeSearchOptions {
+            query: &query,
+            mode: options.mode,
+            source: options.source,
+            field: options.field,
+            limit: options.limit,
+            case_sensitive: options.case_sensitive,
+            source_locale: &settings.source_locale,
+            target_locale: &settings.target_locale,
+            context: &context,
+        },
+    )?;
     let mut diagnostics = loaded.diagnostics;
-    diagnostics.extend(report.diagnostics);
+    diagnostics.extend(loaded.knowledge.merge_diagnostics().iter().cloned());
     Ok(KnowledgeLookup {
-        annotations: entry.annotations().to_vec(),
+        query,
+        mode: options.mode,
+        total_matches: search.total_matches,
+        results: search.results,
         diagnostics,
         index_used: loaded.index_used,
     })
@@ -458,6 +469,16 @@ fn sorted_files(root: &Utf8Path, extension: &str) -> Result<Vec<Utf8PathBuf>, Wo
         return Ok(Vec::new());
     }
     let mut files = Vec::new();
+    collect_sorted_files(root, extension, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_sorted_files(
+    root: &Utf8Path,
+    extension: &str,
+    files: &mut Vec<Utf8PathBuf>,
+) -> Result<(), WorkspaceError> {
     for entry in fs::read_dir(root).map_err(|source| WorkspaceError::ReadFile {
         path: root.to_owned(),
         source,
@@ -472,12 +493,13 @@ fn sorted_files(root: &Utf8Path, extension: &str) -> Result<Vec<Utf8PathBuf>, Wo
                 message: "knowledge file path is not valid UTF-8".to_string(),
             }
         })?;
-        if path.extension() == Some(extension) {
+        if path.is_dir() {
+            collect_sorted_files(&path, extension, files)?;
+        } else if path.extension() == Some(extension) {
             files.push(path);
         }
     }
-    files.sort();
-    Ok(files)
+    Ok(())
 }
 
 fn entry_from_record(

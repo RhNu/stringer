@@ -4,6 +4,7 @@ use clap::{CommandFactory, Parser};
 use serde_json::Value;
 use stringer_cli::{
     AdaptCommand, AdaptFormatArg, Cli, Command, KnowledgeCommand, KnowledgeIndexCommand,
+    KnowledgeLookupFieldArg, KnowledgeLookupSourceArg,
 };
 
 #[test]
@@ -111,10 +112,44 @@ fn adapt_import_command_uses_format_input_output_and_locales() {
     let AdaptCommand::Import(command) = command;
     assert_eq!(command.format, AdaptFormatArg::XtSst);
     assert_eq!(command.input.as_str(), "source.sst");
-    assert_eq!(command.out.as_str(), "knowledge/memory/source.jsonl");
+    assert_eq!(
+        command.out.as_deref(),
+        Some("knowledge/memory/source.jsonl".into())
+    );
     assert_eq!(command.source_locale, "en");
     assert_eq!(command.target_locale, "zh-Hans");
     assert_eq!(command.game.as_deref(), Some("SkyrimSe"));
+}
+
+#[test]
+fn adapt_import_command_can_default_to_global_memory() {
+    let cli = Cli::parse_from([
+        "stringer",
+        "adapt",
+        "import",
+        "--format",
+        "xt-sst",
+        "--input",
+        "source.sst",
+        "--source-locale",
+        "en",
+        "--target-locale",
+        "zh-Hans",
+        "--global-knowledge-root",
+        "global-knowledge",
+    ]);
+
+    let Command::Adapt { command } = cli.command else {
+        panic!("expected adapt command");
+    };
+    let AdaptCommand::Import(command) = command;
+    assert_eq!(command.format, AdaptFormatArg::XtSst);
+    assert_eq!(command.input.as_str(), "source.sst");
+    assert_eq!(command.out, None);
+    assert_eq!(
+        command.global_knowledge_root.as_deref(),
+        Some("global-knowledge".into())
+    );
 }
 
 #[tokio::test]
@@ -151,6 +186,90 @@ async fn adapt_import_command_writes_memory_jsonl() {
     assert_eq!(row["target_locale"], "zh-Hans");
     assert_eq!(row["context"]["record_type"], "WEAP");
     assert_eq!(row["context"]["game"], "SkyrimSe");
+}
+
+#[tokio::test]
+async fn adapt_import_command_merges_into_source_named_global_memory_by_default() {
+    let input = test_path("cli-adapt-source.eet");
+    let global = test_path("cli-adapt-global");
+    fs::write(&input, eet_v1_fixture()).unwrap();
+
+    let args = [
+        "stringer",
+        "adapt",
+        "import",
+        "--format",
+        "eet",
+        "--input",
+        input.as_str(),
+        "--source-locale",
+        "en",
+        "--target-locale",
+        "zh-Hans",
+        "--game",
+        "skyrim-se",
+        "--global-knowledge-root",
+        global.as_str(),
+    ];
+
+    stringer_cli::run(Cli::parse_from(args)).await.unwrap();
+    stringer_cli::run(Cli::parse_from(args)).await.unwrap();
+
+    let output = global
+        .join("memory")
+        .join("adapt")
+        .join(format!("{}.jsonl", input.file_name().unwrap()));
+    let text = fs::read_to_string(output).unwrap();
+    let rows = text
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["source"], "Iron Sword");
+    assert_eq!(rows[0]["target"], "铁剑");
+}
+
+#[tokio::test]
+async fn adapt_import_command_keeps_different_sources_in_separate_global_memory_files() {
+    let first = test_path("first-source.eet");
+    let second = test_path("second-source.eet");
+    let global = test_path("separate-global");
+    fs::write(&first, eet_v1_fixture()).unwrap();
+    fs::write(&second, eet_v1_fixture()).unwrap();
+
+    for input in [&first, &second] {
+        let cli = Cli::parse_from([
+            "stringer",
+            "adapt",
+            "import",
+            "--format",
+            "eet",
+            "--input",
+            input.as_str(),
+            "--source-locale",
+            "en",
+            "--target-locale",
+            "zh-Hans",
+            "--global-knowledge-root",
+            global.as_str(),
+        ]);
+        stringer_cli::run(cli).await.unwrap();
+    }
+
+    assert!(
+        global
+            .join("memory")
+            .join("adapt")
+            .join(format!("{}.jsonl", first.file_name().unwrap()))
+            .exists()
+    );
+    assert!(
+        global
+            .join("memory")
+            .join("adapt")
+            .join(format!("{}.jsonl", second.file_name().unwrap()))
+            .exists()
+    );
 }
 
 #[test]
@@ -251,6 +370,14 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
         "global",
         "--override-knowledge-root",
         "override",
+        "--regex",
+        "--limit",
+        "5",
+        "--case-sensitive",
+        "--source",
+        "memory",
+        "--field",
+        "target",
         "--json",
     ]);
 
@@ -273,7 +400,37 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
         command.override_knowledge_root.as_deref(),
         Some("override".into())
     );
+    assert!(command.regex);
+    assert_eq!(command.limit, 5);
+    assert!(command.case_sensitive);
+    assert_eq!(command.source, KnowledgeLookupSourceArg::Memory);
+    assert_eq!(command.field, KnowledgeLookupFieldArg::Target);
     assert!(command.json);
+}
+
+#[test]
+fn knowledge_lookup_command_defaults_to_agent_search_options() {
+    let cli = Cli::parse_from([
+        "stringer",
+        "knowledge",
+        "lookup",
+        "--root",
+        "input",
+        "--text",
+        "altmer",
+    ]);
+
+    let Command::Knowledge { command } = cli.command else {
+        panic!("expected knowledge command");
+    };
+    let KnowledgeCommand::Lookup(command) = command else {
+        panic!("expected knowledge lookup command");
+    };
+    assert_eq!(command.limit, 20);
+    assert_eq!(command.source, KnowledgeLookupSourceArg::All);
+    assert_eq!(command.field, KnowledgeLookupFieldArg::Both);
+    assert!(!command.regex);
+    assert!(!command.case_sensitive);
 }
 
 #[test]
@@ -371,8 +528,12 @@ fn lookup_help_explains_machine_readable_usage() {
         .to_string();
 
     assert!(help.contains("--json"));
+    assert!(help.contains("--regex"));
+    assert!(help.contains("--limit"));
+    assert!(help.contains("--source"));
+    assert!(help.contains("--field"));
     assert!(help.contains("plugin"));
-    assert!(help.contains("record-type"));
+    assert!(help.contains("Altmer"));
 }
 
 fn test_path(name: &str) -> camino::Utf8PathBuf {

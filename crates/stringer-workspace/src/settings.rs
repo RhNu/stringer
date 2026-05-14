@@ -106,7 +106,7 @@ fn load_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, Works
     if !path.exists() && !explicit {
         return Ok(LoadedConfigFile {
             config: ConfigFile::default(),
-            path: None,
+            path: Some(path),
         });
     }
     let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::ReadFile {
@@ -125,6 +125,23 @@ fn load_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, Works
 
 pub fn default_config_path() -> Option<Utf8PathBuf> {
     platform_default_config_path()
+}
+
+pub fn load_global_knowledge_root(
+    config_path: Option<Utf8PathBuf>,
+) -> Result<Option<Utf8PathBuf>, WorkspaceError> {
+    let explicit = config_path.is_some();
+    let Some(path) = config_path.or_else(default_config_path) else {
+        return Ok(None);
+    };
+    if path.exists() || explicit {
+        let loaded = load_config_file(Some(path))?;
+        return Ok(global_knowledge_root(
+            loaded.path.as_ref(),
+            loaded.config.knowledge,
+        ));
+    }
+    Ok(path.parent().map(|parent| parent.join("knowledge")))
 }
 
 #[cfg(windows)]

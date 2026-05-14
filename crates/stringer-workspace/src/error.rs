@@ -45,6 +45,13 @@ pub enum WorkspaceError {
     #[error("invalid workspace setting `{name}` value `{value}`")]
     InvalidSetting { name: &'static str, value: String },
 
+    #[error("invalid lookup regex `{pattern}`: {source}")]
+    InvalidLookupRegex {
+        pattern: String,
+        #[source]
+        source: regex::Error,
+    },
+
     #[error("failed to parse JSONL `{path}` line {line}: {source}")]
     JsonLine {
         path: Utf8PathBuf,

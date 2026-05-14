@@ -1,6 +1,6 @@
 pub(crate) const ROOT_LONG_ABOUT: &str = r#"Stringer is a Bethesda mod localization command-line tool.
 
-It exports translatable mod assets into a JSONL translation package, lets a human or agent edit translations, then writes changed assets into an override directory. Knowledge commands add terminology, translation-memory hints, diagnostics, and single-text lookup support.
+It exports translatable mod assets into a JSONL translation package, lets a human or agent edit translations, then writes changed assets into an override directory. Knowledge commands add terminology, translation-memory hints, diagnostics, and agent-readable knowledge search.
 
 Recommended agent workflow:
   1. Run `stringer --help` to understand the whole flow.
@@ -9,7 +9,7 @@ Recommended agent workflow:
 
 pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
   stringer export --root <MOD_ROOT> --out <TRANSLATIONS> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
-  stringer adapt import --format xt-sst --input <OLD_TRANSLATION.sst> --out <MOD_ROOT>/knowledge/memory/imported.jsonl --source-locale en --target-locale zh-Hans --game SkyrimSe
+  stringer adapt import --format xt-sst --input <OLD_TRANSLATION.sst> --source-locale en --target-locale zh-Hans --game SkyrimSe
   stringer knowledge annotate --root <MOD_ROOT> --translations <TRANSLATIONS>
   # Edit the translation fields in <TRANSLATIONS>/entries/**/*.jsonl.
   stringer knowledge validate --root <MOD_ROOT> --translations <TRANSLATIONS>
@@ -62,7 +62,7 @@ Recommended:
 
 pub(crate) const ADAPT_LONG_ABOUT: &str = r#"Adapt external translation resources into Stringer translation memory.
 
-adapt commands do not edit mod assets or translation packages. They read external translator files, normalize usable source/target pairs, and write Stringer memory JSONL that can be placed under <MOD_ROOT>/knowledge/memory."#;
+adapt commands do not edit mod assets or translation packages. They read external translator files, normalize usable source/target pairs, and merge Stringer memory JSONL into the global user knowledge root by default."#;
 
 pub(crate) const ADAPT_IMPORT_LONG_ABOUT: &str = r#"Import an external translation resource as Stringer translation memory JSONL.
 
@@ -72,10 +72,10 @@ Supported formats:
   eet-json  EET JSON or DDS-style export
   xt-sst    xTranslator SST file
 
-The output rows contain id, source, target, source_locale, target_locale, context, origin, and quality. Empty source or target rows are skipped and counted as diagnostics. Use the output as a knowledge/memory/*.jsonl file, then run knowledge annotate or lookup."#;
+The output rows contain id, source, target, source_locale, target_locale, context, origin, and quality. Empty source or target rows are skipped and counted as diagnostics. When --out is omitted, rows are merged into <GLOBAL_KNOWLEDGE_ROOT>/memory/adapt/<INPUT_FILE_NAME>.jsonl so repeated imports of the same source stay isolated and idempotent. Use --out to write a specific JSONL file instead."#;
 
 pub(crate) const ADAPT_IMPORT_AFTER_LONG_HELP: &str = r#"Example:
-  stringer adapt import --format xt-sst --input ./old.sst --out ./MyMod/knowledge/memory/old.sst.jsonl --source-locale en --target-locale zh-Hans --game SkyrimSe
+  stringer adapt import --format xt-sst --input ./old.sst --source-locale en --target-locale zh-Hans --game SkyrimSe
 
 Common next step:
   stringer knowledge index rebuild --root ./MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans"#;
@@ -111,12 +111,13 @@ Common diagnostics:
   translation.empty       translation is empty
   memory.conflict         translation conflicts with memory"#;
 
-pub(crate) const LOOKUP_LONG_ABOUT: &str = r#"Look up knowledge hints for a single source text, intended for agents translating one string at a time.
+pub(crate) const LOOKUP_LONG_ABOUT: &str = r#"Search terminology and translation memory for agent-readable translation evidence.
 
-lookup builds a temporary entry from text, kind, record-type, subrecord, game, language, and locale settings, then matches terminology and memory. Use --json for machine-readable hints and diagnostics."#;
+lookup searches loaded knowledge tables by source and target text. By default it performs case-insensitive contains matching across both terminology and memory, ranks normalized exact source matches first, and emits compact results for agent lookup. Use --regex for regex matching and --json for machine-readable results."#;
 
 pub(crate) const LOOKUP_AFTER_LONG_HELP: &str = r#"Example:
-  stringer knowledge lookup --root ./MyMod --text "Iron Sword" --kind plugin --record-type WEAP --subrecord FULL --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans --json
+  stringer knowledge lookup --root ./MyMod --text "Altmer" --kind plugin --record-type NPC_ --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans --json
+  stringer knowledge lookup --root ./MyMod --text "^(Alt|Bos)mer$" --regex --source memory --field source --json
 
 Available kind values:
   plugin
@@ -125,9 +126,9 @@ Available kind values:
   pex
 
 Hints:
-  Plugin entries usually benefit from record-type and subrecord.
-  Scaleform entries usually only need kind=scaleform and text.
-  PEX is not part of the first knowledge-enrichment path, but lookup accepts kind=pex to keep the interface uniform."#;
+  Exact source matches rank before prefix and contains matches.
+  Search defaults to --source all --field both --limit 20.
+  Plugin entries can use record-type and subrecord to boost context-relevant results."#;
 
 pub(crate) const INDEX_LONG_ABOUT: &str = r#"Knowledge index maintenance commands.
 

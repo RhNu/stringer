@@ -867,6 +867,7 @@ dependencies = [
  "bytes",
  "camino",
  "directories",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

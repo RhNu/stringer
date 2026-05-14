@@ -8,7 +8,7 @@ mod model;
 mod xml;
 mod xt_sst;
 
-pub use memory::write_memory_jsonl;
+pub use memory::{merge_memory_jsonl, write_memory_jsonl};
 pub use model::{
     AdaptCatalog, AdaptDiagnostic, AdaptEntry, AdaptError, AdaptFormat, AdaptImportOptions,
     AdaptQuality, AdaptSummary,

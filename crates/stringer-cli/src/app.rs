@@ -1,14 +1,16 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 use stringer_adapt::{
-    AdaptError, AdaptFormat, AdaptImportOptions, read_adapt_catalog, write_memory_jsonl,
+    AdaptError, AdaptFormat, AdaptImportOptions, merge_memory_jsonl, read_adapt_catalog,
+    write_memory_jsonl,
 };
 use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ExportTranslationsOptions,
     ImportTranslationsOptions, KnowledgeLayerOverrides, LoadWorkspaceSettingsOptions,
-    LookupKnowledgeOptions, PipelineEntryKind, ValidateTranslationsOptions, WorkspaceError,
-    WorkspaceSettingsOverrides, WriteTarget, annotate_translations, build_knowledge_index,
-    export_translations, game_release_name, import_translations, load_workspace_settings,
+    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
+    PipelineEntryKind, ValidateTranslationsOptions, WorkspaceError, WorkspaceSettingsOverrides,
+    WriteTarget, annotate_translations, build_knowledge_index, export_translations,
+    game_release_name, import_translations, load_global_knowledge_root, load_workspace_settings,
     lookup_knowledge, parse_game_release_name, parse_language_name, validate_translations,
 };
 use thiserror::Error;
@@ -164,9 +166,9 @@ pub struct AdaptImportCommand {
         long,
         value_name = "MEMORY_JSONL",
         help = "Output Stringer memory JSONL path",
-        long_help = "Output Stringer memory JSONL path. Put this under <MOD_ROOT>/knowledge/memory/ to make it available to knowledge annotate and lookup."
+        long_help = "Output Stringer memory JSONL path. When omitted, adapt merges into the global user knowledge root under memory/adapt/<INPUT_FILE_NAME>.jsonl."
     )]
-    pub out: Utf8PathBuf,
+    pub out: Option<Utf8PathBuf>,
     #[arg(
         long,
         value_name = "LOCALE",
@@ -188,6 +190,13 @@ pub struct AdaptImportCommand {
         long_help = "Optional game context. Accepted names follow the same normalization as --game-release, for example SkyrimSe or skyrim-se. When valid, the generated memory context includes game=SkyrimSe or game=SkyrimLe."
     )]
     pub game: Option<String>,
+    #[arg(
+        long,
+        value_name = "KNOWLEDGE_ROOT",
+        help = "Override the global user knowledge root",
+        long_help = KNOWLEDGE_ROOTS_LONG_HELP
+    )]
+    pub global_knowledge_root: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -200,6 +209,20 @@ pub enum AdaptFormatArg {
     EetJson,
     #[value(name = "xt-sst")]
     XtSst,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum KnowledgeLookupSourceArg {
+    All,
+    Memory,
+    Terms,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum KnowledgeLookupFieldArg {
+    Both,
+    Source,
+    Target,
 }
 
 #[derive(Debug, Subcommand)]
@@ -217,7 +240,7 @@ pub enum KnowledgeCommand {
     )]
     Validate(KnowledgeValidateCommand),
     #[command(
-        about = "Look up terminology and memory hints for one text",
+        about = "Search terminology and memory tables",
         long_about = LOOKUP_LONG_ABOUT,
         after_long_help = LOOKUP_AFTER_LONG_HELP
     )]
@@ -325,8 +348,8 @@ pub struct KnowledgeLookupCommand {
     #[arg(
         long,
         value_name = "TEXT",
-        help = "Source text to look up",
-        long_help = "Source text to look up. lookup uses it as the source_text of a temporary PipelineEntry and matches terminology and translation memory against it."
+        help = "Text query to search in knowledge source and target fields",
+        long_help = "Text query to search in knowledge source and target fields. By default lookup treats this as a case-insensitive contains query; pass --regex to treat it as a regex pattern."
     )]
     pub text: String,
     #[arg(
@@ -395,8 +418,41 @@ pub struct KnowledgeLookupCommand {
     pub override_knowledge_root: Option<Utf8PathBuf>,
     #[arg(
         long,
+        help = "Treat --text as a regex pattern instead of a contains query",
+        long_help = "Treat --text as a regex pattern instead of a contains query. Matching is case-insensitive by default unless --case-sensitive is also passed."
+    )]
+    pub regex: bool,
+    #[arg(
+        long,
+        default_value_t = 20,
+        value_name = "N",
+        help = "Maximum number of ranked matches to print"
+    )]
+    pub limit: usize,
+    #[arg(
+        long,
+        help = "Use case-sensitive lookup matching",
+        long_help = "Use case-sensitive lookup matching. By default lookup uses case-insensitive exact, prefix, contains, and regex matching."
+    )]
+    pub case_sensitive: bool,
+    #[arg(
+        long,
+        default_value = "all",
+        value_name = "SOURCE",
+        help = "Knowledge source to search: all, memory, or terms"
+    )]
+    pub source: KnowledgeLookupSourceArg,
+    #[arg(
+        long,
+        default_value = "both",
+        value_name = "FIELD",
+        help = "Text field to search: both, source, or target"
+    )]
+    pub field: KnowledgeLookupFieldArg,
+    #[arg(
+        long,
         help = "Emit structured JSON",
-        long_help = "Emit structured JSON containing index_used, hints, and diagnostics. Recommended for agent lookups."
+        long_help = "Emit structured JSON containing index_used, query, mode, total_matches, results, and diagnostics. Recommended for agent lookups."
     )]
     pub json: bool,
 }
@@ -507,6 +563,7 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
 async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
     match command {
         AdaptCommand::Import(command) => {
+            let input = command.input;
             let game = command
                 .game
                 .as_deref()
@@ -515,7 +572,7 @@ async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
                 .map(game_release_name)
                 .map(str::to_string);
             let catalog = read_adapt_catalog(
-                &command.input,
+                &input,
                 AdaptImportOptions {
                     source_locale: command.source_locale,
                     target_locale: command.target_locale,
@@ -523,11 +580,24 @@ async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
                     format: command.format.into(),
                 },
             )?;
-            let summary = write_memory_jsonl(&catalog, &command.out)?;
+            let (summary, action, output) = if let Some(output) = command.out {
+                (write_memory_jsonl(&catalog, &output)?, "wrote", output)
+            } else {
+                let root = command
+                    .global_knowledge_root
+                    .or(load_global_knowledge_root(None)?)
+                    .ok_or(WorkspaceError::MissingSetting {
+                        name: "knowledge.global_root",
+                    })?;
+                let output = default_adapt_memory_path(&root, &input)?;
+                (merge_memory_jsonl(&catalog, &output)?, "merged", output)
+            };
             println!(
-                "adapted {} entries, wrote {} memory entries, skipped {} entries, reported {} diagnostics",
+                "adapted {} entries, {} {} memory entries to {}, skipped {} entries, reported {} diagnostics",
                 summary.total_entries,
+                action,
                 summary.written_entries,
+                output,
                 summary.skipped_entries,
                 summary.diagnostics
             );
@@ -590,13 +660,21 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
                     command.global_knowledge_root,
                     command.override_knowledge_root,
                 ),
+                mode: lookup_mode(command.regex),
+                source: command.source.into(),
+                field: command.field.into(),
+                limit: command.limit,
+                case_sensitive: command.case_sensitive,
             })?;
             if command.json {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&serde_json::json!({
                         "index_used": lookup.index_used,
-                        "hints": lookup.annotations,
+                        "query": lookup.query,
+                        "mode": lookup.mode.as_str(),
+                        "total_matches": lookup.total_matches,
+                        "results": lookup.results,
                         "diagnostics": lookup.diagnostics,
                     }))
                     .map_err(|source| WorkspaceError::Json {
@@ -606,10 +684,26 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
                 );
             } else {
                 println!(
-                    "found {} hints and {} diagnostics",
-                    lookup.annotations.len(),
+                    "found {} matches, showing {}, and reported {} diagnostics",
+                    lookup.total_matches,
+                    lookup.results.len(),
                     lookup.diagnostics.len()
                 );
+                for result in lookup.results {
+                    let detail = result
+                        .quality
+                        .or(result.status)
+                        .unwrap_or_else(|| "-".to_string());
+                    println!(
+                        "{}\t{}\t{}\t{}\t{}\t{}",
+                        result.kind,
+                        result.layer,
+                        result.match_field,
+                        detail,
+                        result.source,
+                        result.target
+                    );
+                }
             }
             Ok(())
         }
@@ -654,6 +748,34 @@ fn parse_pipeline_kind(value: String) -> Result<PipelineEntryKind, WorkspaceErro
     })
 }
 
+fn lookup_mode(regex: bool) -> LookupKnowledgeMode {
+    if regex {
+        LookupKnowledgeMode::Regex
+    } else {
+        LookupKnowledgeMode::Contains
+    }
+}
+
+impl From<KnowledgeLookupSourceArg> for LookupKnowledgeSource {
+    fn from(value: KnowledgeLookupSourceArg) -> Self {
+        match value {
+            KnowledgeLookupSourceArg::All => Self::All,
+            KnowledgeLookupSourceArg::Memory => Self::Memory,
+            KnowledgeLookupSourceArg::Terms => Self::Terms,
+        }
+    }
+}
+
+impl From<KnowledgeLookupFieldArg> for LookupKnowledgeField {
+    fn from(value: KnowledgeLookupFieldArg) -> Self {
+        match value {
+            KnowledgeLookupFieldArg::Both => Self::Both,
+            KnowledgeLookupFieldArg::Source => Self::Source,
+            KnowledgeLookupFieldArg::Target => Self::Target,
+        }
+    }
+}
+
 impl From<AdaptFormatArg> for AdaptFormat {
     fn from(value: AdaptFormatArg) -> Self {
         match value {
@@ -689,6 +811,22 @@ fn knowledge_overrides(
 fn project_config_path(root: &Utf8PathBuf) -> Option<Utf8PathBuf> {
     let path = root.join("stringer.toml");
     path.exists().then_some(path)
+}
+
+fn default_adapt_memory_path(
+    root: &Utf8PathBuf,
+    input: &Utf8PathBuf,
+) -> Result<Utf8PathBuf, WorkspaceError> {
+    let file_name = input
+        .file_name()
+        .ok_or_else(|| WorkspaceError::InvalidLogicalPath {
+            path: input.to_string(),
+            message: "adapt input path must include a file name".to_string(),
+        })?;
+    Ok(root
+        .join("memory")
+        .join("adapt")
+        .join(format!("{file_name}.jsonl")))
 }
 
 fn overrides(

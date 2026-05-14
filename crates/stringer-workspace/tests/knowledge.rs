@@ -4,10 +4,10 @@ use serde_json::Value;
 use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ExportTranslationsOptions,
     ImportTranslationsOptions, KnowledgeLayerOverrides, LoadWorkspaceSettingsOptions,
-    LookupKnowledgeOptions, PipelineEntryKind, ValidateTranslationsOptions, WorkspaceSettings,
-    WorkspaceSettingsOverrides, WriteTarget, annotate_translations, build_knowledge_index,
-    export_translations, import_translations, load_workspace_settings, lookup_knowledge,
-    validate_translations,
+    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
+    PipelineEntryKind, ValidateTranslationsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
+    WriteTarget, annotate_translations, build_knowledge_index, export_translations,
+    import_translations, load_workspace_settings, lookup_knowledge, validate_translations,
 };
 
 #[allow(dead_code)]
@@ -362,13 +362,16 @@ fn lookup_uses_global_library_project_and_override_layers_in_order() {
             global_root: Some(utf8(&global)),
             override_root: Some(utf8(&override_root)),
         },
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
     })
     .unwrap();
 
-    assert!(lookup.annotations.iter().any(|annotation| {
-        annotation.kind() == "term"
-            && annotation.layer() == "override"
-            && annotation.payload()["target"] == "覆盖铁剑"
+    assert!(lookup.results.iter().any(|result| {
+        result.kind == "term" && result.layer == "override" && result.target == "覆盖铁剑"
     }));
     assert!(lookup.diagnostics.iter().any(|diagnostic| {
         diagnostic.code() == "knowledge.override"
@@ -406,12 +409,17 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
         knowledge: KnowledgeLayerOverrides::default(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
     })
     .unwrap();
 
     assert!(lookup.index_used);
     assert!(lookup.diagnostics.is_empty());
-    assert_eq!(lookup.annotations[0].payload()["target"], "铁剑");
+    assert_eq!(lookup.results[0].target, "铁剑");
 }
 
 #[test]
@@ -434,6 +442,11 @@ fn lookup_falls_back_to_files_and_reports_stale_index_when_knowledge_changes() {
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
         knowledge: KnowledgeLayerOverrides::default(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
     })
     .unwrap();
 
@@ -444,7 +457,7 @@ fn lookup_falls_back_to_files_and_reports_stale_index_when_knowledge_changes() {
             .iter()
             .any(|diagnostic| diagnostic.code() == "knowledge.index_stale")
     );
-    assert_eq!(lookup.annotations[0].payload()["target"], "熟铁剑");
+    assert_eq!(lookup.results[0].target, "熟铁剑");
 }
 
 #[tokio::test]
@@ -555,6 +568,11 @@ fn lookup_falls_back_to_files_when_index_is_corrupt() {
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
         knowledge: KnowledgeLayerOverrides::default(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
     })
     .unwrap();
 
@@ -565,7 +583,7 @@ fn lookup_falls_back_to_files_when_index_is_corrupt() {
             .iter()
             .any(|diagnostic| diagnostic.code() == "knowledge.index_stale")
     );
-    assert_eq!(lookup.annotations[0].payload()["target"], "铁剑");
+    assert_eq!(lookup.results[0].target, "铁剑");
 }
 
 #[test]
@@ -619,13 +637,21 @@ fn fresh_index_preserves_duplicate_memory_ids_across_files_in_same_layer() {
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
         knowledge: KnowledgeLayerOverrides::default(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
     })
     .unwrap();
 
     assert!(lookup.index_used);
-    assert!(lookup.annotations.iter().any(|annotation| {
-        annotation.kind() == "memory" && annotation.payload()["target"] == "钢剑"
-    }));
+    assert!(
+        lookup
+            .results
+            .iter()
+            .any(|result| { result.kind == "memory" && result.target == "钢剑" })
+    );
 }
 
 #[tokio::test]
