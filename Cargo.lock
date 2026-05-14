@@ -662,6 +662,7 @@ dependencies = [
  "camino",
  "clap",
  "miette",
+ "serde_json",
  "stringer-workspace",
  "tokio",
 ]
@@ -684,6 +685,17 @@ dependencies = [
  "stringer-core",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "stringer-pipeline"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "toml",
 ]
 
 [[package]]
@@ -735,6 +747,7 @@ dependencies = [
  "serde_json",
  "stringer-core",
  "stringer-pex",
+ "stringer-pipeline",
  "stringer-plugin",
  "stringer-reader",
  "stringer-scaleform",

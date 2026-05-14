@@ -84,8 +84,17 @@ pub enum WorkspaceError {
     Pex(#[from] stringer_pex::PexError),
 
     #[error(transparent)]
+    Pipeline(Box<stringer_pipeline::PipelineError>),
+
+    #[error(transparent)]
     Scaleform(#[from] stringer_scaleform::ScaleformError),
 
     #[error(transparent)]
     Bundle(#[from] stringer_core::StringerCoreError),
+}
+
+impl From<stringer_pipeline::PipelineError> for WorkspaceError {
+    fn from(source: stringer_pipeline::PipelineError) -> Self {
+        Self::Pipeline(Box::new(source))
+    }
 }

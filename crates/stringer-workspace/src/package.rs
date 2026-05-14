@@ -9,6 +9,7 @@ use stringer_core::{
     PexOperandPath, PluginStringStorage, StringEntry, StringEntryContext, StringEntrySource,
     StringEntryView,
 };
+use stringer_pipeline::{PipelineAnnotation, PipelineDiagnostic};
 
 use crate::WorkspaceError;
 use crate::settings::{
@@ -39,22 +40,41 @@ pub struct TranslationManifestFile {
     pub group: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslationRecord {
     pub id: String,
     pub source_text: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translated_text: Option<String>,
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub context: BTreeMap<String, String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<PipelineAnnotation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<PipelineDiagnostic>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone)]
 pub struct PackagedTranslationRecord {
     pub file: TranslationFileKey,
     pub record: TranslationRecord,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TranslationPackageRecords {
+    pub settings: WorkspaceSettings,
+    pub files: Vec<TranslationPackageFileRecords>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TranslationPackageFileRecords {
+    pub manifest_file: TranslationManifestFile,
+    pub records: Vec<TranslationRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -85,6 +105,9 @@ pub fn packaged_record_from_entry(
             translated_text: None,
             context: context_values(entry.context()),
             source,
+            annotations: Vec::new(),
+            diagnostics: Vec::new(),
+            extra: BTreeMap::new(),
         },
     }
 }
@@ -164,6 +187,52 @@ pub fn read_translation_package(
     Ok((settings, patches))
 }
 
+pub(crate) fn read_translation_package_records(
+    path: &Utf8Path,
+) -> Result<TranslationPackageRecords, WorkspaceError> {
+    let manifest_path = path.join(MANIFEST_FILE);
+    let manifest = read_manifest(&manifest_path)?;
+    if manifest.schema_version != SCHEMA_VERSION {
+        return Err(WorkspaceError::UnsupportedTranslationSchema {
+            path: manifest_path,
+            version: manifest.schema_version,
+        });
+    }
+
+    let settings = settings_from_manifest(&manifest)?;
+    let mut seen_files = BTreeSet::new();
+    let mut seen_ids = BTreeSet::new();
+    let mut files = Vec::new();
+    for manifest_file in manifest.files {
+        let entry_path = package_entry_path(path, &manifest_file.path)?;
+        let normalized_file = normalize_path(&manifest_file.path);
+        if !seen_files.insert(normalized_file) {
+            return Err(WorkspaceError::InvalidTranslationPackagePath {
+                path: manifest_file.path,
+                message: "manifest lists the same entry file more than once".to_string(),
+            });
+        }
+        let records = read_record_file(&entry_path, &mut seen_ids)?;
+        files.push(TranslationPackageFileRecords {
+            manifest_file,
+            records,
+        });
+    }
+
+    Ok(TranslationPackageRecords { settings, files })
+}
+
+pub(crate) fn write_translation_package_records(
+    path: &Utf8Path,
+    package: &TranslationPackageRecords,
+) -> Result<(), WorkspaceError> {
+    for file in &package.files {
+        let entry_path = package_entry_path(path, &file.manifest_file.path)?;
+        write_records_jsonl(&entry_path, &file.records)?;
+    }
+    Ok(())
+}
+
 fn write_manifest(path: &Utf8Path, manifest: &TranslationManifest) -> Result<(), WorkspaceError> {
     let file = fs::File::create(path).map_err(|source| WorkspaceError::WriteFile {
         path: path.to_owned(),
@@ -194,6 +263,17 @@ fn read_manifest(path: &Utf8Path) -> Result<TranslationManifest, WorkspaceError>
     serde_json::from_str(&text).map_err(|source| WorkspaceError::Json {
         path: path.to_owned(),
         source,
+    })
+}
+
+fn settings_from_manifest(
+    manifest: &TranslationManifest,
+) -> Result<WorkspaceSettings, WorkspaceError> {
+    Ok(WorkspaceSettings {
+        game_release: parse_game_release_name(&manifest.game_release)?,
+        asset_language: parse_language_name(&manifest.asset_language)?,
+        source_locale: required_manifest_setting(manifest.source_locale.clone(), "source_locale")?,
+        target_locale: required_manifest_setting(manifest.target_locale.clone(), "target_locale")?,
     })
 }
 
@@ -270,6 +350,42 @@ fn read_patch_file(
         patches.insert(patch.id, translated_text);
     }
     Ok(())
+}
+
+fn read_record_file(
+    path: &Utf8Path,
+    seen_ids: &mut BTreeSet<String>,
+) -> Result<Vec<TranslationRecord>, WorkspaceError> {
+    let file = fs::File::open(path).map_err(|source| WorkspaceError::ReadFile {
+        path: path.to_owned(),
+        source,
+    })?;
+    let reader = BufReader::new(file);
+    let mut records = Vec::new();
+    for (index, line) in reader.lines().enumerate() {
+        let line_number = index + 1;
+        let line = line.map_err(|source| WorkspaceError::ReadFile {
+            path: path.to_owned(),
+            source,
+        })?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record: TranslationRecord =
+            serde_json::from_str(&line).map_err(|source| WorkspaceError::JsonLine {
+                path: path.to_owned(),
+                line: line_number,
+                source,
+            })?;
+        if !seen_ids.insert(record.id.clone()) {
+            return Err(WorkspaceError::DuplicateTranslationId {
+                path: path.to_owned(),
+                id: record.id,
+            });
+        }
+        records.push(record);
+    }
+    Ok(records)
 }
 
 fn package_entry_path(root: &Utf8Path, path: &str) -> Result<Utf8PathBuf, WorkspaceError> {

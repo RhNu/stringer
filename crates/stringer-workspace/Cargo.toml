@@ -12,6 +12,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 stringer-core = { path = "../stringer-core" }
 stringer-pex = { path = "../stringer-pex" }
+stringer-pipeline = { path = "../stringer-pipeline" }
 stringer-plugin = { path = "../stringer-plugin" }
 stringer-reader = { path = "../stringer-reader" }
 stringer-scaleform = { path = "../stringer-scaleform" }

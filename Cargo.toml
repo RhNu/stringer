@@ -3,6 +3,7 @@ members = [
     "crates/stringer-core",
     "crates/stringer-cli",
     "crates/stringer-pex",
+    "crates/stringer-pipeline",
     "crates/stringer-plugin",
     "crates/stringer-reader",
     "crates/stringer-scaleform",

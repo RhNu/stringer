@@ -13,5 +13,6 @@ path = "src/main.rs"
 camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
 miette = { workspace = true, features = ["fancy"] }
+serde_json.workspace = true
 stringer-workspace = { path = "../stringer-workspace" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

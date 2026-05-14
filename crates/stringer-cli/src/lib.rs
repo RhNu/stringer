@@ -3,9 +3,11 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 use stringer_workspace::{
-    ExportTranslationsOptions, ImportTranslationsOptions, LoadWorkspaceSettingsOptions,
-    WorkspaceError, WorkspaceSettingsOverrides, WriteTarget, export_translations,
-    import_translations, load_workspace_settings, parse_game_release_name, parse_language_name,
+    AnnotateTranslationsOptions, ExportTranslationsOptions, ImportTranslationsOptions,
+    LoadWorkspaceSettingsOptions, LookupKnowledgeOptions, PipelineEntryKind,
+    ValidateTranslationsOptions, WorkspaceError, WorkspaceSettingsOverrides, WriteTarget,
+    annotate_translations, export_translations, import_translations, load_workspace_settings,
+    lookup_knowledge, parse_game_release_name, parse_language_name, validate_translations,
 };
 
 #[derive(Debug, Parser)]
@@ -19,6 +21,10 @@ pub struct Cli {
 pub enum Command {
     Export(ExportCommand),
     Import(ImportCommand),
+    Knowledge {
+        #[command(subcommand)]
+        command: KnowledgeCommand,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -45,6 +51,55 @@ pub struct ImportCommand {
     pub translations: Utf8PathBuf,
     #[arg(long)]
     pub override_root: Utf8PathBuf,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum KnowledgeCommand {
+    Annotate(KnowledgeAnnotateCommand),
+    Validate(KnowledgeValidateCommand),
+    Lookup(KnowledgeLookupCommand),
+}
+
+#[derive(Debug, Parser)]
+pub struct KnowledgeAnnotateCommand {
+    #[arg(long)]
+    pub root: Utf8PathBuf,
+    #[arg(long)]
+    pub translations: Utf8PathBuf,
+    #[arg(long)]
+    pub auto_fill_memory: bool,
+}
+
+#[derive(Debug, Parser)]
+pub struct KnowledgeValidateCommand {
+    #[arg(long)]
+    pub root: Utf8PathBuf,
+    #[arg(long)]
+    pub translations: Utf8PathBuf,
+}
+
+#[derive(Debug, Parser)]
+pub struct KnowledgeLookupCommand {
+    #[arg(long)]
+    pub root: Utf8PathBuf,
+    #[arg(long)]
+    pub text: String,
+    #[arg(long, default_value = "plugin")]
+    pub kind: String,
+    #[arg(long)]
+    pub record_type: Option<String>,
+    #[arg(long)]
+    pub subrecord: Option<String>,
+    #[arg(long)]
+    pub game_release: Option<String>,
+    #[arg(long)]
+    pub asset_language: Option<String>,
+    #[arg(long)]
+    pub source_locale: Option<String>,
+    #[arg(long)]
+    pub target_locale: Option<String>,
+    #[arg(long)]
+    pub json: bool,
 }
 
 pub async fn run(cli: Cli) -> Result<(), WorkspaceError> {
@@ -83,7 +138,92 @@ pub async fn run(cli: Cli) -> Result<(), WorkspaceError> {
             );
             Ok(())
         }
+        Command::Knowledge { command } => run_knowledge(command).await,
     }
+}
+
+async fn run_knowledge(command: KnowledgeCommand) -> Result<(), WorkspaceError> {
+    match command {
+        KnowledgeCommand::Annotate(command) => {
+            let summary = annotate_translations(AnnotateTranslationsOptions {
+                root: command.root,
+                translations: command.translations,
+                allow_memory_auto_fill: command.auto_fill_memory,
+            })?;
+            println!(
+                "annotated {} entries, added {} annotations, wrote {} diagnostics, auto-filled {} entries",
+                summary.entries, summary.annotations, summary.diagnostics, summary.auto_filled
+            );
+            Ok(())
+        }
+        KnowledgeCommand::Validate(command) => {
+            let summary = validate_translations(ValidateTranslationsOptions {
+                root: command.root,
+                translations: command.translations,
+            })?;
+            println!(
+                "validated {} entries and wrote {} diagnostics",
+                summary.entries, summary.diagnostics
+            );
+            Ok(())
+        }
+        KnowledgeCommand::Lookup(command) => {
+            let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
+                config_path: None,
+                overrides: overrides(
+                    command.game_release,
+                    command.asset_language,
+                    command.source_locale,
+                    command.target_locale,
+                )?,
+            })?;
+            let lookup = lookup_knowledge(LookupKnowledgeOptions {
+                root: command.root,
+                settings,
+                text: command.text,
+                kind: parse_pipeline_kind(command.kind)?,
+                context: lookup_context(command.record_type, command.subrecord),
+            })?;
+            if command.json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "annotations": lookup.annotations,
+                        "diagnostics": lookup.diagnostics,
+                    }))
+                    .map_err(|source| WorkspaceError::Json {
+                        path: Utf8PathBuf::from("<stdout>"),
+                        source,
+                    })?
+                );
+            } else {
+                println!(
+                    "found {} annotations and {} diagnostics",
+                    lookup.annotations.len(),
+                    lookup.diagnostics.len()
+                );
+            }
+            Ok(())
+        }
+    }
+}
+
+fn parse_pipeline_kind(value: String) -> Result<PipelineEntryKind, WorkspaceError> {
+    PipelineEntryKind::from_package_kind(&value).ok_or(WorkspaceError::InvalidSetting {
+        name: "kind",
+        value,
+    })
+}
+
+fn lookup_context(record_type: Option<String>, subrecord: Option<String>) -> Vec<(String, String)> {
+    let mut context = Vec::new();
+    if let Some(record_type) = record_type {
+        context.push(("record_type".to_string(), record_type));
+    }
+    if let Some(subrecord) = subrecord {
+        context.push(("subrecord".to_string(), subrecord));
+    }
+    context
 }
 
 fn overrides(
