@@ -230,6 +230,60 @@ pub struct KnowledgeIndexRebuildParams {
     pub settings: SettingsParam,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct KnowledgeTermUpsertParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub term: KnowledgeTermParam,
+    #[serde(default)]
+    pub rebuild_index: bool,
+    #[serde(default)]
+    pub settings: SettingsParam,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct KnowledgeTermDeleteParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub id: String,
+    #[serde(default)]
+    pub rebuild_index: bool,
+    #[serde(default)]
+    pub settings: SettingsParam,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct KnowledgeTermParam {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    #[serde(default)]
+    pub case_sensitive: bool,
+    #[serde(default)]
+    pub status: KnowledgeTermStatusParam,
+    #[serde(default)]
+    pub scope: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum KnowledgeTermStatusParam {
+    #[default]
+    Preferred,
+    Allowed,
+    Forbidden,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct KnowledgeOperationResult {
     pub entries: usize,
@@ -273,6 +327,16 @@ pub struct KnowledgeIndexRebuildResult {
     pub memory: usize,
     pub rules: usize,
     pub diagnostics: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct KnowledgeTermEditResult {
+    pub action: String,
+    pub id: String,
+    pub path: String,
+    pub index_rebuilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_summary: Option<KnowledgeIndexRebuildResult>,
 }
 
 fn default_lookup_limit() -> usize {

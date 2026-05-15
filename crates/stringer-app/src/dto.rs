@@ -229,6 +229,60 @@ pub struct KnowledgeIndexRebuildRequest {
     pub settings: SettingsInput,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnowledgeTermUpsertRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub term: KnowledgeTermInput,
+    #[serde(default)]
+    pub rebuild_index: bool,
+    #[serde(default)]
+    pub settings: SettingsInput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnowledgeTermDeleteRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    pub id: String,
+    #[serde(default)]
+    pub rebuild_index: bool,
+    #[serde(default)]
+    pub settings: SettingsInput,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnowledgeTermInput {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    #[serde(default)]
+    pub case_sensitive: bool,
+    #[serde(default)]
+    pub status: KnowledgeTermStatusInput,
+    #[serde(default)]
+    pub scope: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KnowledgeTermStatusInput {
+    #[default]
+    Preferred,
+    Allowed,
+    Forbidden,
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnowledgeOperationResponse {
     pub entries: usize,
@@ -272,6 +326,16 @@ pub struct KnowledgeIndexRebuildResponse {
     pub memory: usize,
     pub rules: usize,
     pub diagnostics: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KnowledgeTermEditResponse {
+    pub action: String,
+    pub id: String,
+    pub path: String,
+    pub index_rebuilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_summary: Option<KnowledgeIndexRebuildResponse>,
 }
 
 fn default_lookup_limit() -> usize {

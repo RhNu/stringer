@@ -39,6 +39,25 @@ pub enum WorkspaceError {
         source: toml::ser::Error,
     },
 
+    #[error("failed to parse knowledge terms TOML `{path}`: {source}")]
+    KnowledgeTermsToml {
+        path: Utf8PathBuf,
+        #[source]
+        source: Box<toml_edit::TomlError>,
+    },
+
+    #[error("invalid knowledge terms TOML `{path}`: {message}")]
+    InvalidKnowledgeTermsToml { path: Utf8PathBuf, message: String },
+
+    #[error("knowledge term `{id}` was not found in `{path}`")]
+    KnowledgeTermNotFound { path: Utf8PathBuf, id: String },
+
+    #[error("invalid knowledge term scope key `{key}` for term `{id}`")]
+    InvalidKnowledgeTermScope { id: String, key: String },
+
+    #[error("invalid knowledge term file `{path}`: {message}")]
+    InvalidKnowledgeTermFile { path: Utf8PathBuf, message: String },
+
     #[error("missing workspace setting `{name}`")]
     MissingSetting { name: &'static str },
 

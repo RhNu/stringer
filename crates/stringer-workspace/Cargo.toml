@@ -20,6 +20,7 @@ stringer-reader = { path = "../stringer-reader" }
 stringer-scaleform = { path = "../stringer-scaleform" }
 thiserror.workspace = true
 toml.workspace = true
+toml_edit.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

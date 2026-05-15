@@ -22,6 +22,8 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
             "knowledge_annotate",
             "knowledge_index_rebuild",
             "knowledge_lookup",
+            "knowledge_term_delete",
+            "knowledge_term_upsert",
             "knowledge_validate",
             "workspace_batch_apply",
             "workspace_batch_claim",
@@ -41,6 +43,53 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
             Some("object")
         );
     }
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_knowledge_term_upsert_integrates_with_lookup() {
+    let project = TempRoot::new("mcp-knowledge-term");
+    let (client, server_handle) = connect().await;
+
+    let upsert = client
+        .call_tool(
+            CallToolRequestParams::new("knowledge_term_upsert").with_arguments(args(json!({
+                "project_root": path_string(project.path()),
+                "term": {
+                    "id": "term:iron_sword",
+                    "source": "Iron Sword",
+                    "target": "熟铁剑",
+                    "status": "preferred",
+                    "scope": { "game": ["SkyrimSe"], "kind": ["plugin"] }
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upsert.structured_content.unwrap()["action"], "upserted");
+
+    let lookup = client
+        .call_tool(
+            CallToolRequestParams::new("knowledge_lookup").with_arguments(args(json!({
+                "project_root": path_string(project.path()),
+                "text": "Iron Sword",
+                "source": "terms",
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+
+    let content = lookup.structured_content.unwrap();
+    assert_eq!(content["total_matches"], 1);
+    assert_eq!(content["results"][0]["target"], "熟铁剑");
 
     client.cancel().await.unwrap();
     server_handle.await.unwrap();

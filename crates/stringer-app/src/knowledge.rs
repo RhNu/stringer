@@ -1,13 +1,17 @@
 use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeLookup, KnowledgeSummary,
-    LookupKnowledgeMode, LookupKnowledgeOptions, ValidateTranslationsOptions, WorkspaceError,
-    annotate_translations, build_knowledge_index, lookup_knowledge, validate_translations,
+    KnowledgeTermDeleteOptions, KnowledgeTermEditSummary, KnowledgeTermInput as WorkspaceTermInput,
+    KnowledgeTermStatus, KnowledgeTermUpsertOptions, LookupKnowledgeMode, LookupKnowledgeOptions,
+    ValidateTranslationsOptions, WorkspaceError, annotate_translations, build_knowledge_index,
+    delete_knowledge_term, lookup_knowledge, upsert_knowledge_term, validate_translations,
 };
 
 use crate::dto::{
     KnowledgeAnnotateRequest, KnowledgeIndexRebuildRequest, KnowledgeIndexRebuildResponse,
     KnowledgeKindInput, KnowledgeLookupRequest, KnowledgeLookupResponse,
-    KnowledgeLookupResultResponse, KnowledgeOperationResponse, KnowledgeValidateRequest,
+    KnowledgeLookupResultResponse, KnowledgeOperationResponse, KnowledgeTermDeleteRequest,
+    KnowledgeTermEditResponse, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest,
+    KnowledgeValidateRequest,
 };
 use crate::error::{AppError, serialize_value};
 use crate::paths::{path, project_root_or_current};
@@ -72,6 +76,52 @@ pub fn knowledge_index_rebuild(
     })
 }
 
+pub fn knowledge_term_upsert(
+    request: KnowledgeTermUpsertRequest,
+) -> Result<KnowledgeTermEditResponse, AppError> {
+    let project_root = project_root_or_current(request.project_root)?;
+    let settings = request
+        .rebuild_index
+        .then(|| load_settings_for_project(&project_root, request.settings))
+        .transpose()?;
+    let summary = upsert_knowledge_term(KnowledgeTermUpsertOptions {
+        project_root,
+        file: request.file.map(path),
+        term: WorkspaceTermInput {
+            id: request.term.id,
+            source: request.term.source,
+            target: request.term.target,
+            aliases: request.term.aliases,
+            case_sensitive: request.term.case_sensitive,
+            status: request.term.status.into(),
+            scope: request.term.scope,
+            tags: request.term.tags,
+            note: request.term.note,
+        },
+        rebuild_index: request.rebuild_index,
+        settings,
+    })?;
+    Ok(knowledge_term_edit_response(summary))
+}
+
+pub fn knowledge_term_delete(
+    request: KnowledgeTermDeleteRequest,
+) -> Result<KnowledgeTermEditResponse, AppError> {
+    let project_root = project_root_or_current(request.project_root)?;
+    let settings = request
+        .rebuild_index
+        .then(|| load_settings_for_project(&project_root, request.settings))
+        .transpose()?;
+    let summary = delete_knowledge_term(KnowledgeTermDeleteOptions {
+        project_root,
+        file: request.file.map(path),
+        id: request.id,
+        rebuild_index: request.rebuild_index,
+        settings,
+    })?;
+    Ok(knowledge_term_edit_response(summary))
+}
+
 pub fn parse_knowledge_kind(value: &str) -> Result<KnowledgeKindInput, AppError> {
     match value {
         "plugin" => Ok(KnowledgeKindInput::Plugin),
@@ -86,6 +136,25 @@ pub fn parse_knowledge_kind(value: &str) -> Result<KnowledgeKindInput, AppError>
     }
 }
 
+fn knowledge_term_edit_response(summary: KnowledgeTermEditSummary) -> KnowledgeTermEditResponse {
+    let index_rebuilt = summary.index_summary.is_some();
+    KnowledgeTermEditResponse {
+        action: summary.action,
+        id: summary.id,
+        path: summary.path.as_str().replace('\\', "/"),
+        index_rebuilt,
+        index_summary: summary
+            .index_summary
+            .map(|summary| KnowledgeIndexRebuildResponse {
+                files: summary.files,
+                terms: summary.terms,
+                memory: summary.memory,
+                rules: summary.rules,
+                diagnostics: summary.diagnostics,
+            }),
+    }
+}
+
 fn knowledge_operation_response(summary: KnowledgeSummary) -> KnowledgeOperationResponse {
     KnowledgeOperationResponse {
         entries: summary.entries,
@@ -94,6 +163,16 @@ fn knowledge_operation_response(summary: KnowledgeSummary) -> KnowledgeOperation
         auto_filled: summary.auto_filled,
         knowledge_diagnostics: summary.knowledge_diagnostics.len(),
         index_used: summary.index_used,
+    }
+}
+
+impl From<KnowledgeTermStatusInput> for KnowledgeTermStatus {
+    fn from(value: KnowledgeTermStatusInput) -> Self {
+        match value {
+            KnowledgeTermStatusInput::Preferred => Self::Preferred,
+            KnowledgeTermStatusInput::Allowed => Self::Allowed,
+            KnowledgeTermStatusInput::Forbidden => Self::Forbidden,
+        }
     }
 }
 

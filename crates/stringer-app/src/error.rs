@@ -52,6 +52,15 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::CurrentDirectory { .. } => "workspace.current_directory",
         WorkspaceError::ConfigToml { .. } => "workspace.config_toml",
         WorkspaceError::Toml { .. } => "workspace.toml",
+        WorkspaceError::KnowledgeTermsToml { .. } => "workspace.knowledge_terms_toml",
+        WorkspaceError::InvalidKnowledgeTermsToml { .. } => {
+            "workspace.invalid_knowledge_terms_toml"
+        }
+        WorkspaceError::KnowledgeTermNotFound { .. } => "workspace.knowledge_term_not_found",
+        WorkspaceError::InvalidKnowledgeTermScope { .. } => {
+            "workspace.invalid_knowledge_term_scope"
+        }
+        WorkspaceError::InvalidKnowledgeTermFile { .. } => "workspace.invalid_knowledge_term_file",
         WorkspaceError::MissingSetting { .. } => "workspace.missing_setting",
         WorkspaceError::InvalidSetting { .. } => "workspace.invalid_setting",
         WorkspaceError::InvalidLookupRegex { .. } => "workspace.invalid_lookup_regex",
@@ -94,6 +103,7 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         | WorkspaceError::WriteFile { path, .. }
         | WorkspaceError::ConfigToml { path, .. }
         | WorkspaceError::Toml { path, .. }
+        | WorkspaceError::KnowledgeTermsToml { path, .. }
         | WorkspaceError::Json { path, .. }
         | WorkspaceError::Sqlite { path, .. }
         | WorkspaceError::LegacyTranslationWorkspace { path }
@@ -111,6 +121,18 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         }
         WorkspaceError::InvalidTranslationPackagePath { path, message } => {
             json!({ "path": path, "message": message })
+        }
+        WorkspaceError::InvalidKnowledgeTermsToml { path, message } => {
+            json!({ "path": json_path(path), "message": message })
+        }
+        WorkspaceError::KnowledgeTermNotFound { path, id } => {
+            json!({ "path": json_path(path), "id": id })
+        }
+        WorkspaceError::InvalidKnowledgeTermScope { id, key } => {
+            json!({ "id": id, "key": key })
+        }
+        WorkspaceError::InvalidKnowledgeTermFile { path, message } => {
+            json!({ "path": json_path(path), "message": message })
         }
         WorkspaceError::DuplicateTranslationId { path, id } => {
             json!({ "path": json_path(path), "id": id })

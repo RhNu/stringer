@@ -6,6 +6,7 @@ mod fsutil;
 mod knowledge;
 mod knowledge_index;
 mod knowledge_lookup;
+mod knowledge_terms;
 mod lock;
 mod operations;
 mod package;
@@ -28,6 +29,10 @@ pub use knowledge::{
 pub use knowledge_lookup::{
     KnowledgeLookup, KnowledgeLookupResult, LookupKnowledgeField, LookupKnowledgeMode,
     LookupKnowledgeSource,
+};
+pub use knowledge_terms::{
+    KnowledgeTermDeleteOptions, KnowledgeTermEditSummary, KnowledgeTermInput, KnowledgeTermStatus,
+    KnowledgeTermUpsertOptions, delete_knowledge_term, upsert_knowledge_term,
 };
 pub use operations::{
     ExportSummary, ExportTranslationsOptions, ImportSummary, ImportTranslationsOptions,

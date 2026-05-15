@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Read};
 
@@ -6,9 +7,10 @@ use clap::{Parser, Subcommand, ValueEnum};
 use stringer_app::{
     AdaptFormatInput, AdaptImportRequest, AppError, KnowledgeAnnotateRequest,
     KnowledgeIndexRebuildRequest, KnowledgeLookupFieldInput, KnowledgeLookupRequest,
-    KnowledgeLookupSourceInput, KnowledgeValidateRequest, SettingsInput, adapt_import,
-    knowledge_annotate, knowledge_index_rebuild, knowledge_lookup, knowledge_validate,
-    parse_knowledge_kind,
+    KnowledgeLookupSourceInput, KnowledgeTermDeleteRequest, KnowledgeTermInput,
+    KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, KnowledgeValidateRequest, SettingsInput,
+    adapt_import, knowledge_annotate, knowledge_index_rebuild, knowledge_lookup,
+    knowledge_term_delete, knowledge_term_upsert, knowledge_validate, parse_knowledge_kind,
 };
 use thiserror::Error;
 
@@ -171,6 +173,14 @@ pub enum KnowledgeCommand {
         #[command(subcommand)]
         command: KnowledgeIndexCommand,
     },
+    #[command(
+        about = "Create, update, or delete project terminology",
+        arg_required_else_help = true
+    )]
+    Term {
+        #[command(subcommand)]
+        command: KnowledgeTermCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -181,6 +191,22 @@ pub enum KnowledgeIndexCommand {
         after_long_help = INDEX_REBUILD_AFTER_LONG_HELP
     )]
     Rebuild(KnowledgeIndexRebuildCommand),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum KnowledgeTermCommand {
+    #[command(about = "Create or replace a terminology entry")]
+    Upsert(KnowledgeTermUpsertCommand),
+    #[command(about = "Delete a terminology entry")]
+    Delete(KnowledgeTermDeleteCommand),
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum KnowledgeTermStatusArg {
+    #[default]
+    Preferred,
+    Allowed,
+    Forbidden,
 }
 
 #[derive(Debug, Parser)]
@@ -371,6 +397,66 @@ pub struct KnowledgeIndexRebuildCommand {
     pub target_locale: Option<String>,
 }
 
+#[derive(Debug, Parser)]
+pub struct KnowledgeTermUpsertCommand {
+    #[arg(long, value_name = "PROJECT_ROOT")]
+    pub project_root: Option<Utf8PathBuf>,
+    #[arg(long, value_name = "TERMS_TOML")]
+    pub file: Option<Utf8PathBuf>,
+    #[arg(long, value_name = "ID")]
+    pub id: String,
+    #[arg(long, value_name = "TEXT")]
+    pub source: String,
+    #[arg(long, value_name = "TEXT")]
+    pub target: String,
+    #[arg(long, default_value = "preferred", value_name = "STATUS")]
+    pub status: KnowledgeTermStatusArg,
+    #[arg(long = "alias", value_name = "TEXT")]
+    pub aliases: Vec<String>,
+    #[arg(long)]
+    pub case_sensitive: bool,
+    #[arg(long, value_name = "JSON")]
+    pub scope_json: Option<String>,
+    #[arg(long = "tag", value_name = "TAG")]
+    pub tags: Vec<String>,
+    #[arg(long, value_name = "TEXT")]
+    pub note: Option<String>,
+    #[arg(long)]
+    pub rebuild_index: bool,
+    #[arg(long, value_name = "GAME", long_help = SETTINGS_LONG_HELP)]
+    pub game_release: Option<String>,
+    #[arg(long, value_name = "LANGUAGE", long_help = SETTINGS_LONG_HELP)]
+    pub asset_language: Option<String>,
+    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
+    pub source_locale: Option<String>,
+    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
+    pub target_locale: Option<String>,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Parser)]
+pub struct KnowledgeTermDeleteCommand {
+    #[arg(long, value_name = "PROJECT_ROOT")]
+    pub project_root: Option<Utf8PathBuf>,
+    #[arg(long, value_name = "TERMS_TOML")]
+    pub file: Option<Utf8PathBuf>,
+    #[arg(long, value_name = "ID")]
+    pub id: String,
+    #[arg(long)]
+    pub rebuild_index: bool,
+    #[arg(long, value_name = "GAME", long_help = SETTINGS_LONG_HELP)]
+    pub game_release: Option<String>,
+    #[arg(long, value_name = "LANGUAGE", long_help = SETTINGS_LONG_HELP)]
+    pub asset_language: Option<String>,
+    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
+    pub source_locale: Option<String>,
+    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
+    pub target_locale: Option<String>,
+    #[arg(long)]
+    pub json: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error(transparent)]
@@ -514,6 +600,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             Ok(())
         }
         KnowledgeCommand::Index { command } => run_knowledge_index(command).await,
+        KnowledgeCommand::Term { command } => run_knowledge_term(command).await,
     }
 }
 
@@ -533,6 +620,61 @@ async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliEr
                 "indexed {} files, {} terms, {} memory entries, {} rules, {} diagnostics",
                 summary.files, summary.terms, summary.memory, summary.rules, summary.diagnostics
             );
+            Ok(())
+        }
+    }
+}
+
+async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliError> {
+    match command {
+        KnowledgeTermCommand::Upsert(command) => {
+            let response = knowledge_term_upsert(KnowledgeTermUpsertRequest {
+                project_root: command.project_root.map(|path| path.to_string()),
+                file: command.file.map(|path| path.to_string()),
+                term: KnowledgeTermInput {
+                    id: command.id,
+                    source: command.source,
+                    target: command.target,
+                    aliases: command.aliases,
+                    case_sensitive: command.case_sensitive,
+                    status: command.status.into(),
+                    scope: parse_scope_json(command.scope_json)?,
+                    tags: command.tags,
+                    note: command.note,
+                },
+                rebuild_index: command.rebuild_index,
+                settings: settings_input(
+                    command.game_release,
+                    command.asset_language,
+                    command.source_locale,
+                    command.target_locale,
+                ),
+            })?;
+            if command.json {
+                print_json(&response)?;
+            } else {
+                println!("upserted term {} in {}", response.id, response.path);
+            }
+            Ok(())
+        }
+        KnowledgeTermCommand::Delete(command) => {
+            let response = knowledge_term_delete(KnowledgeTermDeleteRequest {
+                project_root: command.project_root.map(|path| path.to_string()),
+                file: command.file.map(|path| path.to_string()),
+                id: command.id,
+                rebuild_index: command.rebuild_index,
+                settings: settings_input(
+                    command.game_release,
+                    command.asset_language,
+                    command.source_locale,
+                    command.target_locale,
+                ),
+            })?;
+            if command.json {
+                print_json(&response)?;
+            } else {
+                println!("deleted term {} from {}", response.id, response.path);
+            }
             Ok(())
         }
     }
@@ -558,6 +700,16 @@ impl From<KnowledgeLookupFieldArg> for KnowledgeLookupFieldInput {
     }
 }
 
+impl From<KnowledgeTermStatusArg> for KnowledgeTermStatusInput {
+    fn from(value: KnowledgeTermStatusArg) -> Self {
+        match value {
+            KnowledgeTermStatusArg::Preferred => Self::Preferred,
+            KnowledgeTermStatusArg::Allowed => Self::Allowed,
+            KnowledgeTermStatusArg::Forbidden => Self::Forbidden,
+        }
+    }
+}
+
 impl From<AdaptFormatArg> for AdaptFormatInput {
     fn from(value: AdaptFormatArg) -> Self {
         match value {
@@ -566,6 +718,16 @@ impl From<AdaptFormatArg> for AdaptFormatInput {
             AdaptFormatArg::EetJson => Self::EetJson,
             AdaptFormatArg::XtSst => Self::XtSst,
         }
+    }
+}
+
+fn parse_scope_json(text: Option<String>) -> Result<BTreeMap<String, Vec<String>>, CliError> {
+    match text {
+        Some(text) => serde_json::from_str(&text).map_err(|source| CliError::Json {
+            path: Utf8PathBuf::from("<scope-json>"),
+            source,
+        }),
+        None => Ok(BTreeMap::new()),
     }
 }
 

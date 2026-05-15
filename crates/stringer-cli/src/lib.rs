@@ -8,7 +8,8 @@ pub use app::{
     AdaptCommand, AdaptFormatArg, AdaptImportCommand, Cli, CliError, Command,
     KnowledgeAnnotateCommand, KnowledgeCommand, KnowledgeIndexCommand,
     KnowledgeIndexRebuildCommand, KnowledgeLookupCommand, KnowledgeLookupFieldArg,
-    KnowledgeLookupSourceArg, KnowledgeValidateCommand, run,
+    KnowledgeLookupSourceArg, KnowledgeTermCommand, KnowledgeTermDeleteCommand,
+    KnowledgeTermStatusArg, KnowledgeTermUpsertCommand, KnowledgeValidateCommand, run,
 };
 pub use workspace::{
     WorkspaceBatchApplyCommand, WorkspaceBatchClaimCommand, WorkspaceBatchCommand,

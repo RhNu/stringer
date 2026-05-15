@@ -15,8 +15,9 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
 use stringer_app::{
     AppError, adapt_import, knowledge_annotate, knowledge_index_rebuild, knowledge_lookup,
-    knowledge_validate, workspace_batch_apply, workspace_batch_claim, workspace_batch_count,
-    workspace_batch_release, workspace_finalize, workspace_open,
+    knowledge_term_delete, knowledge_term_upsert, knowledge_validate, workspace_batch_apply,
+    workspace_batch_claim, workspace_batch_count, workspace_batch_release, workspace_finalize,
+    workspace_open,
 };
 
 pub use schema::*;
@@ -167,6 +168,32 @@ impl StringerMcp {
         Parameters(request): Parameters<KnowledgeIndexRebuildParams>,
     ) -> Result<Json<KnowledgeIndexRebuildResult>, ErrorData> {
         app_json(knowledge_index_rebuild(app_request(request)?))
+    }
+
+    #[tool(
+        name = "knowledge_term_upsert",
+        description = "Create or replace a project terminology entry.",
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermUpsertParams>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeTermEditResult>()
+    )]
+    pub async fn knowledge_term_upsert(
+        &self,
+        Parameters(request): Parameters<KnowledgeTermUpsertParams>,
+    ) -> Result<Json<KnowledgeTermEditResult>, ErrorData> {
+        app_json(knowledge_term_upsert(app_request(request)?))
+    }
+
+    #[tool(
+        name = "knowledge_term_delete",
+        description = "Delete a project terminology entry by id.",
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermDeleteParams>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeTermEditResult>()
+    )]
+    pub async fn knowledge_term_delete(
+        &self,
+        Parameters(request): Parameters<KnowledgeTermDeleteParams>,
+    ) -> Result<Json<KnowledgeTermEditResult>, ErrorData> {
+        app_json(knowledge_term_delete(app_request(request)?))
     }
 }
 
