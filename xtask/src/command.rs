@@ -7,7 +7,7 @@ use clap::{Args, Parser, Subcommand, error::ErrorKind};
 
 use crate::{
     PathAppendCopyOutcome, copy_release_binary_to_path_append_out_path,
-    find_line_budget_violations, release_binary_path,
+    find_line_budget_violations, release_binary_paths, release_build_args,
 };
 
 const DEFAULT_MAX_LINES: usize = 850;
@@ -90,7 +90,7 @@ fn run_line_budget(args: LineBudgetArgs) -> Result<(), String> {
 fn run_release() -> Result<(), String> {
     let workspace_root = env::current_dir().map_err(|error| error.to_string())?;
     let status = ProcessCommand::new("cargo")
-        .args(["build", "-p", "stringer-cli", "--release"])
+        .args(release_build_args())
         .status()
         .map_err(|error| format!("failed to run cargo build: {error}"))?;
 
@@ -98,22 +98,25 @@ fn run_release() -> Result<(), String> {
         return Err(format!("cargo build failed with {status}"));
     }
 
-    let binary_path = release_binary_path(&workspace_root);
     let path_append_out_path = env::var_os("PATH_APPEND_OUT_PATH").map(PathBuf::from);
-    match copy_release_binary_to_path_append_out_path(binary_path, path_append_out_path)
-        .map_err(|error| format!("failed to copy release binary: {error}"))?
-    {
-        PathAppendCopyOutcome::Copied(destination) => {
-            println!("Copied release binary to {}.", destination.display());
-        }
-        PathAppendCopyOutcome::SkippedMissingEnv => {
-            println!("PATH_APPEND_OUT_PATH is not defined; skipped release binary copy.");
-        }
-        PathAppendCopyOutcome::SkippedMissingDirectory(path) => {
-            println!(
-                "PATH_APPEND_OUT_PATH does not point to an existing directory ({}); skipped release binary copy.",
-                path.display()
-            );
+    for binary_path in release_binary_paths(&workspace_root) {
+        match copy_release_binary_to_path_append_out_path(binary_path, path_append_out_path.clone())
+            .map_err(|error| format!("failed to copy release binary: {error}"))?
+        {
+            PathAppendCopyOutcome::Copied(destination) => {
+                println!("Copied release binary to {}.", destination.display());
+            }
+            PathAppendCopyOutcome::SkippedMissingEnv => {
+                println!("PATH_APPEND_OUT_PATH is not defined; skipped release binary copy.");
+                break;
+            }
+            PathAppendCopyOutcome::SkippedMissingDirectory(path) => {
+                println!(
+                    "PATH_APPEND_OUT_PATH does not point to an existing directory ({}); skipped release binary copy.",
+                    path.display()
+                );
+                break;
+            }
         }
     }
 

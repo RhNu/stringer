@@ -4,7 +4,23 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use xtask::{
     PathAppendCopyOutcome, copy_release_binary_to_path_append_out_path, release_binary_path,
+    release_binary_paths, release_build_args,
 };
+
+#[test]
+fn release_build_args_include_the_cli_and_mcp_packages() {
+    assert_eq!(
+        release_build_args(),
+        [
+            "build",
+            "-p",
+            "stringer-cli",
+            "-p",
+            "stringer-mcp",
+            "--release"
+        ]
+    );
+}
 
 #[test]
 fn release_binary_path_points_to_the_stringer_release_executable() {
@@ -19,6 +35,29 @@ fn release_binary_path_points_to_the_stringer_release_executable() {
             .join("target")
             .join("release")
             .join(format!("stringer{}", std::env::consts::EXE_SUFFIX))
+    );
+}
+
+#[test]
+fn release_binary_paths_include_the_stringer_and_mcp_release_executables() {
+    let workspace = TestWorkspace::new("release_binary_paths");
+
+    let paths = release_binary_paths(workspace.path());
+
+    assert_eq!(
+        paths,
+        [
+            workspace
+                .path()
+                .join("target")
+                .join("release")
+                .join(format!("stringer{}", std::env::consts::EXE_SUFFIX)),
+            workspace
+                .path()
+                .join("target")
+                .join("release")
+                .join(format!("stringer-mcp{}", std::env::consts::EXE_SUFFIX)),
+        ]
     );
 }
 
