@@ -499,8 +499,41 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
 }
 
 #[test]
-fn lookup_falls_back_to_files_and_reports_stale_index_when_knowledge_changes() {
-    let root = TempRoot::new("knowledge-index-stale");
+fn lookup_auto_creates_missing_index_without_stale_diagnostic() {
+    let root = TempRoot::new("knowledge-index-auto-create");
+    write_term(
+        &root.path().join("knowledge/terms/project.toml"),
+        "skyrim.weapon.iron_sword",
+        "铁剑",
+    );
+
+    let lookup = lookup_knowledge(LookupKnowledgeOptions {
+        project_root: utf8(root.path()),
+        settings: settings_with_global(None),
+        text: "Iron Sword".to_string(),
+        kind: PipelineEntryKind::Plugin,
+        context: Vec::new(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
+    })
+    .unwrap();
+
+    assert!(lookup.index_used);
+    assert!(lookup.diagnostics.is_empty());
+    assert_eq!(lookup.results[0].target, "铁剑");
+    assert!(
+        root.path()
+            .join(".stringer/indexes/knowledge.sqlite")
+            .exists()
+    );
+}
+
+#[test]
+fn lookup_refreshes_changed_knowledge_index_without_stale_diagnostic() {
+    let root = TempRoot::new("knowledge-index-refresh");
     let terms = root.path().join("knowledge/terms/project.toml");
     write_term(&terms, "skyrim.weapon.iron_sword", "铁剑");
     build_knowledge_index(BuildKnowledgeIndexOptions {
@@ -524,13 +557,8 @@ fn lookup_falls_back_to_files_and_reports_stale_index_when_knowledge_changes() {
     })
     .unwrap();
 
-    assert!(!lookup.index_used);
-    assert!(
-        lookup
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code() == "knowledge.index_stale")
-    );
+    assert!(lookup.index_used);
+    assert!(lookup.diagnostics.is_empty());
     assert_eq!(lookup.results[0].target, "熟铁剑");
 }
 
@@ -574,7 +602,7 @@ async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diag
 }
 
 #[test]
-fn lookup_falls_back_to_files_when_index_is_corrupt() {
+fn lookup_rebuilds_corrupt_index_without_stale_diagnostic() {
     let root = TempRoot::new("knowledge-index-corrupt");
     write_term(
         &root.path().join("knowledge/terms/project.toml"),
@@ -600,13 +628,8 @@ fn lookup_falls_back_to_files_when_index_is_corrupt() {
     })
     .unwrap();
 
-    assert!(!lookup.index_used);
-    assert!(
-        lookup
-            .diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.code() == "knowledge.index_stale")
-    );
+    assert!(lookup.index_used);
+    assert!(lookup.diagnostics.is_empty());
     assert_eq!(lookup.results[0].target, "铁剑");
 }
 

@@ -11,12 +11,12 @@ use stringer_pipeline::{
 use crate::WorkspaceError;
 use crate::batch::claimed_entry_ids;
 use crate::knowledge_index::{
-    KnowledgeFileKind, KnowledgeSourceFile, fingerprint, index_is_fresh, knowledge_index_path,
-    read_knowledge_index, write_knowledge_index,
+    KnowledgeFileKind, KnowledgeSourceFile, ensure_knowledge_index, index_is_current,
+    knowledge_index_path, read_index_diagnostics, rebuild_knowledge_index, source_file_from_path,
 };
 use crate::knowledge_lookup::{
     KnowledgeLookup, KnowledgeSearchOptions, LookupKnowledgeField, LookupKnowledgeMode,
-    LookupKnowledgeSource, search_knowledge,
+    LookupKnowledgeSource, search_knowledge_index,
 };
 use crate::lock::{WorkspaceLock, unix_ms};
 use crate::package::{
@@ -79,6 +79,9 @@ pub struct KnowledgeIndexSummary {
     pub memory: usize,
     pub rules: usize,
     pub diagnostics: usize,
+    pub indexed_items: usize,
+    pub fts_rows: usize,
+    pub rebuild_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -215,11 +218,6 @@ pub fn lookup_knowledge(
 ) -> Result<KnowledgeLookup, WorkspaceError> {
     let query = options.text.clone();
     let settings = options.settings.clone();
-    let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        project_root: options.project_root.clone(),
-        settings: settings.clone(),
-        prefer_index: true,
-    })?;
     let mut context = BTreeMap::new();
     context.insert(
         "game".to_string(),
@@ -231,8 +229,13 @@ pub fn lookup_knowledge(
     for (key, value) in options.context {
         context.insert(key, value);
     }
-    let search = search_knowledge(
-        &loaded.knowledge,
+    let files = collect_source_files(&options.project_root, &settings)?;
+    let index_path = knowledge_index_path(&options.project_root);
+    let index = ensure_knowledge_index(&index_path, &files, &settings, || {
+        load_knowledge_from_files(&files)
+    })?;
+    let search = search_knowledge_index(
+        &index.path,
         &KnowledgeSearchOptions {
             query: &query,
             mode: options.mode,
@@ -245,15 +248,14 @@ pub fn lookup_knowledge(
             context: &context,
         },
     )?;
-    let mut diagnostics = loaded.diagnostics;
-    diagnostics.extend(loaded.knowledge.merge_diagnostics().iter().cloned());
+    let diagnostics = read_index_diagnostics(&index.path)?;
     Ok(KnowledgeLookup {
         query,
         mode: options.mode,
         total_matches: search.total_matches,
         results: search.results,
         diagnostics,
-        index_used: loaded.index_used,
+        index_used: true,
     })
 }
 
@@ -264,14 +266,7 @@ pub fn build_knowledge_index(
     let files = collect_source_files(&options.project_root, &settings)?;
     let knowledge = load_knowledge_from_files(&files)?;
     let index_path = knowledge_index_path(&options.project_root);
-    write_knowledge_index(&index_path, &files, &knowledge)?;
-    Ok(KnowledgeIndexSummary {
-        files: files.len(),
-        terms: knowledge.terms().len(),
-        memory: knowledge.memory().len(),
-        rules: knowledge.rules().len(),
-        diagnostics: knowledge.merge_diagnostics().len(),
-    })
+    rebuild_knowledge_index(&index_path, &files, &settings, &knowledge, Some("explicit"))
 }
 
 pub fn load_knowledge_layers(
@@ -280,35 +275,17 @@ pub fn load_knowledge_layers(
     let settings = options.settings;
     let files = collect_source_files(&options.project_root, &settings)?;
     let index_path = knowledge_index_path(&options.project_root);
-    if options.prefer_index
-        && index_path.exists()
-        && let Ok(true) = index_is_fresh(&index_path, &files)
-        && let Ok(knowledge) = read_knowledge_index(&index_path)
-    {
-        return Ok(LoadedKnowledgeLayers {
-            knowledge,
-            diagnostics: Vec::new(),
-            index_used: true,
-        });
-    }
-
     let knowledge = load_knowledge_from_files(&files)?;
     let mut diagnostics = Vec::new();
-    if options.prefer_index {
-        let diagnostic = PipelineDiagnostic::new(
-            PipelineDiagnosticSeverity::Warning,
-            "knowledge.index_stale",
-            "Knowledge index is missing or stale; using file-backed knowledge.",
-            "",
-        )
-        .with_layer("index")
-        .with_rule_id("knowledge.sqlite");
-        diagnostics.push(diagnostic);
+    let index_used =
+        options.prefer_index && index_is_current(&index_path, &files, &settings).unwrap_or(false);
+    if options.prefer_index && !index_used {
+        diagnostics.push(index_stale_diagnostic());
     }
     Ok(LoadedKnowledgeLayers {
         knowledge,
         diagnostics,
-        index_used: false,
+        index_used,
     })
 }
 
@@ -325,6 +302,17 @@ fn knowledge_diagnostics(loaded: &LoadedKnowledgeLayers) -> Vec<PipelineDiagnost
     let mut diagnostics = loaded.diagnostics.clone();
     diagnostics.extend(loaded.knowledge.merge_diagnostics().iter().cloned());
     diagnostics
+}
+
+fn index_stale_diagnostic() -> PipelineDiagnostic {
+    PipelineDiagnostic::new(
+        PipelineDiagnosticSeverity::Warning,
+        "knowledge.index_stale",
+        "Knowledge index is missing or stale; using file-backed knowledge.",
+        "",
+    )
+    .with_layer("index")
+    .with_rule_id("knowledge.sqlite")
 }
 
 fn settings_with_user_knowledge_defaults(
@@ -385,16 +373,7 @@ fn collect_files_for_layer(
         (KnowledgeFileKind::Rules, "rules", "toml"),
     ] {
         for path in sorted_files(&root.join(folder), extension)? {
-            let bytes = fs::read(&path).map_err(|source| WorkspaceError::ReadFile {
-                path: path.clone(),
-                source,
-            })?;
-            files.push(KnowledgeSourceFile {
-                path,
-                layer: layer.to_string(),
-                kind,
-                fingerprint: fingerprint(&bytes),
-            });
+            files.push(source_file_from_path(path, layer, kind)?);
         }
     }
     Ok(())

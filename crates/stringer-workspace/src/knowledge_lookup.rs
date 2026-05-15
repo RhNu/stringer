@@ -1,11 +1,14 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use camino::Utf8Path;
 use regex::{Regex, RegexBuilder};
+use rusqlite::{Connection, params, params_from_iter, types::Value};
 use serde::Serialize;
-use stringer_pipeline::{KnowledgeBase, MemoryQuality, PipelineDiagnostic, Term, TermStatus};
+use stringer_pipeline::PipelineDiagnostic;
 
 use crate::WorkspaceError;
+use crate::knowledge_index::normalize_lookup_text;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -80,17 +83,50 @@ pub(crate) struct KnowledgeSearchOutput {
     pub results: Vec<KnowledgeLookupResult>,
 }
 
-pub(crate) fn search_knowledge(
-    knowledge: &KnowledgeBase,
+pub(crate) fn search_knowledge_index(
+    path: &Utf8Path,
     options: &KnowledgeSearchOptions<'_>,
 ) -> Result<KnowledgeSearchOutput, WorkspaceError> {
     let regex = lookup_regex(options)?;
+    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+        path: path.to_owned(),
+        source,
+    })?;
+    let rows = candidate_rows(&connection, path, options)?;
     let mut ranked = Vec::new();
-    if options.source != LookupKnowledgeSource::Terms {
-        collect_memory_results(knowledge, options, regex.as_ref(), &mut ranked);
-    }
-    if options.source != LookupKnowledgeSource::Memory {
-        collect_term_results(knowledge, options, regex.as_ref(), &mut ranked);
+    for mut row in rows {
+        row.aliases = aliases_for_row(&connection, path, row.rowid)?;
+        row.scope = scope_for_row(&connection, path, row.rowid)?;
+        let Some(field_match) = best_index_row_match(&row, options, regex.as_ref()) else {
+            continue;
+        };
+        let context = scope_match(options.context, &row.scope);
+        if context.conflicts > 0 {
+            continue;
+        }
+        ranked.push(RankedResult {
+            layer_priority: layer_priority(&row.layer),
+            quality_priority: index_quality_priority(
+                row.item_kind.as_str(),
+                row.quality.as_deref(),
+                row.status.as_deref(),
+            ),
+            source_len: row.source_len,
+            context_matches: context.matches,
+            context_conflicts: context.conflicts,
+            result: KnowledgeLookupResult {
+                kind: row.item_kind,
+                id: row.id,
+                layer: row.layer,
+                source: row.source,
+                target: row.target,
+                match_field: field_match.field.to_string(),
+                match_kind: field_match.kind.to_string(),
+                score: field_match.score,
+                quality: row.quality,
+                status: row.status,
+            },
+        });
     }
     ranked.sort_by(compare_ranked_results);
 
@@ -106,85 +142,376 @@ pub(crate) fn search_knowledge(
     })
 }
 
-fn collect_memory_results(
-    knowledge: &KnowledgeBase,
+#[derive(Debug, Clone)]
+struct IndexRow {
+    rowid: i64,
+    item_kind: String,
+    id: String,
+    layer: String,
+    source: String,
+    target: String,
+    quality: Option<String>,
+    status: Option<String>,
+    source_len: usize,
+    aliases: Vec<String>,
+    scope: BTreeMap<String, Vec<String>>,
+}
+
+fn candidate_rows(
+    connection: &Connection,
+    path: &Utf8Path,
     options: &KnowledgeSearchOptions<'_>,
-    regex: Option<&Regex>,
-    ranked: &mut Vec<RankedResult>,
-) {
-    for item in knowledge.memory() {
-        if item.quality() == MemoryQuality::Rejected {
-            continue;
-        }
-        if item.source_locale() != options.source_locale
-            || item.target_locale() != options.target_locale
-        {
-            continue;
-        }
-        let Some(field_match) = best_field_match(item.source(), item.target(), options, regex)
-        else {
-            continue;
-        };
-        let context = context_match(options.context, item.context());
-        if context.conflicts > 0 {
-            continue;
-        }
-        ranked.push(RankedResult {
-            layer_priority: layer_priority(item.layer()),
-            quality_priority: memory_quality_priority(item.quality()),
-            source_len: item.source().chars().count(),
-            context_matches: context.matches,
-            context_conflicts: context.conflicts,
-            result: KnowledgeLookupResult {
-                kind: "memory".to_string(),
-                id: item.id().to_string(),
-                layer: item.layer().to_string(),
-                source: item.source().to_string(),
-                target: item.target().to_string(),
-                match_field: field_match.field.to_string(),
-                match_kind: field_match.kind.to_string(),
-                score: field_match.score,
-                quality: Some(item.quality().as_str().to_string()),
-                status: None,
-            },
-        });
+) -> Result<Vec<IndexRow>, WorkspaceError> {
+    if options.query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let query = normalize_lookup_text(options.query);
+    let rowids = if options.mode == LookupKnowledgeMode::Regex || query.chars().count() < 3 {
+        None
+    } else {
+        let mut rowids = exact_prefix_candidate_rowids(connection, path, options, &query)?;
+        rowids.extend(fts_candidate_rowids(connection, path, &query)?);
+        Some(rowids)
+    };
+    select_candidate_rows(connection, path, options, rowids.as_ref())
+}
+
+fn exact_prefix_candidate_rowids(
+    connection: &Connection,
+    path: &Utf8Path,
+    options: &KnowledgeSearchOptions<'_>,
+    query: &str,
+) -> Result<BTreeSet<i64>, WorkspaceError> {
+    let prefix = format!("{query}%");
+    let mut rowids = BTreeSet::new();
+    if matches!(
+        options.field,
+        LookupKnowledgeField::Both | LookupKnowledgeField::Source
+    ) {
+        rowids.extend(rowids_for_text_column(
+            connection,
+            path,
+            "source_norm",
+            query,
+            &prefix,
+        )?);
+        rowids.extend(rowids_for_aliases(connection, path, query, &prefix)?);
+    }
+    if matches!(
+        options.field,
+        LookupKnowledgeField::Both | LookupKnowledgeField::Target
+    ) {
+        rowids.extend(rowids_for_text_column(
+            connection,
+            path,
+            "target_norm",
+            query,
+            &prefix,
+        )?);
+    }
+    Ok(rowids)
+}
+
+fn rowids_for_text_column(
+    connection: &Connection,
+    path: &Utf8Path,
+    column: &str,
+    query: &str,
+    prefix: &str,
+) -> Result<BTreeSet<i64>, WorkspaceError> {
+    let sql = format!("SELECT rowid FROM items WHERE {column} = ?1 OR {column} LIKE ?2");
+    let mut statement = connection
+        .prepare(&sql)
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let rows = statement
+        .query_map(params![query, prefix], |row| row.get::<_, i64>(0))
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    collect_rowids(path, rows)
+}
+
+fn rowids_for_aliases(
+    connection: &Connection,
+    path: &Utf8Path,
+    query: &str,
+    prefix: &str,
+) -> Result<BTreeSet<i64>, WorkspaceError> {
+    let mut statement = connection
+        .prepare("SELECT item_rowid FROM aliases WHERE alias_norm = ?1 OR alias_norm LIKE ?2")
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let rows = statement
+        .query_map(params![query, prefix], |row| row.get::<_, i64>(0))
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    collect_rowids(path, rows)
+}
+
+fn fts_candidate_rowids(
+    connection: &Connection,
+    path: &Utf8Path,
+    query: &str,
+) -> Result<BTreeSet<i64>, WorkspaceError> {
+    let query = fts_phrase(query);
+    let mut statement = connection
+        .prepare("SELECT rowid FROM items_fts WHERE items_fts MATCH ?1")
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let rows = statement
+        .query_map(params![query], |row| row.get::<_, i64>(0))
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    collect_rowids(path, rows)
+}
+
+fn collect_rowids(
+    path: &Utf8Path,
+    rows: impl Iterator<Item = rusqlite::Result<i64>>,
+) -> Result<BTreeSet<i64>, WorkspaceError> {
+    let mut rowids = BTreeSet::new();
+    for row in rows {
+        rowids.insert(row.map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?);
+    }
+    Ok(rowids)
+}
+
+fn select_candidate_rows(
+    connection: &Connection,
+    path: &Utf8Path,
+    options: &KnowledgeSearchOptions<'_>,
+    rowids: Option<&BTreeSet<i64>>,
+) -> Result<Vec<IndexRow>, WorkspaceError> {
+    match rowids {
+        Some(rowids) if rowids.is_empty() => Ok(Vec::new()),
+        Some(rowids) => select_candidate_rows_by_rowid(connection, path, options, rowids),
+        None => select_candidate_rows_by_filter(connection, path, options),
     }
 }
 
-fn collect_term_results(
-    knowledge: &KnowledgeBase,
+fn select_candidate_rows_by_filter(
+    connection: &Connection,
+    path: &Utf8Path,
+    options: &KnowledgeSearchOptions<'_>,
+) -> Result<Vec<IndexRow>, WorkspaceError> {
+    let mut statement = connection
+        .prepare(&candidate_rows_sql(None))
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let source_filter = match options.source {
+        LookupKnowledgeSource::All => "all",
+        LookupKnowledgeSource::Memory => "memory",
+        LookupKnowledgeSource::Terms => "term",
+    };
+    let rows = statement
+        .query_map(
+            params![
+                source_filter,
+                source_filter,
+                options.source_locale,
+                options.target_locale,
+            ],
+            index_row_from_sql,
+        )
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    collect_index_rows(path, rows)
+}
+
+fn select_candidate_rows_by_rowid(
+    connection: &Connection,
+    path: &Utf8Path,
+    options: &KnowledgeSearchOptions<'_>,
+    rowids: &BTreeSet<i64>,
+) -> Result<Vec<IndexRow>, WorkspaceError> {
+    let source_filter = match options.source {
+        LookupKnowledgeSource::All => "all",
+        LookupKnowledgeSource::Memory => "memory",
+        LookupKnowledgeSource::Terms => "term",
+    };
+    let mut candidates = Vec::new();
+    for chunk in rowids.iter().copied().collect::<Vec<_>>().chunks(500) {
+        let mut values = chunk
+            .iter()
+            .map(|rowid| Value::Integer(*rowid))
+            .collect::<Vec<_>>();
+        values.extend([
+            Value::Text(source_filter.to_string()),
+            Value::Text(source_filter.to_string()),
+            Value::Text(options.source_locale.to_string()),
+            Value::Text(options.target_locale.to_string()),
+        ]);
+        let mut statement = connection
+            .prepare(&candidate_rows_sql(Some(chunk.len())))
+            .map_err(|source| WorkspaceError::Sqlite {
+                path: path.to_owned(),
+                source,
+            })?;
+        let rows = statement
+            .query_map(params_from_iter(values), index_row_from_sql)
+            .map_err(|source| WorkspaceError::Sqlite {
+                path: path.to_owned(),
+                source,
+            })?;
+        candidates.extend(collect_index_rows(path, rows)?);
+    }
+    Ok(candidates)
+}
+
+fn candidate_rows_sql(rowid_count: Option<usize>) -> String {
+    let rowid_filter = rowid_count.map(|count| {
+        format!(
+            "rowid IN ({}) AND ",
+            (0..count).map(|_| "?").collect::<Vec<_>>().join(", ")
+        )
+    });
+    format!(
+        concat!(
+            "SELECT rowid, item_kind, id, layer, source, target, quality, status, source_len ",
+            "FROM items WHERE ",
+            "{}",
+            "(? = 'all' OR item_kind = ?) AND ",
+            "(item_kind != 'memory' OR (source_locale = ? AND target_locale = ? AND quality != 'rejected'))"
+        ),
+        rowid_filter.unwrap_or_default()
+    )
+}
+
+fn collect_index_rows(
+    path: &Utf8Path,
+    rows: impl Iterator<Item = rusqlite::Result<IndexRow>>,
+) -> Result<Vec<IndexRow>, WorkspaceError> {
+    let mut candidates = Vec::new();
+    for row in rows {
+        candidates.push(row.map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?);
+    }
+    Ok(candidates)
+}
+
+fn index_row_from_sql(row: &rusqlite::Row<'_>) -> rusqlite::Result<IndexRow> {
+    Ok(IndexRow {
+        rowid: row.get::<_, i64>(0)?,
+        item_kind: row.get::<_, String>(1)?,
+        id: row.get::<_, String>(2)?,
+        layer: row.get::<_, String>(3)?,
+        source: row.get::<_, String>(4)?,
+        target: row.get::<_, String>(5)?,
+        quality: row.get::<_, Option<String>>(6)?,
+        status: row.get::<_, Option<String>>(7)?,
+        source_len: row.get::<_, i64>(8)? as usize,
+        aliases: Vec::new(),
+        scope: BTreeMap::new(),
+    })
+}
+
+fn aliases_for_row(
+    connection: &Connection,
+    path: &Utf8Path,
+    rowid: i64,
+) -> Result<Vec<String>, WorkspaceError> {
+    let mut statement = connection
+        .prepare("SELECT alias FROM aliases WHERE item_rowid = ?1")
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let rows = statement
+        .query_map(params![rowid], |row| row.get::<_, String>(0))
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let mut aliases = Vec::new();
+    for row in rows {
+        aliases.push(row.map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?);
+    }
+    Ok(aliases)
+}
+
+fn scope_for_row(
+    connection: &Connection,
+    path: &Utf8Path,
+    rowid: i64,
+) -> Result<BTreeMap<String, Vec<String>>, WorkspaceError> {
+    let mut statement = connection
+        .prepare("SELECT key, value FROM item_scope WHERE item_rowid = ?1")
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let rows = statement
+        .query_map(params![rowid], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let mut scope = BTreeMap::<String, Vec<String>>::new();
+    for row in rows {
+        let (key, value) = row.map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+        scope.entry(key).or_default().push(value);
+    }
+    Ok(scope)
+}
+
+fn best_index_row_match(
+    row: &IndexRow,
     options: &KnowledgeSearchOptions<'_>,
     regex: Option<&Regex>,
-    ranked: &mut Vec<RankedResult>,
-) {
-    for term in knowledge.terms() {
-        let Some(field_match) = best_term_match(term, options, regex) else {
-            continue;
-        };
-        let context = scope_match(options.context, term.scope_values());
-        if context.conflicts > 0 {
-            continue;
+) -> Option<FieldMatch> {
+    let mut candidates = Vec::new();
+    if matches!(
+        options.field,
+        LookupKnowledgeField::Both | LookupKnowledgeField::Source
+    ) {
+        if let Some(candidate) = text_match(&row.source, "source", options, regex) {
+            candidates.push(candidate);
         }
-        ranked.push(RankedResult {
-            layer_priority: layer_priority(term.layer()),
-            quality_priority: term_status_priority(term.status()),
-            source_len: term.source().chars().count(),
-            context_matches: context.matches,
-            context_conflicts: context.conflicts,
-            result: KnowledgeLookupResult {
-                kind: "term".to_string(),
-                id: term.id().to_string(),
-                layer: term.layer().to_string(),
-                source: term.source().to_string(),
-                target: term.target().to_string(),
-                match_field: field_match.field.to_string(),
-                match_kind: field_match.kind.to_string(),
-                score: field_match.score,
-                quality: None,
-                status: Some(term.status().as_str().to_string()),
-            },
-        });
+        for alias in &row.aliases {
+            if let Some(candidate) = text_match(alias, "alias", options, regex) {
+                candidates.push(candidate);
+            }
+        }
     }
+    if matches!(
+        options.field,
+        LookupKnowledgeField::Both | LookupKnowledgeField::Target
+    ) && let Some(candidate) = text_match(&row.target, "target", options, regex)
+    {
+        candidates.push(candidate);
+    }
+    candidates
+        .into_iter()
+        .max_by_key(|candidate| candidate.score)
 }
 
 #[derive(Debug, Clone)]
@@ -222,63 +549,6 @@ fn lookup_regex(options: &KnowledgeSearchOptions<'_>) -> Result<Option<Regex>, W
             pattern: options.query.to_string(),
             source,
         })
-}
-
-fn best_term_match(
-    term: &Term,
-    options: &KnowledgeSearchOptions<'_>,
-    regex: Option<&Regex>,
-) -> Option<FieldMatch> {
-    let mut candidates = Vec::new();
-    if matches!(
-        options.field,
-        LookupKnowledgeField::Both | LookupKnowledgeField::Source
-    ) {
-        if let Some(candidate) = text_match(term.source(), "source", options, regex) {
-            candidates.push(candidate);
-        }
-        for alias in term.aliases() {
-            if let Some(candidate) = text_match(alias, "alias", options, regex) {
-                candidates.push(candidate);
-            }
-        }
-    }
-    if matches!(
-        options.field,
-        LookupKnowledgeField::Both | LookupKnowledgeField::Target
-    ) && let Some(candidate) = text_match(term.target(), "target", options, regex)
-    {
-        candidates.push(candidate);
-    }
-    candidates
-        .into_iter()
-        .max_by_key(|candidate| candidate.score)
-}
-
-fn best_field_match(
-    source: &str,
-    target: &str,
-    options: &KnowledgeSearchOptions<'_>,
-    regex: Option<&Regex>,
-) -> Option<FieldMatch> {
-    let mut candidates = Vec::new();
-    if matches!(
-        options.field,
-        LookupKnowledgeField::Both | LookupKnowledgeField::Source
-    ) && let Some(candidate) = text_match(source, "source", options, regex)
-    {
-        candidates.push(candidate);
-    }
-    if matches!(
-        options.field,
-        LookupKnowledgeField::Both | LookupKnowledgeField::Target
-    ) && let Some(candidate) = text_match(target, "target", options, regex)
-    {
-        candidates.push(candidate);
-    }
-    candidates
-        .into_iter()
-        .max_by_key(|candidate| candidate.score)
 }
 
 fn text_match(
@@ -333,23 +603,6 @@ fn contains_text_match(
     } else {
         None
     }
-}
-
-fn context_match(
-    actual: &BTreeMap<String, String>,
-    expected: &BTreeMap<String, String>,
-) -> ContextMatch {
-    let mut result = ContextMatch::default();
-    for (key, value) in expected {
-        if let Some(actual) = actual.get(key) {
-            if actual == value {
-                result.matches += 1;
-            } else {
-                result.conflicts += 1;
-            }
-        }
-    }
-    result
 }
 
 fn scope_match(
@@ -440,19 +693,24 @@ fn layer_priority(layer: &str) -> usize {
     }
 }
 
-fn memory_quality_priority(quality: MemoryQuality) -> usize {
-    match quality {
-        MemoryQuality::Confirmed => 4,
-        MemoryQuality::Imported => 3,
-        MemoryQuality::Machine => 2,
-        MemoryQuality::Rejected => 1,
+fn index_quality_priority(kind: &str, quality: Option<&str>, status: Option<&str>) -> usize {
+    if kind == "memory" {
+        match quality {
+            Some("confirmed") => 4,
+            Some("imported") => 3,
+            Some("machine") => 2,
+            _ => 1,
+        }
+    } else {
+        match status {
+            Some("preferred") => 3,
+            Some("allowed") => 2,
+            Some("forbidden") => 1,
+            _ => 0,
+        }
     }
 }
 
-fn term_status_priority(status: TermStatus) -> usize {
-    match status {
-        TermStatus::Preferred => 3,
-        TermStatus::Allowed => 2,
-        TermStatus::Forbidden => 1,
-    }
+fn fts_phrase(query: &str) -> String {
+    format!("\"{}\"", query.replace('"', "\"\""))
 }

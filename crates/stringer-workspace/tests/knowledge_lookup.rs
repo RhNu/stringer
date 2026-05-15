@@ -173,6 +173,28 @@ scope = { record_type = "WEAP" }
     assert_eq!(lookup.results[0].id, "term:match");
 }
 
+#[test]
+#[ignore = "performance smoke test for larger indexed memory fixtures"]
+fn lookup_uses_index_for_large_memory_fixture() {
+    let root = TempRoot::new("lookup-large-indexed-memory");
+    let mut rows = String::new();
+    for index in 0..10_000 {
+        rows.push_str(&format!(
+            "{{\"id\":\"tm:{index}\",\"source\":\"Common Memory {index}\",\"target\":\"记忆 {index}\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}}\n"
+        ));
+    }
+    rows.push_str(
+        "{\"id\":\"tm:needle\",\"source\":\"Needle Unique Phrase\",\"target\":\"唯一记忆\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
+    );
+    write_text(&root.path().join("knowledge/memory/project.jsonl"), &rows);
+
+    let lookup = lookup_knowledge(lookup_options(root.path(), "Needle Unique")).unwrap();
+
+    assert!(lookup.index_used);
+    assert_eq!(lookup.total_matches, 1);
+    assert_eq!(lookup.results[0].id, "tm:needle");
+}
+
 fn lookup_options(root: &std::path::Path, text: &str) -> LookupKnowledgeOptions {
     LookupKnowledgeOptions {
         project_root: utf8(root),

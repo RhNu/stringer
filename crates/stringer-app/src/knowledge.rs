@@ -73,6 +73,9 @@ pub fn knowledge_index_rebuild(
         memory: summary.memory,
         rules: summary.rules,
         diagnostics: summary.diagnostics,
+        indexed_items: summary.indexed_items,
+        fts_rows: summary.fts_rows,
+        rebuild_reason: summary.rebuild_reason,
     })
 }
 
@@ -151,6 +154,9 @@ fn knowledge_term_edit_response(summary: KnowledgeTermEditSummary) -> KnowledgeT
                 memory: summary.memory,
                 rules: summary.rules,
                 diagnostics: summary.diagnostics,
+                indexed_items: summary.indexed_items,
+                fts_rows: summary.fts_rows,
+                rebuild_reason: summary.rebuild_reason,
             }),
     }
 }

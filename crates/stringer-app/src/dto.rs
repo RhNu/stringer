@@ -443,13 +443,17 @@ pub struct KnowledgeLookupResultResponse {
     pub status: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KnowledgeIndexRebuildResponse {
     pub files: usize,
     pub terms: usize,
     pub memory: usize,
     pub rules: usize,
     pub diagnostics: usize,
+    pub indexed_items: usize,
+    pub fts_rows: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rebuild_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
