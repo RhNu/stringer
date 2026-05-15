@@ -1,6 +1,6 @@
 ---
 name: stringer-workflows
-description: Use when agent needs to operate Stringer CLI or MCP server for Bethesda mod localization, including opening translation workspaces, translating claimed batches, splitting work across agents, using terminology or translation memory, reviewing diagnostics, validating workspaces, finalizing overrides, or mapping Stringer CLI commands to MCP tools.
+description: Use when agent needs to operate Stringer CLI or MCP server for Bethesda mod localization, including opening translation workspaces, translating claimed batches, splitting work across agents, using terminology or translation memory, editing project terminology, reviewing diagnostics, validating workspaces, finalizing overrides, or mapping Stringer CLI commands to MCP tools.
 ---
 
 # Stringer Workflows
@@ -10,6 +10,7 @@ description: Use when agent needs to operate Stringer CLI or MCP server for Beth
 - Prefer Stringer batch commands or MCP batch tools for agent edits. Use direct JSONL editing only as a fallback.
 - Preserve `id`, `source`, `context`, `hints`, and `diagnostics`. Write translations through `translation` only.
 - Use `knowledge lookup` for uncertain names, terminology, repeated phrases, or diagnostic review.
+- Use `knowledge term upsert/delete` or MCP `knowledge_term_upsert/delete` for project terminology edits; do not hand-edit term TOML unless the command/tool is unavailable.
 - Run `knowledge validate` before `workspace finalize`.
 - Treat diagnostics as review inputs. Resolve real risks; do not delete diagnostics manually.
 

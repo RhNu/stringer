@@ -10,6 +10,31 @@ stringer knowledge index rebuild --project-root <PROJECT_ROOT> --game-release Sk
 
 `annotate`, `validate`, and `lookup` prefer a fresh index and fall back to files when needed.
 
+## Edit Project Terms
+
+Prefer term edit commands/tools over direct TOML edits. They create `knowledge/terms/project.toml` by default and restrict custom files to `.toml` paths under `<PROJECT_ROOT>/knowledge/terms/`.
+
+Upsert a term:
+
+```powershell
+stringer knowledge term upsert --project-root <PROJECT_ROOT> --id "term:iron_sword" --source "Iron Sword" --target "熟铁剑" --status preferred --alias "Iron Blade" --scope-json '{"game":["SkyrimSe"],"kind":["plugin"],"record_type":["WEAP"]}' --tag weapon --note "Project wording" --json
+```
+
+Delete a term:
+
+```powershell
+stringer knowledge term delete --project-root <PROJECT_ROOT> --id "term:iron_sword" --json
+```
+
+Use `--file knowledge/terms/<NAME>.toml` to target a specific project term file. Use `--rebuild-index` after an edit when subsequent lookup or annotation must use the SQLite index immediately; provide full settings or rely on project settings.
+
+Supported status values are `preferred`, `allowed`, and `forbidden`. Supported scope keys are `game`, `source_locale`, `target_locale`, `kind`, `record_type`, and `asset_path`; CLI `--scope-json` values must be string arrays.
+
+MCP equivalents:
+
+- `knowledge_term_upsert` with `{ "project_root": "...", "term": { "id": "...", "source": "...", "target": "...", "status": "preferred", "scope": { "game": ["SkyrimSe"] } }, "rebuild_index": false }`
+- `knowledge_term_delete` with `{ "project_root": "...", "id": "...", "rebuild_index": false }`
+
 ## Lookup
 
 Use JSON output for agent evidence:

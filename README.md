@@ -220,6 +220,37 @@ cargo run -p stringer-cli -- knowledge index rebuild `
 
 普通 `annotate`、`validate` 和 `lookup` 会优先使用新鲜索引；索引缺失或过期时会回退到文件知识库，并报告 `knowledge.index_stale`。
 
+### 编辑项目术语
+
+CLI 可以直接新增、替换或删除项目术语。默认文件是 `knowledge/terms/project.toml`；也可以用 `--file` 指向 `knowledge/terms/` 下的其他 `.toml` 文件。`--scope-json` 只接受支持的 scope 键：`game`、`source_locale`、`target_locale`、`kind`、`record_type`、`asset_path`，值为字符串数组。
+
+新增或替换术语：
+
+```powershell
+cargo run -p stringer-cli -- knowledge term upsert `
+  --project-root path/to/mod-root `
+  --id skyrim.weapon.iron_sword `
+  --source "Iron Sword" `
+  --target "铁剑" `
+  --alias "Iron Blade" `
+  --status preferred `
+  --scope-json '{"game":["SkyrimSe"],"target_locale":["zh-Hans"],"kind":["plugin"],"record_type":["WEAP"]}' `
+  --tag weapon `
+  --note "项目固定译名。" `
+  --json
+```
+
+删除术语：
+
+```powershell
+cargo run -p stringer-cli -- knowledge term delete `
+  --project-root path/to/mod-root `
+  --id skyrim.weapon.iron_sword `
+  --json
+```
+
+加上 `--rebuild-index` 会在编辑后立即重建 `.stringer/indexes/knowledge.sqlite`；这时需要同其他知识命令一样提供完整设置，或在项目 `stringer.toml` 中配置设置。
+
 ## 迁移旧翻译资源
 
 `adapt import` 用于把已有翻译资源导入为 Stringer 翻译记忆 JSONL。它不会改模组文件，也不会直接改翻译包；它只读取外部资源，输出可放进 `knowledge/memory/` 的记忆文件，随后由 `knowledge annotate` 和 `knowledge lookup` 使用。
@@ -283,6 +314,8 @@ cargo run -p stringer-cli -- knowledge annotate --help
 cargo run -p stringer-cli -- knowledge validate --help
 cargo run -p stringer-cli -- knowledge lookup --help
 cargo run -p stringer-cli -- knowledge index rebuild --help
+cargo run -p stringer-cli -- knowledge term upsert --help
+cargo run -p stringer-cli -- knowledge term delete --help
 ```
 
 常用命令：
@@ -294,6 +327,7 @@ cargo run -p stringer-cli -- knowledge index rebuild --help
 - `knowledge validate`：重算诊断信息，检查术语、禁用译法、占位符、空译文等风险。
 - `knowledge lookup`：查询单条文本的提示和诊断；加 `--json` 适合 Agent 读取。
 - `knowledge index rebuild`：重建 `.stringer/indexes/knowledge.sqlite`。
+- `knowledge term upsert/delete`：新增、替换或删除项目术语；可选 `--rebuild-index` 同步刷新索引。
 
 ## MCP
 
@@ -302,6 +336,13 @@ Stringer 也提供本地 stdio MCP server，供支持 MCP 的 Agent 使用。MCP
 ```powershell
 cargo run -p stringer-mcp -- serve
 ```
+
+术语编辑对应 MCP tools：
+
+- `knowledge_term_upsert`：参数包含 `project_root`、可选 `file`、`term`、`rebuild_index` 和 `settings`。
+- `knowledge_term_delete`：参数包含 `project_root`、可选 `file`、`id`、`rebuild_index` 和 `settings`。
+
+`term.status` 使用 `preferred`、`allowed` 或 `forbidden`；`term.scope` 使用对象加字符串数组值，例如 `{ "game": ["SkyrimSe"], "kind": ["plugin"] }`。
 
 ## Agent Skill
 

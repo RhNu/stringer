@@ -31,6 +31,8 @@ Use MCP tools when the host exposes the Stringer server:
 | `knowledge validate`      | `knowledge_validate`      |
 | `knowledge lookup`        | `knowledge_lookup`        |
 | `knowledge index rebuild` | `knowledge_index_rebuild` |
+| `knowledge term upsert`   | `knowledge_term_upsert`   |
+| `knowledge term delete`   | `knowledge_term_delete`   |
 
 MCP results are structured JSON. Prefer them over parsing CLI text when both are available.
 
