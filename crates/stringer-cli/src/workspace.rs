@@ -48,14 +48,14 @@ pub struct WorkspaceOpenCommand {
         long,
         value_name = "MOD_ROOT",
         help = "Source mod root directory",
-        long_help = "Source mod root directory. Stringer recursively reads plugin, STRINGS, PEX, and Scaleform translation-table assets from this directory."
+        long_help = "Source mod root directory to scan."
     )]
     pub root: Utf8PathBuf,
     #[arg(
         long,
         value_name = "WORKSPACE",
         help = "Translation workspace output directory",
-        long_help = "Translation workspace output directory. The command creates workspace.json, batches/, and entries/**/*.jsonl. If the directory already exists, files managed by the workspace are rewritten with the current output."
+        long_help = "Translation workspace output directory."
     )]
     pub workspace: Utf8PathBuf,
     #[arg(
@@ -94,21 +94,21 @@ pub struct WorkspaceFinalizeCommand {
         long,
         value_name = "MOD_ROOT",
         help = "Source mod root directory",
-        long_help = "Source mod root directory. finalize rereads the original assets from this directory before applying translation fields to matching entries."
+        long_help = "Source mod root directory used for finalization."
     )]
     pub root: Utf8PathBuf,
     #[arg(
         long,
         value_name = "WORKSPACE",
         help = "Translation workspace directory",
-        long_help = "Translation workspace directory. It must contain workspace.json and entries/**/*.jsonl. finalize only reads id and translation from each row."
+        long_help = "Translation workspace directory with workspace.json and entries/**/*.jsonl."
     )]
     pub workspace: Utf8PathBuf,
     #[arg(
         long,
         value_name = "OVERRIDE_ROOT",
         help = "Override output directory",
-        long_help = "Override output directory. Stringer writes only changed assets and requires this directory to be outside the source mod root."
+        long_help = "Override output directory outside the source mod root."
     )]
     pub override_root: Utf8PathBuf,
 }

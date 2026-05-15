@@ -76,42 +76,42 @@ pub struct AdaptImportCommand {
         long,
         value_name = "FORMAT",
         help = "Input format: eet, eet-xml, eet-json, or xt-sst",
-        long_help = "Input format. Use eet for ESP-ESM Translator binary EET tables, eet-xml for EET XML exports, eet-json for EET JSON or DDS-style exports, and xt-sst for xTranslator SST files."
+        long_help = "Input format: eet, eet-xml, eet-json, or xt-sst."
     )]
     pub format: AdaptFormatArg,
     #[arg(
         long,
         value_name = "INPUT",
         help = "External translation resource to read",
-        long_help = "External translation resource to read. The parser selected by --format reads this file and extracts non-empty source/target pairs."
+        long_help = "External translation resource to read."
     )]
     pub input: Utf8PathBuf,
     #[arg(
         long,
         value_name = "MEMORY_JSONL",
         help = "Output Stringer memory JSONL path",
-        long_help = "Output Stringer memory JSONL path. When omitted, adapt merges into the global user knowledge root under memory/adapt/<INPUT_FILE_NAME>.jsonl."
+        long_help = "Output memory JSONL path; omit to write under the configured global knowledge root."
     )]
     pub out: Option<Utf8PathBuf>,
     #[arg(
         long,
         value_name = "LOCALE",
         help = "Source locale to write into memory rows",
-        long_help = "Source locale to write into every generated memory row, for example en."
+        long_help = "Source locale for generated memory rows, for example en."
     )]
     pub source_locale: String,
     #[arg(
         long,
         value_name = "LOCALE",
         help = "Target locale to write into memory rows",
-        long_help = "Target locale to write into every generated memory row, for example zh-Hans."
+        long_help = "Target locale for generated memory rows, for example zh-Hans."
     )]
     pub target_locale: String,
     #[arg(
         long,
         value_name = "GAME",
         help = "Optional game context, for example SkyrimSe",
-        long_help = "Optional game context. Accepted names follow the same normalization as --game-release, for example SkyrimSe or skyrim-se. When valid, the generated memory context includes game=SkyrimSe or game=SkyrimLe."
+        long_help = "Optional game context, for example SkyrimSe."
     )]
     pub game: Option<String>,
 }
@@ -189,20 +189,20 @@ pub struct KnowledgeAnnotateCommand {
         long,
         value_name = "PROJECT_ROOT",
         help = "Project root directory",
-        long_help = "Project root directory. Used to locate project knowledge at <PROJECT_ROOT>/knowledge and the derived knowledge index at <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite. Defaults to the current directory."
+        long_help = "Project root for knowledge/ and .stringer/indexes; defaults to the current directory."
     )]
     pub project_root: Option<Utf8PathBuf>,
     #[arg(
         long,
         value_name = "WORKSPACE",
         help = "Translation workspace directory",
-        long_help = "Translation workspace directory. annotate updates entries/**/*.jsonl in place, writing hints, diagnostics, and optionally filling translation."
+        long_help = "Translation workspace directory to annotate."
     )]
     pub workspace: Utf8PathBuf,
     #[arg(
         long,
         help = "Do not fill empty translations from high-confidence memory",
-        long_help = "Do not fill empty translations from high-confidence translation memory. By default annotate fills empty translations that meet the threshold and does not overwrite existing agent translations."
+        long_help = "Write hints without filling empty translations from high-confidence memory."
     )]
     pub skip_fill_memory: bool,
 }
@@ -213,14 +213,14 @@ pub struct KnowledgeValidateCommand {
         long,
         value_name = "PROJECT_ROOT",
         help = "Project root directory",
-        long_help = "Project root directory. Used to locate project knowledge at <PROJECT_ROOT>/knowledge and the derived knowledge index at <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite. Defaults to the current directory."
+        long_help = "Project root for knowledge/ and .stringer/indexes; defaults to the current directory."
     )]
     pub project_root: Option<Utf8PathBuf>,
     #[arg(
         long,
         value_name = "WORKSPACE",
         help = "Translation workspace directory",
-        long_help = "Translation workspace directory. validate updates entries/**/*.jsonl in place and recomputes diagnostics for each row."
+        long_help = "Translation workspace directory to validate."
     )]
     pub workspace: Utf8PathBuf,
 }
@@ -231,14 +231,14 @@ pub struct KnowledgeLookupCommand {
         long,
         value_name = "PROJECT_ROOT",
         help = "Project root directory",
-        long_help = "Project root directory. lookup uses it to locate project knowledge, the knowledge index, and optional stringer.toml. Defaults to the current directory."
+        long_help = "Project root for knowledge lookup; defaults to the current directory."
     )]
     pub project_root: Option<Utf8PathBuf>,
     #[arg(
         long,
         value_name = "TEXT",
         help = "Text query to search in knowledge source and target fields",
-        long_help = "Text query to search in knowledge source and target fields. By default lookup treats this as a case-insensitive contains query; pass --regex to treat it as a regex pattern."
+        long_help = "Text query; pass --regex to treat it as a regex pattern."
     )]
     pub text: String,
     #[arg(
@@ -246,21 +246,21 @@ pub struct KnowledgeLookupCommand {
         default_value = "plugin",
         value_name = "KIND",
         help = "Entry kind: plugin, strings, scaleform, or pex",
-        long_help = "Entry kind. Available values: plugin, strings, scaleform, pex. Knowledge enrichment primarily covers plugin, strings, and scaleform; pex is accepted to keep the interface uniform."
+        long_help = "Entry kind: plugin, strings, scaleform, or pex."
     )]
     pub kind: String,
     #[arg(
         long,
         value_name = "RECORD_TYPE",
         help = "Plugin record type, for example WEAP",
-        long_help = "Plugin record type, for example WEAP, ARMO, or NPC_. Terminology scopes can use it for more precise matching."
+        long_help = "Plugin record type, for example WEAP, ARMO, or NPC_."
     )]
     pub record_type: Option<String>,
     #[arg(
         long,
         value_name = "SUBRECORD",
         help = "Plugin subrecord, for example FULL",
-        long_help = "Plugin subrecord, for example FULL or DESC. Terminology and translation memory can use it to constrain context."
+        long_help = "Plugin subrecord, for example FULL or DESC."
     )]
     pub subrecord: Option<String>,
     #[arg(
@@ -294,7 +294,7 @@ pub struct KnowledgeLookupCommand {
     #[arg(
         long,
         help = "Treat --text as a regex pattern instead of a contains query",
-        long_help = "Treat --text as a regex pattern instead of a contains query. Matching is case-insensitive by default unless --case-sensitive is also passed."
+        long_help = "Treat --text as a regex pattern."
     )]
     pub regex: bool,
     #[arg(
@@ -307,7 +307,7 @@ pub struct KnowledgeLookupCommand {
     #[arg(
         long,
         help = "Use case-sensitive lookup matching",
-        long_help = "Use case-sensitive lookup matching. By default lookup uses case-insensitive exact, prefix, contains, and regex matching."
+        long_help = "Use case-sensitive lookup matching."
     )]
     pub case_sensitive: bool,
     #[arg(
@@ -327,7 +327,7 @@ pub struct KnowledgeLookupCommand {
     #[arg(
         long,
         help = "Emit structured JSON",
-        long_help = "Emit structured JSON containing index_used, query, mode, total_matches, results, and diagnostics. Recommended for agent lookups."
+        long_help = "Emit structured JSON for agent lookups."
     )]
     pub json: bool,
 }
@@ -338,7 +338,7 @@ pub struct KnowledgeIndexRebuildCommand {
         long,
         value_name = "PROJECT_ROOT",
         help = "Project root directory",
-        long_help = "Project root directory. The index is written to <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite. Defaults to the current directory."
+        long_help = "Project root for the derived knowledge index; defaults to the current directory."
     )]
     pub project_root: Option<Utf8PathBuf>,
     #[arg(

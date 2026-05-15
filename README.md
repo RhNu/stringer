@@ -303,6 +303,10 @@ Stringer 也提供本地 stdio MCP server，供支持 MCP 的 Agent 使用。MCP
 cargo run -p stringer-mcp -- serve
 ```
 
+## Agent Skill
+
+Agent workflow guidance lives in `skills/stringer-workflows/`. Use that Skill for batch translation, subagent splitting, review, validation, and knowledge lookup workflows instead of relying on long CLI help text.
+
 ## Workspace 布局
 
 - `crates/stringer-core`：共享文件、语言和字符串条目模型。
@@ -315,5 +319,6 @@ cargo run -p stringer-mcp -- serve
 - `crates/stringer-app`：CLI 和 MCP 共用的应用服务层。
 - `crates/stringer-cli`：命令行薄入口。
 - `crates/stringer-mcp`：本地 stdio MCP server，面向 Agent 暴露结构化 tools。
+- `skills`：项目内 Agent 工作流 Skill。
 - `xtask`：维护脚本，例如行数预算检查。
 - `docs`：设计和调研文档。

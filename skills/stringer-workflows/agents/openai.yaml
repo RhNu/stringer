@@ -1,0 +1,4 @@
+interface:
+  display_name: "Stringer Workflows"
+  short_description: "Agent workflows for Stringer translation"
+  default_prompt: "Use $stringer-workflows to translate and validate a Stringer workspace."

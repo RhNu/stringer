@@ -685,7 +685,7 @@ fn knowledge_index_rebuild_command_uses_project_root_and_settings() {
 }
 
 #[test]
-fn root_help_explains_agent_workflow() {
+fn root_help_points_to_compact_agent_workflow() {
     let help = Cli::command().render_long_help().to_string();
 
     assert!(help.contains("Typical workflow"));
@@ -695,6 +695,9 @@ fn root_help_explains_agent_workflow() {
     assert!(help.contains("adapt import"));
     assert!(help.contains("knowledge annotate"));
     assert!(help.contains("entries/**/*.jsonl"));
+    assert!(help.contains("skills/stringer-workflows"));
+    assert!(!help.contains("Recommended agent workflow"));
+    assert!(!help.contains("Default knowledge locations"));
     assert!(!help.contains("stringer export --root"));
     assert!(!help.contains("stringer import --root"));
 }

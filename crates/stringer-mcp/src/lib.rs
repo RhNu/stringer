@@ -25,7 +25,7 @@ pub struct StringerMcp;
 impl StringerMcp {
     #[tool(
         name = "workspace_open",
-        description = "Open a Stringer translation workspace from a Bethesda mod root."
+        description = "Open a translation workspace from a Bethesda mod root."
     )]
     pub async fn workspace_open(
         &self,
@@ -36,7 +36,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_finalize",
-        description = "Finalize a Stringer translation workspace into an override directory."
+        description = "Finalize a translation workspace into an override directory."
     )]
     pub async fn workspace_finalize(
         &self,
@@ -47,7 +47,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_count",
-        description = "Count translation entries, claimed entries, and diagnostics in a workspace."
+        description = "Count translation rows, claims, and diagnostics in a workspace."
     )]
     pub async fn workspace_batch_count(
         &self,
@@ -58,7 +58,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_claim",
-        description = "Claim a batch of eligible translation entries for agent work."
+        description = "Claim eligible translation rows for agent work."
     )]
     pub async fn workspace_batch_claim(
         &self,
@@ -69,7 +69,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_apply",
-        description = "Apply translated entries for a previously claimed batch."
+        description = "Apply translations for a claimed batch."
     )]
     pub async fn workspace_batch_apply(
         &self,
@@ -80,7 +80,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_release",
-        description = "Release a claimed translation batch without applying translations."
+        description = "Release a claimed batch without applying translations."
     )]
     pub async fn workspace_batch_release(
         &self,
@@ -91,7 +91,7 @@ impl StringerMcp {
 
     #[tool(
         name = "adapt_import",
-        description = "Import an external translation resource as Stringer memory JSONL."
+        description = "Import an external translation resource as memory JSONL."
     )]
     pub async fn adapt_import(
         &self,
@@ -102,7 +102,7 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_annotate",
-        description = "Annotate workspace entries with terminology, memory, and diagnostics."
+        description = "Annotate workspace rows with terminology, memory, and diagnostics."
     )]
     pub async fn knowledge_annotate(
         &self,
@@ -124,7 +124,7 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_lookup",
-        description = "Search Stringer terminology and translation memory."
+        description = "Search terminology and translation memory."
     )]
     pub async fn knowledge_lookup(
         &self,
@@ -135,7 +135,7 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_index_rebuild",
-        description = "Rebuild the derived SQLite knowledge index for a project root."
+        description = "Rebuild the derived knowledge index for a project root."
     )]
     pub async fn knowledge_index_rebuild(
         &self,
