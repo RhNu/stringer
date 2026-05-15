@@ -8,26 +8,26 @@ use stringer_pipeline::{
     ReplacementRuleProcessor, TerminologyProcessor, TranslationMemoryProcessor,
 };
 
-use crate::WorkspaceError;
-use crate::batch::claimed_entry_ids;
-use crate::knowledge_index::{
+use crate::KnowledgeError;
+use crate::index::{
     IndexedKnowledgeId, KnowledgeFileKind, ensure_knowledge_index, index_is_current,
     read_index_diagnostics, read_index_knowledge_ids, read_matching_index_knowledge_ids,
     rebuild_knowledge_index,
 };
-use crate::knowledge_index_layers::{
+use crate::layers::{
     collect_all_source_files, collect_index_layers, collect_workspace_index_layer,
 };
-use crate::knowledge_lookup::{
+use crate::lookup::{
     KnowledgeLookup, KnowledgeSearchOptions, LookupKnowledgeField, LookupKnowledgeMode,
     LookupKnowledgeSource, search_knowledge_indexes,
 };
-use crate::lock::{WorkspaceLock, unix_ms};
-use crate::package::{
+use stringer_workspace_core::claimed_entry_ids;
+use stringer_workspace_core::{
     TranslationMeta, TranslationRecord, read_translation_package_records,
     write_translation_package_records,
 };
-use crate::settings::{WorkspaceSettings, game_release_name, load_global_knowledge_root};
+use stringer_workspace_core::{WorkspaceCoreError, WorkspaceLock, unix_ms};
+use stringer_workspace_core::{WorkspaceSettings, game_release_name, load_global_knowledge_root};
 
 const BUILTIN_PROCESSORS: &[&str] = &[
     "stringer.term",
@@ -125,7 +125,7 @@ pub struct KnowledgeSummary {
 
 pub fn annotate_translations(
     options: AnnotateTranslationsOptions,
-) -> Result<KnowledgeSummary, WorkspaceError> {
+) -> Result<KnowledgeSummary, KnowledgeError> {
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
     let claimed = claimed_entry_ids(&options.workspace)?;
@@ -192,7 +192,7 @@ pub fn annotate_translations(
 
 pub fn validate_translations(
     options: ValidateTranslationsOptions,
-) -> Result<KnowledgeSummary, WorkspaceError> {
+) -> Result<KnowledgeSummary, KnowledgeError> {
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
     let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
@@ -237,7 +237,7 @@ pub fn validate_translations(
 
 pub fn lookup_knowledge(
     options: LookupKnowledgeOptions,
-) -> Result<KnowledgeLookup, WorkspaceError> {
+) -> Result<KnowledgeLookup, KnowledgeError> {
     let query = options.text.clone();
     let settings = settings_with_user_knowledge_defaults(options.settings.clone())?;
     let mut context = BTreeMap::new();
@@ -293,7 +293,7 @@ pub fn lookup_knowledge(
 
 pub fn build_knowledge_index(
     options: BuildKnowledgeIndexOptions,
-) -> Result<KnowledgeIndexSummary, WorkspaceError> {
+) -> Result<KnowledgeIndexSummary, KnowledgeError> {
     let settings = settings_for_build_scope(options.settings, options.scope)?;
     let layers = match options.scope {
         KnowledgeIndexBuildScope::All => collect_index_layers(&options.workspace, &settings)?,
@@ -317,7 +317,7 @@ pub fn build_knowledge_index(
 
 pub fn load_knowledge_layers(
     options: LoadKnowledgeLayersOptions,
-) -> Result<LoadedKnowledgeLayers, WorkspaceError> {
+) -> Result<LoadedKnowledgeLayers, KnowledgeError> {
     let settings = settings_with_user_knowledge_defaults(options.settings)?;
     let layers = collect_index_layers(&options.workspace, &settings)?;
     let files = collect_all_source_files(&layers);
@@ -379,7 +379,7 @@ struct KnowledgeOverride {
 fn read_layered_index_diagnostics(
     indexes: &[KnowledgeIndexHandle],
     overrides: &[KnowledgeOverride],
-) -> Result<Vec<PipelineDiagnostic>, WorkspaceError> {
+) -> Result<Vec<PipelineDiagnostic>, KnowledgeError> {
     let suppressed_rules = suppressed_rule_diagnostics(overrides);
     let mut diagnostics = Vec::new();
     for index in indexes {
@@ -395,7 +395,7 @@ fn read_layered_index_diagnostics(
 
 fn cross_layer_overrides(
     indexes: &[KnowledgeIndexHandle],
-) -> Result<Vec<KnowledgeOverride>, WorkspaceError> {
+) -> Result<Vec<KnowledgeOverride>, KnowledgeError> {
     if indexes.len() < 2 {
         return Ok(Vec::new());
     }
@@ -509,7 +509,7 @@ fn override_diagnostic(
 
 fn settings_with_user_knowledge_defaults(
     mut settings: WorkspaceSettings,
-) -> Result<WorkspaceSettings, WorkspaceError> {
+) -> Result<WorkspaceSettings, KnowledgeError> {
     if settings.global_knowledge_root.is_none() {
         settings.global_knowledge_root = load_global_knowledge_root(None)?;
     }
@@ -519,15 +519,15 @@ fn settings_with_user_knowledge_defaults(
 fn settings_for_build_scope(
     settings: WorkspaceSettings,
     scope: KnowledgeIndexBuildScope,
-) -> Result<WorkspaceSettings, WorkspaceError> {
-    settings_for_build_scope_with(settings, scope, || load_global_knowledge_root(None))
+) -> Result<WorkspaceSettings, KnowledgeError> {
+    settings_for_build_scope_with(settings, scope, || Ok(load_global_knowledge_root(None)?))
 }
 
 fn settings_for_build_scope_with(
     mut settings: WorkspaceSettings,
     scope: KnowledgeIndexBuildScope,
-    load_global_root: impl FnOnce() -> Result<Option<Utf8PathBuf>, WorkspaceError>,
-) -> Result<WorkspaceSettings, WorkspaceError> {
+    load_global_root: impl FnOnce() -> Result<Option<Utf8PathBuf>, KnowledgeError>,
+) -> Result<WorkspaceSettings, KnowledgeError> {
     if scope == KnowledgeIndexBuildScope::All && settings.global_knowledge_root.is_none() {
         settings.global_knowledge_root = load_global_root()?;
     }
@@ -535,18 +535,19 @@ fn settings_for_build_scope_with(
 }
 
 fn load_knowledge_from_files(
-    files: &[crate::knowledge_index::KnowledgeSourceFile],
-) -> Result<KnowledgeBase, WorkspaceError> {
+    files: &[crate::index::KnowledgeSourceFile],
+) -> Result<KnowledgeBase, KnowledgeError> {
     let mut layers = BTreeMap::<String, KnowledgeLayer>::new();
     layers.insert("built-in".to_string(), KnowledgeLayer::new("built-in"));
     for file in files {
         let layer = layers
             .entry(file.layer.clone())
             .or_insert_with(|| KnowledgeLayer::new(&file.layer));
-        let text = fs::read_to_string(&file.path).map_err(|source| WorkspaceError::ReadFile {
-            path: file.path.clone(),
-            source,
-        })?;
+        let text =
+            fs::read_to_string(&file.path).map_err(|source| WorkspaceCoreError::ReadFile {
+                path: file.path.clone(),
+                source,
+            })?;
         match file.kind {
             KnowledgeFileKind::Terms => layer.add_terms_toml(file.path.as_str(), &text)?,
             KnowledgeFileKind::Memory => layer.add_memory_jsonl(file.path.as_str(), &text)?,
@@ -557,7 +558,7 @@ fn load_knowledge_from_files(
         .into_iter()
         .filter_map(|name| layers.remove(name))
         .collect::<Vec<_>>();
-    KnowledgeBase::from_layers(ordered).map_err(WorkspaceError::from)
+    KnowledgeBase::from_layers(ordered).map_err(KnowledgeError::from)
 }
 
 fn entry_from_record(
@@ -565,9 +566,9 @@ fn entry_from_record(
     kind: &str,
     asset_path: &str,
     settings: &WorkspaceSettings,
-) -> Result<PipelineEntry, WorkspaceError> {
+) -> Result<PipelineEntry, KnowledgeError> {
     let kind = PipelineEntryKind::from_package_kind(kind).ok_or_else(|| {
-        WorkspaceError::InvalidTranslationPackagePath {
+        WorkspaceCoreError::InvalidTranslationPackagePath {
             path: kind.to_string(),
             message: "unsupported translation package kind".to_string(),
         }

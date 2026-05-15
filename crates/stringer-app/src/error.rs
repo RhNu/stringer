@@ -1,13 +1,18 @@
 use camino::Utf8PathBuf;
 use serde_json::{Value, json};
 use stringer_adapt::AdaptError;
+use stringer_knowledge::KnowledgeError;
 use stringer_workspace::WorkspaceError;
+use stringer_workspace_core::WorkspaceCoreError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
+
+    #[error(transparent)]
+    Knowledge(#[from] KnowledgeError),
 
     #[error(transparent)]
     Adapt(#[from] AdaptError),
@@ -24,6 +29,7 @@ impl AppError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::Workspace(error) => workspace_error_code(error),
+            Self::Knowledge(error) => knowledge_error_code(error),
             Self::Adapt(error) => adapt_error_code(error),
             Self::Serialize { .. } => "app.serialize",
         }
@@ -32,9 +38,16 @@ impl AppError {
     pub fn details(&self) -> Value {
         match self {
             Self::Workspace(error) => workspace_error_details(error),
+            Self::Knowledge(error) => knowledge_error_details(error),
             Self::Adapt(error) => adapt_error_details(error),
             Self::Serialize { message, .. } => json!({ "message": message }),
         }
+    }
+}
+
+impl From<WorkspaceCoreError> for AppError {
+    fn from(source: WorkspaceCoreError) -> Self {
+        Self::Workspace(source.into())
     }
 }
 
@@ -52,21 +65,10 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::CurrentDirectory { .. } => "workspace.current_directory",
         WorkspaceError::ConfigToml { .. } => "workspace.config_toml",
         WorkspaceError::Toml { .. } => "workspace.toml",
-        WorkspaceError::KnowledgeTermsToml { .. } => "workspace.knowledge_terms_toml",
-        WorkspaceError::InvalidKnowledgeTermsToml { .. } => {
-            "workspace.invalid_knowledge_terms_toml"
-        }
-        WorkspaceError::KnowledgeTermNotFound { .. } => "workspace.knowledge_term_not_found",
-        WorkspaceError::InvalidKnowledgeTermScope { .. } => {
-            "workspace.invalid_knowledge_term_scope"
-        }
-        WorkspaceError::InvalidKnowledgeTermFile { .. } => "workspace.invalid_knowledge_term_file",
         WorkspaceError::MissingSetting { .. } => "workspace.missing_setting",
         WorkspaceError::InvalidSetting { .. } => "workspace.invalid_setting",
-        WorkspaceError::InvalidLookupRegex { .. } => "workspace.invalid_lookup_regex",
         WorkspaceError::JsonLine { .. } => "workspace.json_line",
         WorkspaceError::Json { .. } => "workspace.json",
-        WorkspaceError::Sqlite { .. } => "workspace.sqlite",
         WorkspaceError::UnsupportedTranslationSchema { .. } => {
             "workspace.unsupported_translation_schema"
         }
@@ -91,7 +93,6 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::Reader(_) => "workspace.reader",
         WorkspaceError::Plugin(_) => "workspace.plugin",
         WorkspaceError::Pex(_) => "workspace.pex",
-        WorkspaceError::Pipeline(_) => "workspace.pipeline",
         WorkspaceError::Scaleform(_) => "workspace.scaleform",
         WorkspaceError::Bundle(_) => "workspace.bundle",
     }
@@ -103,9 +104,7 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         | WorkspaceError::WriteFile { path, .. }
         | WorkspaceError::ConfigToml { path, .. }
         | WorkspaceError::Toml { path, .. }
-        | WorkspaceError::KnowledgeTermsToml { path, .. }
         | WorkspaceError::Json { path, .. }
-        | WorkspaceError::Sqlite { path, .. }
         | WorkspaceError::LegacyTranslationWorkspace { path }
         | WorkspaceError::WorkspaceLocked { path } => json!({ "path": json_path(path) }),
         WorkspaceError::JsonLine { path, line, .. } => {
@@ -115,24 +114,11 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         WorkspaceError::InvalidSetting { name, value } => {
             json!({ "name": name, "value": value })
         }
-        WorkspaceError::InvalidLookupRegex { pattern, .. } => json!({ "pattern": pattern }),
         WorkspaceError::UnsupportedTranslationSchema { path, version } => {
             json!({ "path": json_path(path), "version": version })
         }
         WorkspaceError::InvalidTranslationPackagePath { path, message } => {
             json!({ "path": path, "message": message })
-        }
-        WorkspaceError::InvalidKnowledgeTermsToml { path, message } => {
-            json!({ "path": json_path(path), "message": message })
-        }
-        WorkspaceError::KnowledgeTermNotFound { path, id } => {
-            json!({ "path": json_path(path), "id": id })
-        }
-        WorkspaceError::InvalidKnowledgeTermScope { id, key } => {
-            json!({ "id": id, "key": key })
-        }
-        WorkspaceError::InvalidKnowledgeTermFile { path, message } => {
-            json!({ "path": json_path(path), "message": message })
         }
         WorkspaceError::DuplicateTranslationId { path, id } => {
             json!({ "path": json_path(path), "id": id })
@@ -155,9 +141,107 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         | WorkspaceError::Reader(_)
         | WorkspaceError::Plugin(_)
         | WorkspaceError::Pex(_)
-        | WorkspaceError::Pipeline(_)
         | WorkspaceError::Scaleform(_)
         | WorkspaceError::Bundle(_) => json!({}),
+    }
+}
+
+fn knowledge_error_code(error: &KnowledgeError) -> &'static str {
+    match error {
+        KnowledgeError::Core(error) => workspace_core_error_code(error),
+        KnowledgeError::KnowledgeTermsToml { .. } => "workspace.knowledge_terms_toml",
+        KnowledgeError::InvalidKnowledgeTermsToml { .. } => {
+            "workspace.invalid_knowledge_terms_toml"
+        }
+        KnowledgeError::KnowledgeTermNotFound { .. } => "workspace.knowledge_term_not_found",
+        KnowledgeError::InvalidKnowledgeTermScope { .. } => {
+            "workspace.invalid_knowledge_term_scope"
+        }
+        KnowledgeError::InvalidKnowledgeTermFile { .. } => "workspace.invalid_knowledge_term_file",
+        KnowledgeError::InvalidLookupRegex { .. } => "workspace.invalid_lookup_regex",
+        KnowledgeError::Sqlite { .. } => "workspace.sqlite",
+        KnowledgeError::Pipeline(_) => "workspace.pipeline",
+    }
+}
+
+fn knowledge_error_details(error: &KnowledgeError) -> Value {
+    match error {
+        KnowledgeError::Core(error) => workspace_core_error_details(error),
+        KnowledgeError::KnowledgeTermsToml { path, .. } | KnowledgeError::Sqlite { path, .. } => {
+            json!({ "path": json_path(path) })
+        }
+        KnowledgeError::InvalidKnowledgeTermsToml { path, message }
+        | KnowledgeError::InvalidKnowledgeTermFile { path, message } => {
+            json!({ "path": json_path(path), "message": message })
+        }
+        KnowledgeError::KnowledgeTermNotFound { path, id } => {
+            json!({ "path": json_path(path), "id": id })
+        }
+        KnowledgeError::InvalidKnowledgeTermScope { id, key } => {
+            json!({ "id": id, "key": key })
+        }
+        KnowledgeError::InvalidLookupRegex { pattern, .. } => json!({ "pattern": pattern }),
+        KnowledgeError::Pipeline(_) => json!({}),
+    }
+}
+
+fn workspace_core_error_code(error: &WorkspaceCoreError) -> &'static str {
+    match error {
+        WorkspaceCoreError::ReadFile { .. } => "workspace.read_file",
+        WorkspaceCoreError::WriteFile { .. } => "workspace.write_file",
+        WorkspaceCoreError::CurrentDirectory { .. } => "workspace.current_directory",
+        WorkspaceCoreError::ConfigToml { .. } => "workspace.config_toml",
+        WorkspaceCoreError::Toml { .. } => "workspace.toml",
+        WorkspaceCoreError::MissingSetting { .. } => "workspace.missing_setting",
+        WorkspaceCoreError::InvalidSetting { .. } => "workspace.invalid_setting",
+        WorkspaceCoreError::JsonLine { .. } => "workspace.json_line",
+        WorkspaceCoreError::Json { .. } => "workspace.json",
+        WorkspaceCoreError::UnsupportedTranslationSchema { .. } => {
+            "workspace.unsupported_translation_schema"
+        }
+        WorkspaceCoreError::LegacyTranslationWorkspace { .. } => {
+            "workspace.legacy_translation_workspace"
+        }
+        WorkspaceCoreError::WorkspaceLocked { .. } => "workspace.locked",
+        WorkspaceCoreError::InvalidTranslationPackagePath { .. } => {
+            "workspace.invalid_translation_package_path"
+        }
+        WorkspaceCoreError::InvalidLogicalPath { .. } => "workspace.invalid_logical_path",
+        WorkspaceCoreError::DuplicateTranslationId { .. } => "workspace.duplicate_translation_id",
+        WorkspaceCoreError::BatchNotFound { .. } => "workspace.batch_not_found",
+    }
+}
+
+fn workspace_core_error_details(error: &WorkspaceCoreError) -> Value {
+    match error {
+        WorkspaceCoreError::ReadFile { path, .. }
+        | WorkspaceCoreError::WriteFile { path, .. }
+        | WorkspaceCoreError::ConfigToml { path, .. }
+        | WorkspaceCoreError::Toml { path, .. }
+        | WorkspaceCoreError::Json { path, .. }
+        | WorkspaceCoreError::LegacyTranslationWorkspace { path }
+        | WorkspaceCoreError::WorkspaceLocked { path } => json!({ "path": json_path(path) }),
+        WorkspaceCoreError::JsonLine { path, line, .. } => {
+            json!({ "path": json_path(path), "line": line })
+        }
+        WorkspaceCoreError::MissingSetting { name } => json!({ "name": name }),
+        WorkspaceCoreError::InvalidSetting { name, value } => {
+            json!({ "name": name, "value": value })
+        }
+        WorkspaceCoreError::UnsupportedTranslationSchema { path, version } => {
+            json!({ "path": json_path(path), "version": version })
+        }
+        WorkspaceCoreError::InvalidTranslationPackagePath { path, message } => {
+            json!({ "path": path, "message": message })
+        }
+        WorkspaceCoreError::InvalidLogicalPath { path, message } => {
+            json!({ "path": path, "message": message })
+        }
+        WorkspaceCoreError::DuplicateTranslationId { path, id } => {
+            json!({ "path": json_path(path), "id": id })
+        }
+        WorkspaceCoreError::BatchNotFound { batch_id } => json!({ "batch_id": batch_id }),
+        WorkspaceCoreError::CurrentDirectory { .. } => json!({}),
     }
 }
 

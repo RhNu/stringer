@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter, types::Value};
@@ -8,9 +8,10 @@ use stringer_pipeline::{
     KnowledgeBase, MemoryQuality, PipelineDiagnostic, PipelineDiagnosticSeverity,
 };
 
-use crate::WorkspaceError;
-use crate::knowledge::KnowledgeIndexSummary;
-use crate::settings::{WorkspaceSettings, game_release_name};
+use crate::KnowledgeError;
+use crate::translations::KnowledgeIndexSummary;
+use stringer_workspace_core::fsutil::{replace_file, temp_path};
+use stringer_workspace_core::{WorkspaceCoreError, WorkspaceSettings, game_release_name, unix_ms};
 
 pub(crate) const KNOWLEDGE_INDEX_SCHEMA_VERSION: &str = "3";
 const INDEX_COMPLETE_KEY: &str = "index_complete";
@@ -54,8 +55,8 @@ pub(crate) fn source_file_from_path(
     path: Utf8PathBuf,
     layer: &str,
     kind: KnowledgeFileKind,
-) -> Result<KnowledgeSourceFile, WorkspaceError> {
-    let metadata = fs::metadata(&path).map_err(|source| WorkspaceError::ReadFile {
+) -> Result<KnowledgeSourceFile, KnowledgeError> {
+    let metadata = fs::metadata(&path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.clone(),
         source,
     })?;
@@ -72,8 +73,8 @@ pub(crate) fn ensure_knowledge_index(
     path: &Utf8Path,
     files: &[KnowledgeSourceFile],
     settings: &WorkspaceSettings,
-    knowledge: impl FnOnce() -> Result<KnowledgeBase, WorkspaceError>,
-) -> Result<KnowledgeIndexState, WorkspaceError> {
+    knowledge: impl FnOnce() -> Result<KnowledgeBase, KnowledgeError>,
+) -> Result<KnowledgeIndexState, KnowledgeError> {
     if index_is_current(path, files, settings).unwrap_or(false) {
         return Ok(KnowledgeIndexState {
             path: path.to_owned(),
@@ -91,16 +92,16 @@ pub(crate) fn rebuild_knowledge_index(
     settings: &WorkspaceSettings,
     knowledge: &KnowledgeBase,
     rebuild_reason: Option<&str>,
-) -> Result<KnowledgeIndexSummary, WorkspaceError> {
+) -> Result<KnowledgeIndexSummary, KnowledgeError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|source| WorkspaceError::WriteFile {
+        fs::create_dir_all(parent).map_err(|source| WorkspaceCoreError::WriteFile {
             path: parent.to_owned(),
             source,
         })?;
     }
     let temp_path = temporary_index_path(path);
     if temp_path.exists() {
-        fs::remove_file(&temp_path).map_err(|source| WorkspaceError::WriteFile {
+        fs::remove_file(&temp_path).map_err(|source| WorkspaceCoreError::WriteFile {
             path: temp_path.clone(),
             source,
         })?;
@@ -134,14 +135,14 @@ fn build_replacement_index(
     files: &[KnowledgeSourceFile],
     settings: &WorkspaceSettings,
     knowledge: &KnowledgeBase,
-) -> Result<usize, WorkspaceError> {
-    let mut connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+) -> Result<usize, KnowledgeError> {
+    let mut connection = Connection::open(path).map_err(|source| KnowledgeError::Sqlite {
         path: path.to_owned(),
         source,
     })?;
     let transaction = connection
         .transaction()
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -155,7 +156,7 @@ fn build_replacement_index(
     let fts_rows = fts_row_count(&transaction, path)?;
     transaction
         .commit()
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -166,11 +167,11 @@ pub(crate) fn index_is_current(
     path: &Utf8Path,
     files: &[KnowledgeSourceFile],
     settings: &WorkspaceSettings,
-) -> Result<bool, WorkspaceError> {
+) -> Result<bool, KnowledgeError> {
     if !path.exists() {
         return Ok(false);
     }
-    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+    let connection = Connection::open(path).map_err(|source| KnowledgeError::Sqlite {
         path: path.to_owned(),
         source,
     })?;
@@ -195,14 +196,14 @@ pub(crate) fn index_is_current(
 
 pub(crate) fn read_index_diagnostics(
     path: &Utf8Path,
-) -> Result<Vec<PipelineDiagnostic>, WorkspaceError> {
-    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+) -> Result<Vec<PipelineDiagnostic>, KnowledgeError> {
+    let connection = Connection::open(path).map_err(|source| KnowledgeError::Sqlite {
         path: path.to_owned(),
         source,
     })?;
     let mut statement = connection
         .prepare("SELECT severity, code, message, entry_id, layer, rule_id FROM diagnostics")
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -222,13 +223,13 @@ pub(crate) fn read_index_diagnostics(
             }
             Ok(diagnostic)
         })
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let mut diagnostics = Vec::new();
     for row in rows {
-        diagnostics.push(row.map_err(|source| WorkspaceError::Sqlite {
+        diagnostics.push(row.map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?);
@@ -238,14 +239,14 @@ pub(crate) fn read_index_diagnostics(
 
 pub(crate) fn read_index_knowledge_ids(
     path: &Utf8Path,
-) -> Result<Vec<IndexedKnowledgeId>, WorkspaceError> {
-    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+) -> Result<Vec<IndexedKnowledgeId>, KnowledgeError> {
+    let connection = Connection::open(path).map_err(|source| KnowledgeError::Sqlite {
         path: path.to_owned(),
         source,
     })?;
     let mut statement = connection
         .prepare("SELECT kind, id, layer FROM knowledge_ids ORDER BY layer, kind, id")
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -257,13 +258,13 @@ pub(crate) fn read_index_knowledge_ids(
                 layer: row.get::<_, String>(2)?,
             })
         })
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let mut ids = Vec::new();
     for row in rows {
-        ids.push(row.map_err(|source| WorkspaceError::Sqlite {
+        ids.push(row.map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?);
@@ -274,11 +275,11 @@ pub(crate) fn read_index_knowledge_ids(
 pub(crate) fn read_matching_index_knowledge_ids(
     path: &Utf8Path,
     keys: &BTreeSet<(String, String)>,
-) -> Result<Vec<IndexedKnowledgeId>, WorkspaceError> {
+) -> Result<Vec<IndexedKnowledgeId>, KnowledgeError> {
     if keys.is_empty() {
         return Ok(Vec::new());
     }
-    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+    let connection = Connection::open(path).map_err(|source| KnowledgeError::Sqlite {
         path: path.to_owned(),
         source,
     })?;
@@ -297,7 +298,7 @@ pub(crate) fn read_matching_index_knowledge_ids(
         }
         let mut statement = connection
             .prepare(&sql)
-            .map_err(|source| WorkspaceError::Sqlite {
+            .map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?;
@@ -309,12 +310,12 @@ pub(crate) fn read_matching_index_knowledge_ids(
                     layer: row.get::<_, String>(2)?,
                 })
             })
-            .map_err(|source| WorkspaceError::Sqlite {
+            .map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?;
         for row in rows {
-            ids.push(row.map_err(|source| WorkspaceError::Sqlite {
+            ids.push(row.map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?);
@@ -341,7 +342,7 @@ pub(crate) fn file_kind_name(kind: KnowledgeFileKind) -> &'static str {
     }
 }
 
-fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), WorkspaceError> {
+fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), KnowledgeError> {
     connection
         .execute_batch(
             "
@@ -412,7 +413,7 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Workspa
             );
             ",
         )
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })
@@ -422,7 +423,7 @@ fn write_meta(
     connection: &Connection,
     settings: &WorkspaceSettings,
     path: &Utf8Path,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     for (key, value) in [
         (
             "schema_version".to_string(),
@@ -439,7 +440,7 @@ fn write_meta(
                 "INSERT INTO meta(key, value) VALUES (?1, ?2)",
                 params![key, value],
             )
-            .map_err(|source| WorkspaceError::Sqlite {
+            .map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?;
@@ -451,7 +452,7 @@ fn write_source_files(
     connection: &Connection,
     path: &Utf8Path,
     files: &[KnowledgeSourceFile],
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     for file in files {
         connection
             .execute(
@@ -467,7 +468,7 @@ fn write_source_files(
                     file.modified_unix_ms,
                 ],
             )
-            .map_err(|source| WorkspaceError::Sqlite {
+            .map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?;
@@ -479,7 +480,7 @@ fn write_items(
     connection: &Connection,
     path: &Utf8Path,
     knowledge: &KnowledgeBase,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     for term in knowledge.terms() {
         let rowid = insert_item(
             connection,
@@ -511,7 +512,7 @@ fn write_items(
                     "INSERT INTO aliases(item_rowid, alias, alias_norm) VALUES (?1, ?2, ?3)",
                     params![rowid, alias, normalize_lookup_text(alias)],
                 )
-                .map_err(|source| WorkspaceError::Sqlite {
+                .map_err(|source| KnowledgeError::Sqlite {
                     path: path.to_owned(),
                     source,
                 })?;
@@ -572,7 +573,7 @@ fn insert_item(
     connection: &Connection,
     path: &Utf8Path,
     item: IndexedItemInput<'_>,
-) -> Result<i64, WorkspaceError> {
+) -> Result<i64, KnowledgeError> {
     connection
         .execute(
             concat!(
@@ -598,7 +599,7 @@ fn insert_item(
                 item.file_id,
             ],
         )
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -606,13 +607,13 @@ fn insert_item(
     Ok(rowid)
 }
 
-fn populate_fts(connection: &Connection, path: &Utf8Path) -> Result<(), WorkspaceError> {
+fn populate_fts(connection: &Connection, path: &Utf8Path) -> Result<(), KnowledgeError> {
     connection
         .execute(
             "INSERT INTO items_fts(rowid, source_norm, target_norm, alias_norm) SELECT rowid, source_norm, target_norm, alias_norm FROM items",
             [],
         )
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -623,7 +624,7 @@ fn write_knowledge_ids(
     connection: &Connection,
     path: &Utf8Path,
     knowledge: &KnowledgeBase,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     for term in knowledge.terms() {
         insert_knowledge_id(connection, path, "term", term.id(), term.layer())?;
     }
@@ -639,13 +640,13 @@ fn insert_knowledge_id(
     kind: &str,
     id: &str,
     layer: &str,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     connection
         .execute(
             "INSERT INTO knowledge_ids(kind, id, layer) VALUES (?1, ?2, ?3)",
             params![kind, id, layer],
         )
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -658,13 +659,13 @@ fn insert_scope(
     rowid: i64,
     key: &str,
     value: &str,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     connection
         .execute(
             "INSERT INTO item_scope(item_rowid, key, value) VALUES (?1, ?2, ?3)",
             params![rowid, key, value],
         )
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -675,7 +676,7 @@ fn write_diagnostics(
     connection: &Connection,
     path: &Utf8Path,
     knowledge: &KnowledgeBase,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     for diagnostic in knowledge.merge_diagnostics() {
         connection
             .execute(
@@ -692,7 +693,7 @@ fn write_diagnostics(
                     diagnostic.rule_id(),
                 ],
             )
-            .map_err(|source| WorkspaceError::Sqlite {
+            .map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?;
@@ -704,7 +705,7 @@ fn read_meta_value(
     connection: &Connection,
     path: &Utf8Path,
     key: &str,
-) -> Result<Option<String>, WorkspaceError> {
+) -> Result<Option<String>, KnowledgeError> {
     connection
         .query_row(
             "SELECT value FROM meta WHERE key = ?1",
@@ -712,7 +713,7 @@ fn read_meta_value(
             |row| row.get::<_, String>(0),
         )
         .optional()
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })
@@ -721,10 +722,10 @@ fn read_meta_value(
 fn read_indexed_files(
     connection: &Connection,
     path: &Utf8Path,
-) -> Result<IndexedFileManifest, WorkspaceError> {
+) -> Result<IndexedFileManifest, KnowledgeError> {
     let mut statement = connection
         .prepare("SELECT path, layer, kind, size, modified_unix_ms FROM source_files")
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -740,13 +741,13 @@ fn read_indexed_files(
                 ),
             ))
         })
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let mut files = BTreeMap::new();
     for row in rows {
-        let (path, metadata) = row.map_err(|source| WorkspaceError::Sqlite {
+        let (path, metadata) = row.map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -772,54 +773,25 @@ fn current_files(files: &[KnowledgeSourceFile]) -> IndexedFileManifest {
         .collect()
 }
 
-fn fts_row_count(connection: &Connection, path: &Utf8Path) -> Result<usize, WorkspaceError> {
+fn fts_row_count(connection: &Connection, path: &Utf8Path) -> Result<usize, KnowledgeError> {
     connection
         .query_row("SELECT count(*) FROM items_fts", [], |row| {
             row.get::<_, i64>(0)
         })
         .map(|count| count as usize)
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })
 }
 
 fn temporary_index_path(path: &Utf8Path) -> Utf8PathBuf {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
-    path.with_file_name(format!(
-        "{}.rebuild-{}-{timestamp}",
-        path.file_name().unwrap_or("knowledge.sqlite"),
-        std::process::id()
-    ))
+    temp_path(path, format!("rebuild-{}", unix_ms()))
 }
 
-fn replace_index_file(temp_path: &Utf8Path, path: &Utf8Path) -> Result<(), WorkspaceError> {
-    replace_file(temp_path.as_std_path(), path.as_std_path()).map_err(|source| {
-        WorkspaceError::WriteFile {
-            path: path.to_owned(),
-            source,
-        }
-    })
-}
-
-fn replace_file(temp_path: &std::path::Path, path: &std::path::Path) -> std::io::Result<()> {
-    match fs::rename(temp_path, path) {
-        Ok(()) => Ok(()),
-        Err(source)
-            if path.exists()
-                && matches!(
-                    source.kind(),
-                    std::io::ErrorKind::AlreadyExists | std::io::ErrorKind::PermissionDenied
-                ) =>
-        {
-            fs::remove_file(path)?;
-            fs::rename(temp_path, path)
-        }
-        Err(source) => Err(source),
-    }
+fn replace_index_file(temp_path: &Utf8Path, path: &Utf8Path) -> Result<(), KnowledgeError> {
+    replace_file(temp_path, path)?;
+    Ok(())
 }
 
 fn settings_fingerprint(settings: &WorkspaceSettings) -> String {

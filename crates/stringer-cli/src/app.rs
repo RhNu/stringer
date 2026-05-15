@@ -378,7 +378,7 @@ pub struct KnowledgeTermDeleteCommand {
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error(transparent)]
-    App(#[from] AppError),
+    App(Box<AppError>),
 
     #[error("failed to read `{path}`: {source}")]
     ReadInput {
@@ -393,6 +393,12 @@ pub enum CliError {
         #[source]
         source: serde_json::Error,
     },
+}
+
+impl From<AppError> for CliError {
+    fn from(source: AppError) -> Self {
+        Self::App(Box::new(source))
+    }
 }
 
 pub async fn run(cli: Cli) -> Result<(), CliError> {

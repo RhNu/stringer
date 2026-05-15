@@ -11,7 +11,7 @@ use stringer_core::{
 };
 use stringer_pipeline::{PipelineAnnotation, PipelineDiagnostic};
 
-use crate::WorkspaceError;
+use crate::WorkspaceCoreError;
 use crate::fsutil::{replace_file, temp_path};
 use crate::lock::unix_ms;
 use crate::settings::{
@@ -81,13 +81,13 @@ pub struct PackagedTranslationRecord {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TranslationPackageRecords {
+pub struct TranslationPackageRecords {
     pub settings: WorkspaceSettings,
     pub files: Vec<TranslationPackageFileRecords>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TranslationPackageFileRecords {
+pub struct TranslationPackageFileRecords {
     pub manifest_file: TranslationManifestFile,
     pub records: Vec<TranslationRecord>,
 }
@@ -136,19 +136,19 @@ pub fn write_translation_package(
     source_root: &Utf8Path,
     settings: &WorkspaceSettings,
     records: &[PackagedTranslationRecord],
-) -> Result<(), WorkspaceError> {
-    fs::create_dir_all(path).map_err(|source| WorkspaceError::WriteFile {
+) -> Result<(), WorkspaceCoreError> {
+    fs::create_dir_all(path).map_err(|source| WorkspaceCoreError::WriteFile {
         path: path.to_owned(),
         source,
     })?;
     let batches = path.join(BATCHES_DIR);
     if batches.exists() {
-        fs::remove_dir_all(&batches).map_err(|source| WorkspaceError::WriteFile {
+        fs::remove_dir_all(&batches).map_err(|source| WorkspaceCoreError::WriteFile {
             path: batches.clone(),
             source,
         })?;
     }
-    fs::create_dir_all(&batches).map_err(|source| WorkspaceError::WriteFile {
+    fs::create_dir_all(&batches).map_err(|source| WorkspaceCoreError::WriteFile {
         path: batches,
         source,
     })?;
@@ -182,7 +182,7 @@ pub fn write_translation_package(
     };
     let legacy = path.join(LEGACY_MANIFEST_FILE);
     if legacy.exists() {
-        fs::remove_file(&legacy).map_err(|source| WorkspaceError::WriteFile {
+        fs::remove_file(&legacy).map_err(|source| WorkspaceCoreError::WriteFile {
             path: legacy,
             source,
         })?;
@@ -192,7 +192,7 @@ pub fn write_translation_package(
 
 pub fn read_translation_package(
     path: &Utf8Path,
-) -> Result<(WorkspaceSettings, Utf8PathBuf, BTreeMap<String, String>), WorkspaceError> {
+) -> Result<(WorkspaceSettings, Utf8PathBuf, BTreeMap<String, String>), WorkspaceCoreError> {
     let manifest = read_translation_manifest(path)?;
     let settings = settings_from_manifest(&manifest)?;
     let source_root = source_root_from_manifest(&manifest)?;
@@ -204,7 +204,7 @@ pub fn read_translation_package(
         let entry_path = package_entry_path(path, &file.path)?;
         let normalized_file = normalize_path(&file.path);
         if !seen_files.insert(normalized_file) {
-            return Err(WorkspaceError::InvalidTranslationPackagePath {
+            return Err(WorkspaceCoreError::InvalidTranslationPackagePath {
                 path: file.path,
                 message: "workspace.json lists the same entry file more than once".to_string(),
             });
@@ -215,24 +215,24 @@ pub fn read_translation_package(
     Ok((settings, source_root, patches))
 }
 
-pub fn read_workspace_settings(path: &Utf8Path) -> Result<WorkspaceSettings, WorkspaceError> {
+pub fn read_workspace_settings(path: &Utf8Path) -> Result<WorkspaceSettings, WorkspaceCoreError> {
     settings_from_manifest(&read_translation_manifest(path)?)
 }
 
-pub fn read_workspace_source_root(path: &Utf8Path) -> Result<Utf8PathBuf, WorkspaceError> {
+pub fn read_workspace_source_root(path: &Utf8Path) -> Result<Utf8PathBuf, WorkspaceCoreError> {
     source_root_from_manifest(&read_translation_manifest(path)?)
 }
 
-pub(crate) fn read_translation_package_records(
+pub fn read_translation_package_records(
     path: &Utf8Path,
-) -> Result<TranslationPackageRecords, WorkspaceError> {
+) -> Result<TranslationPackageRecords, WorkspaceCoreError> {
     read_translation_package_records_filtered(path, None)
 }
 
-pub(crate) fn read_translation_package_records_filtered(
+pub fn read_translation_package_records_filtered(
     path: &Utf8Path,
     file_filter: Option<&str>,
-) -> Result<TranslationPackageRecords, WorkspaceError> {
+) -> Result<TranslationPackageRecords, WorkspaceCoreError> {
     let manifest = read_translation_manifest(path)?;
     let settings = settings_from_manifest(&manifest)?;
     let manifest_files = validate_manifest_files(path, manifest.files)?;
@@ -253,13 +253,13 @@ pub(crate) fn read_translation_package_records_filtered(
     Ok(TranslationPackageRecords { settings, files })
 }
 
-pub(crate) fn visit_translation_package_records_filtered<F>(
+pub fn visit_translation_package_records_filtered<F>(
     path: &Utf8Path,
     file_filter: Option<&str>,
     mut visit: F,
-) -> Result<WorkspaceSettings, WorkspaceError>
+) -> Result<WorkspaceSettings, WorkspaceCoreError>
 where
-    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceError>,
+    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceCoreError>,
 {
     let manifest = read_translation_manifest(path)?;
     let settings = settings_from_manifest(&manifest)?;
@@ -268,9 +268,9 @@ where
     Ok(settings)
 }
 
-pub(crate) fn read_translation_manifest_files(
+pub fn read_translation_manifest_files(
     path: &Utf8Path,
-) -> Result<Vec<TranslationManifestFile>, WorkspaceError> {
+) -> Result<Vec<TranslationManifestFile>, WorkspaceCoreError> {
     let manifest = read_translation_manifest(path)?;
     validate_manifest_files(path, manifest.files)
 }
@@ -280,9 +280,9 @@ fn visit_manifest_records<F>(
     manifest_files: Vec<TranslationManifestFile>,
     file_filter: Option<&str>,
     mut visit: F,
-) -> Result<(), WorkspaceError>
+) -> Result<(), WorkspaceCoreError>
 where
-    F: FnMut(&TranslationManifestFile, Vec<TranslationRecord>) -> Result<(), WorkspaceError>,
+    F: FnMut(&TranslationManifestFile, Vec<TranslationRecord>) -> Result<(), WorkspaceCoreError>,
 {
     let normalized_filter = file_filter.map(normalize_path);
     let mut found_filter = normalized_filter.is_none();
@@ -301,7 +301,7 @@ where
         visit(&manifest_file, records)?;
     }
     if !found_filter {
-        return Err(WorkspaceError::InvalidTranslationPackagePath {
+        return Err(WorkspaceCoreError::InvalidTranslationPackagePath {
             path: file_filter.unwrap_or_default().to_string(),
             message: "entry file is not listed in workspace.json".to_string(),
         });
@@ -314,9 +314,9 @@ fn visit_manifest_records_streaming<F>(
     manifest_files: Vec<TranslationManifestFile>,
     file_filter: Option<&str>,
     visit: &mut F,
-) -> Result<(), WorkspaceError>
+) -> Result<(), WorkspaceCoreError>
 where
-    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceError>,
+    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceCoreError>,
 {
     let normalized_filter = file_filter.map(normalize_path);
     let mut found_filter = normalized_filter.is_none();
@@ -334,7 +334,7 @@ where
         visit_record_file(&entry_path, &manifest_file, &mut seen_ids, visit)?;
     }
     if !found_filter {
-        return Err(WorkspaceError::InvalidTranslationPackagePath {
+        return Err(WorkspaceCoreError::InvalidTranslationPackagePath {
             path: file_filter.unwrap_or_default().to_string(),
             message: "entry file is not listed in workspace.json".to_string(),
         });
@@ -342,13 +342,13 @@ where
     Ok(())
 }
 
-pub(crate) fn read_translation_manifest(
+pub fn read_translation_manifest(
     path: &Utf8Path,
-) -> Result<TranslationManifest, WorkspaceError> {
+) -> Result<TranslationManifest, WorkspaceCoreError> {
     let manifest_path = path.join(WORKSPACE_FILE);
     let manifest = read_manifest(path, &manifest_path)?;
     if manifest.schema_version != SCHEMA_VERSION {
-        return Err(WorkspaceError::UnsupportedTranslationSchema {
+        return Err(WorkspaceCoreError::UnsupportedTranslationSchema {
             path: manifest_path,
             version: manifest.schema_version,
         });
@@ -360,12 +360,12 @@ pub(crate) fn read_translation_manifest(
 fn validate_manifest_files(
     root: &Utf8Path,
     files: Vec<TranslationManifestFile>,
-) -> Result<Vec<TranslationManifestFile>, WorkspaceError> {
+) -> Result<Vec<TranslationManifestFile>, WorkspaceCoreError> {
     let mut seen_files = BTreeSet::new();
     for file in &files {
         let normalized_file = normalize_path(&file.path);
         if !seen_files.insert(normalized_file) {
-            return Err(WorkspaceError::InvalidTranslationPackagePath {
+            return Err(WorkspaceCoreError::InvalidTranslationPackagePath {
                 path: file.path.clone(),
                 message: "workspace.json lists the same entry file more than once".to_string(),
             });
@@ -375,10 +375,10 @@ fn validate_manifest_files(
     Ok(files)
 }
 
-pub(crate) fn write_translation_package_records(
+pub fn write_translation_package_records(
     path: &Utf8Path,
     package: &TranslationPackageRecords,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), WorkspaceCoreError> {
     for file in &package.files {
         let entry_path = package_entry_path(path, &file.manifest_file.path)?;
         write_records_jsonl(&entry_path, &file.records)?;
@@ -386,48 +386,58 @@ pub(crate) fn write_translation_package_records(
     Ok(())
 }
 
-fn write_manifest(path: &Utf8Path, manifest: &TranslationManifest) -> Result<(), WorkspaceError> {
+fn write_manifest(
+    path: &Utf8Path,
+    manifest: &TranslationManifest,
+) -> Result<(), WorkspaceCoreError> {
     let temp = temp_path(path, unix_ms().to_string());
-    let file = fs::File::create(&temp).map_err(|source| WorkspaceError::WriteFile {
+    let file = fs::File::create(&temp).map_err(|source| WorkspaceCoreError::WriteFile {
         path: temp.clone(),
         source,
     })?;
     let mut writer = BufWriter::new(file);
-    serde_json::to_writer_pretty(&mut writer, manifest).map_err(|source| WorkspaceError::Json {
-        path: temp.clone(),
-        source,
+    serde_json::to_writer_pretty(&mut writer, manifest).map_err(|source| {
+        WorkspaceCoreError::Json {
+            path: temp.clone(),
+            source,
+        }
     })?;
     writer
         .write_all(b"\n")
-        .map_err(|source| WorkspaceError::WriteFile {
+        .map_err(|source| WorkspaceCoreError::WriteFile {
             path: temp.clone(),
             source,
         })?;
-    writer.flush().map_err(|source| WorkspaceError::WriteFile {
-        path: temp.clone(),
-        source,
-    })?;
+    writer
+        .flush()
+        .map_err(|source| WorkspaceCoreError::WriteFile {
+            path: temp.clone(),
+            source,
+        })?;
     replace_file(&temp, path)
 }
 
-fn read_manifest(root: &Utf8Path, path: &Utf8Path) -> Result<TranslationManifest, WorkspaceError> {
-    let text = fs::read_to_string(path).map_err(|source| WorkspaceError::ReadFile {
+fn read_manifest(
+    root: &Utf8Path,
+    path: &Utf8Path,
+) -> Result<TranslationManifest, WorkspaceCoreError> {
+    let text = fs::read_to_string(path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.to_owned(),
         source,
     });
     let text = match text {
         Ok(text) => text,
-        Err(WorkspaceError::ReadFile { source, .. })
+        Err(WorkspaceCoreError::ReadFile { source, .. })
             if source.kind() == std::io::ErrorKind::NotFound
                 && root.join(LEGACY_MANIFEST_FILE).exists() =>
         {
-            return Err(WorkspaceError::LegacyTranslationWorkspace {
+            return Err(WorkspaceCoreError::LegacyTranslationWorkspace {
                 path: root.to_owned(),
             });
         }
         Err(error) => return Err(error),
     };
-    serde_json::from_str(&text).map_err(|source| WorkspaceError::Json {
+    serde_json::from_str(&text).map_err(|source| WorkspaceCoreError::Json {
         path: path.to_owned(),
         source,
     })
@@ -435,7 +445,7 @@ fn read_manifest(root: &Utf8Path, path: &Utf8Path) -> Result<TranslationManifest
 
 fn settings_from_manifest(
     manifest: &TranslationManifest,
-) -> Result<WorkspaceSettings, WorkspaceError> {
+) -> Result<WorkspaceSettings, WorkspaceCoreError> {
     Ok(WorkspaceSettings {
         game_release: parse_game_release_name(&manifest.game_release)?,
         asset_language: parse_language_name(&manifest.asset_language)?,
@@ -447,11 +457,11 @@ fn settings_from_manifest(
 
 fn source_root_from_manifest(
     manifest: &TranslationManifest,
-) -> Result<Utf8PathBuf, WorkspaceError> {
+) -> Result<Utf8PathBuf, WorkspaceCoreError> {
     let value = required_manifest_setting(manifest.source_root.clone(), "source_root")?;
     let path = Utf8PathBuf::from(value);
     if !path.is_absolute() {
-        return Err(WorkspaceError::InvalidTranslationPackagePath {
+        return Err(WorkspaceCoreError::InvalidTranslationPackagePath {
             path: path.to_string(),
             message: "workspace source_root must be absolute".to_string(),
         });
@@ -462,38 +472,42 @@ fn source_root_from_manifest(
 fn write_records_jsonl(
     path: &Utf8Path,
     records: &[TranslationRecord],
-) -> Result<(), WorkspaceError> {
+) -> Result<(), WorkspaceCoreError> {
     if let Some(parent) = path.parent()
         && !parent.as_str().is_empty()
     {
-        fs::create_dir_all(parent).map_err(|source| WorkspaceError::WriteFile {
+        fs::create_dir_all(parent).map_err(|source| WorkspaceCoreError::WriteFile {
             path: parent.to_owned(),
             source,
         })?;
     }
     let temp = temp_path(path, unix_ms().to_string());
-    let file = fs::File::create(&temp).map_err(|source| WorkspaceError::WriteFile {
+    let file = fs::File::create(&temp).map_err(|source| WorkspaceCoreError::WriteFile {
         path: temp.clone(),
         source,
     })?;
     let mut writer = BufWriter::new(file);
     for record in records {
-        serde_json::to_writer(&mut writer, record).map_err(|source| WorkspaceError::JsonLine {
-            path: temp.clone(),
-            line: 0,
-            source,
+        serde_json::to_writer(&mut writer, record).map_err(|source| {
+            WorkspaceCoreError::JsonLine {
+                path: temp.clone(),
+                line: 0,
+                source,
+            }
         })?;
         writer
             .write_all(b"\n")
-            .map_err(|source| WorkspaceError::WriteFile {
+            .map_err(|source| WorkspaceCoreError::WriteFile {
                 path: temp.clone(),
                 source,
             })?;
     }
-    writer.flush().map_err(|source| WorkspaceError::WriteFile {
-        path: temp.clone(),
-        source,
-    })?;
+    writer
+        .flush()
+        .map_err(|source| WorkspaceCoreError::WriteFile {
+            path: temp.clone(),
+            source,
+        })?;
     replace_file(&temp, path)
 }
 
@@ -501,15 +515,15 @@ fn read_patch_file(
     path: &Utf8Path,
     seen_ids: &mut BTreeSet<String>,
     patches: &mut BTreeMap<String, String>,
-) -> Result<(), WorkspaceError> {
-    let file = fs::File::open(path).map_err(|source| WorkspaceError::ReadFile {
+) -> Result<(), WorkspaceCoreError> {
+    let file = fs::File::open(path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.to_owned(),
         source,
     })?;
     let reader = BufReader::new(file);
     for (index, line) in reader.lines().enumerate() {
         let line_number = index + 1;
-        let line = line.map_err(|source| WorkspaceError::ReadFile {
+        let line = line.map_err(|source| WorkspaceCoreError::ReadFile {
             path: path.to_owned(),
             source,
         })?;
@@ -517,13 +531,13 @@ fn read_patch_file(
             continue;
         }
         let patch: TranslationPatchRecord =
-            serde_json::from_str(&line).map_err(|source| WorkspaceError::JsonLine {
+            serde_json::from_str(&line).map_err(|source| WorkspaceCoreError::JsonLine {
                 path: path.to_owned(),
                 line: line_number,
                 source,
             })?;
         if !seen_ids.insert(patch.id.clone()) {
-            return Err(WorkspaceError::DuplicateTranslationId {
+            return Err(WorkspaceCoreError::DuplicateTranslationId {
                 path: path.to_owned(),
                 id: patch.id,
             });
@@ -539,8 +553,8 @@ fn read_patch_file(
 fn read_record_file(
     path: &Utf8Path,
     seen_ids: &mut BTreeSet<String>,
-) -> Result<Vec<TranslationRecord>, WorkspaceError> {
-    let file = fs::File::open(path).map_err(|source| WorkspaceError::ReadFile {
+) -> Result<Vec<TranslationRecord>, WorkspaceCoreError> {
+    let file = fs::File::open(path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.to_owned(),
         source,
     })?;
@@ -548,7 +562,7 @@ fn read_record_file(
     let mut records = Vec::new();
     for (index, line) in reader.lines().enumerate() {
         let line_number = index + 1;
-        let line = line.map_err(|source| WorkspaceError::ReadFile {
+        let line = line.map_err(|source| WorkspaceCoreError::ReadFile {
             path: path.to_owned(),
             source,
         })?;
@@ -556,13 +570,13 @@ fn read_record_file(
             continue;
         }
         let record: TranslationRecord =
-            serde_json::from_str(&line).map_err(|source| WorkspaceError::JsonLine {
+            serde_json::from_str(&line).map_err(|source| WorkspaceCoreError::JsonLine {
                 path: path.to_owned(),
                 line: line_number,
                 source,
             })?;
         if !seen_ids.insert(record.id.clone()) {
-            return Err(WorkspaceError::DuplicateTranslationId {
+            return Err(WorkspaceCoreError::DuplicateTranslationId {
                 path: path.to_owned(),
                 id: record.id,
             });
@@ -577,18 +591,18 @@ fn visit_record_file<F>(
     manifest_file: &TranslationManifestFile,
     seen_ids: &mut BTreeSet<String>,
     visit: &mut F,
-) -> Result<(), WorkspaceError>
+) -> Result<(), WorkspaceCoreError>
 where
-    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceError>,
+    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceCoreError>,
 {
-    let file = fs::File::open(path).map_err(|source| WorkspaceError::ReadFile {
+    let file = fs::File::open(path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.to_owned(),
         source,
     })?;
     let reader = BufReader::new(file);
     for (index, line) in reader.lines().enumerate() {
         let line_number = index + 1;
-        let line = line.map_err(|source| WorkspaceError::ReadFile {
+        let line = line.map_err(|source| WorkspaceCoreError::ReadFile {
             path: path.to_owned(),
             source,
         })?;
@@ -596,13 +610,13 @@ where
             continue;
         }
         let record: TranslationRecord =
-            serde_json::from_str(&line).map_err(|source| WorkspaceError::JsonLine {
+            serde_json::from_str(&line).map_err(|source| WorkspaceCoreError::JsonLine {
                 path: path.to_owned(),
                 line: line_number,
                 source,
             })?;
         if !seen_ids.insert(record.id.clone()) {
-            return Err(WorkspaceError::DuplicateTranslationId {
+            return Err(WorkspaceCoreError::DuplicateTranslationId {
                 path: path.to_owned(),
                 id: record.id,
             });
@@ -612,7 +626,7 @@ where
     Ok(())
 }
 
-fn package_entry_path(root: &Utf8Path, path: &str) -> Result<Utf8PathBuf, WorkspaceError> {
+fn package_entry_path(root: &Utf8Path, path: &str) -> Result<Utf8PathBuf, WorkspaceCoreError> {
     let relative = Utf8Path::new(path);
     if relative.is_absolute() {
         return Err(invalid_package_path(
@@ -646,16 +660,19 @@ fn package_entry_path(root: &Utf8Path, path: &str) -> Result<Utf8PathBuf, Worksp
     Ok(root.join(relative))
 }
 
-fn invalid_package_path(path: &str, message: impl Into<String>) -> WorkspaceError {
-    WorkspaceError::InvalidTranslationPackagePath {
+fn invalid_package_path(path: &str, message: impl Into<String>) -> WorkspaceCoreError {
+    WorkspaceCoreError::InvalidTranslationPackagePath {
         path: path.to_string(),
         message: message.into(),
     }
 }
 
-fn required_manifest_setting(value: String, name: &'static str) -> Result<String, WorkspaceError> {
+fn required_manifest_setting(
+    value: String,
+    name: &'static str,
+) -> Result<String, WorkspaceCoreError> {
     if value.trim().is_empty() {
-        return Err(WorkspaceError::InvalidSetting { name, value });
+        return Err(WorkspaceCoreError::InvalidSetting { name, value });
     }
     Ok(value)
 }
@@ -769,7 +786,7 @@ fn pex_operand_name(operand: PexOperandPath) -> String {
     }
 }
 
-pub(crate) fn external_entry_id(entry: &StringEntry) -> String {
+pub fn external_entry_id(entry: &StringEntry) -> String {
     match entry.source() {
         StringEntrySource::Plugin(metadata) => {
             replace_path_segment(entry.id(), "plugin:", metadata.path.as_str())

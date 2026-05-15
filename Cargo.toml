@@ -4,6 +4,7 @@ members = [
     "crates/stringer-adapt",
     "crates/stringer-app",
     "crates/stringer-cli",
+    "crates/stringer-knowledge",
     "crates/stringer-mcp",
     "crates/stringer-pex",
     "crates/stringer-pipeline",
@@ -11,6 +12,7 @@ members = [
     "crates/stringer-reader",
     "crates/stringer-scaleform",
     "crates/stringer-workspace",
+    "crates/stringer-workspace-core",
     "xtask",
 ]
 resolver = "3"

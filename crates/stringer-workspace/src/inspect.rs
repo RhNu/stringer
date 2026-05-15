@@ -3,13 +3,13 @@ use std::collections::BTreeMap;
 use camino::Utf8PathBuf;
 use serde::Serialize;
 use stringer_pipeline::{PipelineAnnotation, PipelineDiagnostic, PipelineDiagnosticSeverity};
+use stringer_workspace_core::{
+    TranslationManifestFile, TranslationMeta, TranslationRecord, batch_entry_ids,
+    claimed_entry_batches, read_translation_manifest_files, read_translation_package_records,
+    visit_translation_package_records_filtered,
+};
 
 use crate::WorkspaceError;
-use crate::batch::{batch_entry_ids, claimed_entry_batches};
-use crate::package::{
-    TranslationManifestFile, TranslationMeta, TranslationRecord, read_translation_manifest_files,
-    read_translation_package_records, visit_translation_package_records_filtered,
-};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InspectWorkspaceFilesOptions {

@@ -5,7 +5,7 @@ use serde::Deserialize;
 use stringer_core::Language;
 use stringer_plugin::GameRelease;
 
-use crate::WorkspaceError;
+use crate::WorkspaceCoreError;
 
 const CONFIG_ENV: &str = "STRINGER_CONFIG";
 
@@ -56,7 +56,7 @@ struct LoadedConfigFile {
 
 pub fn load_workspace_settings(
     options: LoadWorkspaceSettingsOptions,
-) -> Result<WorkspaceSettings, WorkspaceError> {
+) -> Result<WorkspaceSettings, WorkspaceCoreError> {
     let user = load_user_config_file(options.user_config_path)?;
     let workspace_config = load_workspace_config_file(options.workspace_config_path)?;
     let user_config = user.config;
@@ -87,7 +87,7 @@ pub fn load_workspace_settings(
             .game_release
             .or(workspace_game_release)
             .or(user_game_release)
-            .ok_or(WorkspaceError::MissingSetting {
+            .ok_or(WorkspaceCoreError::MissingSetting {
                 name: "game_release",
             })?,
         asset_language: options
@@ -95,7 +95,7 @@ pub fn load_workspace_settings(
             .asset_language
             .or(workspace_asset_language)
             .or(user_asset_language)
-            .ok_or(WorkspaceError::MissingSetting {
+            .ok_or(WorkspaceCoreError::MissingSetting {
                 name: "asset_language",
             })?,
         source_locale: take_setting(
@@ -114,7 +114,9 @@ pub fn load_workspace_settings(
     })
 }
 
-fn load_user_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, WorkspaceError> {
+fn load_user_config_file(
+    path: Option<Utf8PathBuf>,
+) -> Result<LoadedConfigFile, WorkspaceCoreError> {
     let explicit = path.is_some();
     let Some(path) = path.or_else(default_config_path) else {
         return Ok(LoadedConfigFile {
@@ -128,11 +130,11 @@ fn load_user_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, 
             path: Some(path),
         });
     }
-    let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::ReadFile {
+    let text = fs::read_to_string(&path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.clone(),
         source,
     })?;
-    let config = toml::from_str(&text).map_err(|source| WorkspaceError::ConfigToml {
+    let config = toml::from_str(&text).map_err(|source| WorkspaceCoreError::ConfigToml {
         path: path.clone(),
         source,
     })?;
@@ -144,15 +146,15 @@ fn load_user_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, 
 
 fn load_workspace_config_file(
     path: Option<Utf8PathBuf>,
-) -> Result<WorkspaceConfigFile, WorkspaceError> {
+) -> Result<WorkspaceConfigFile, WorkspaceCoreError> {
     let Some(path) = path else {
         return Ok(WorkspaceConfigFile::default());
     };
-    let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::ReadFile {
+    let text = fs::read_to_string(&path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.clone(),
         source,
     })?;
-    let config = toml::from_str(&text).map_err(|source| WorkspaceError::ConfigToml {
+    let config = toml::from_str(&text).map_err(|source| WorkspaceCoreError::ConfigToml {
         path: path.clone(),
         source,
     })?;
@@ -165,7 +167,7 @@ pub fn default_config_path() -> Option<Utf8PathBuf> {
 
 pub fn load_global_knowledge_root(
     config_path: Option<Utf8PathBuf>,
-) -> Result<Option<Utf8PathBuf>, WorkspaceError> {
+) -> Result<Option<Utf8PathBuf>, WorkspaceCoreError> {
     let explicit = config_path.is_some();
     let Some(path) = config_path.or_else(default_config_path) else {
         return Ok(None);
@@ -207,13 +209,13 @@ fn take_setting(
     workspace_value: Option<String>,
     user_value: Option<String>,
     name: &'static str,
-) -> Result<String, WorkspaceError> {
+) -> Result<String, WorkspaceCoreError> {
     let value = override_value
         .or(workspace_value)
         .or(user_value)
-        .ok_or(WorkspaceError::MissingSetting { name })?;
+        .ok_or(WorkspaceCoreError::MissingSetting { name })?;
     if value.trim().is_empty() {
-        return Err(WorkspaceError::InvalidSetting { name, value });
+        return Err(WorkspaceCoreError::InvalidSetting { name, value });
     }
     Ok(value)
 }
@@ -224,23 +226,23 @@ fn user_knowledge_root(config_path: Option<&Utf8PathBuf>) -> Option<Utf8PathBuf>
         .map(|dir| dir.join("knowledge"))
 }
 
-pub fn parse_game_release_name(value: &str) -> Result<GameRelease, WorkspaceError> {
+pub fn parse_game_release_name(value: &str) -> Result<GameRelease, WorkspaceCoreError> {
     match normalize_name(value).as_str() {
         "skyrimle" => Ok(GameRelease::SkyrimLe),
         "skyrimse" => Ok(GameRelease::SkyrimSe),
-        _ => Err(WorkspaceError::InvalidSetting {
+        _ => Err(WorkspaceCoreError::InvalidSetting {
             name: "game_release",
             value: value.to_string(),
         }),
     }
 }
 
-pub fn parse_language_name(value: &str) -> Result<Language, WorkspaceError> {
+pub fn parse_language_name(value: &str) -> Result<Language, WorkspaceCoreError> {
     let normalized = normalize_name(value);
     Language::ALL
         .into_iter()
         .find(|language| normalize_name(language.full_name()) == normalized)
-        .ok_or_else(|| WorkspaceError::InvalidSetting {
+        .ok_or_else(|| WorkspaceCoreError::InvalidSetting {
             name: "asset_language",
             value: value.to_string(),
         })

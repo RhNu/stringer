@@ -1,9 +1,11 @@
 use camino::Utf8PathBuf;
 use stringer_adapt::AdaptFormat;
-use stringer_workspace::{
-    LoadWorkspaceSettingsOptions, LookupKnowledgeField, LookupKnowledgeSource, PipelineEntryKind,
-    WorkspaceError, WorkspaceSettingsOverrides, load_workspace_settings, parse_game_release_name,
-    parse_language_name,
+use stringer_knowledge::{LookupKnowledgeField, LookupKnowledgeSource};
+use stringer_pipeline::PipelineEntryKind;
+use stringer_workspace::WorkspaceError;
+use stringer_workspace_core::{
+    LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
+    load_workspace_settings, parse_game_release_name, parse_language_name,
 };
 
 use crate::dto::{
@@ -15,12 +17,12 @@ use crate::paths::workspace_config_path;
 pub(crate) fn load_settings_for_workspace(
     workspace: &Utf8PathBuf,
     settings: SettingsInput,
-) -> Result<stringer_workspace::WorkspaceSettings, WorkspaceError> {
-    load_workspace_settings(LoadWorkspaceSettingsOptions {
+) -> Result<WorkspaceSettings, WorkspaceError> {
+    Ok(load_workspace_settings(LoadWorkspaceSettingsOptions {
         user_config_path: None,
         workspace_config_path: workspace_config_path(workspace),
         overrides: settings.overrides()?,
-    })
+    })?)
 }
 
 impl SettingsInput {

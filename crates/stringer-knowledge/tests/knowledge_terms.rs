@@ -1,14 +1,16 @@
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use camino::Utf8PathBuf;
-use stringer_workspace::{
-    KnowledgeTermDeleteOptions, KnowledgeTermInput, KnowledgeTermStatus,
+use stringer_knowledge::{
+    KnowledgeError, KnowledgeTermDeleteOptions, KnowledgeTermInput, KnowledgeTermStatus,
     KnowledgeTermUpsertOptions, KnowledgeTermsUpsertOptions, LoadKnowledgeLayersOptions,
-    WorkspaceError, WorkspaceSettings, delete_knowledge_term, load_knowledge_layers,
-    parse_game_release_name, parse_language_name, upsert_knowledge_term, upsert_knowledge_terms,
+    delete_knowledge_term, load_knowledge_layers, upsert_knowledge_term, upsert_knowledge_terms,
 };
+
+#[allow(dead_code)]
+mod support;
+
+use support::*;
 
 #[test]
 fn term_upsert_creates_default_workspace_file_and_loads_from_knowledge_layers() {
@@ -167,7 +169,7 @@ target = "熟铁剑"
 
     assert!(matches!(
         error,
-        WorkspaceError::KnowledgeTermNotFound { id, .. } if id == "term:missing"
+        KnowledgeError::KnowledgeTermNotFound { id, .. } if id == "term:missing"
     ));
 }
 
@@ -319,7 +321,7 @@ fn term_upsert_rejects_unsupported_scope_keys() {
 
     assert!(matches!(
         error,
-        WorkspaceError::InvalidKnowledgeTermScope { key, .. } if key == "subrecord"
+        KnowledgeError::InvalidKnowledgeTermScope { key, .. } if key == "subrecord"
     ));
 }
 
@@ -338,7 +340,7 @@ fn term_upsert_rejects_file_overrides_outside_workspace_terms_root() {
 
     assert!(matches!(
         error,
-        WorkspaceError::InvalidKnowledgeTermFile { .. }
+        KnowledgeError::InvalidKnowledgeTermFile { .. }
     ));
 }
 
@@ -359,7 +361,7 @@ fn term_upsert_rejects_file_overrides_that_traverse_outside_workspace_terms_root
 
     assert!(matches!(
         error,
-        WorkspaceError::InvalidKnowledgeTermFile { .. }
+        KnowledgeError::InvalidKnowledgeTermFile { .. }
     ));
 }
 
@@ -378,7 +380,7 @@ fn term_upsert_rejects_file_overrides_without_toml_extension() {
 
     assert!(matches!(
         error,
-        WorkspaceError::InvalidKnowledgeTermFile { .. }
+        KnowledgeError::InvalidKnowledgeTermFile { .. }
     ));
 }
 
@@ -397,7 +399,7 @@ fn term_upsert_rejects_terms_root_as_file_override() {
 
     assert!(matches!(
         error,
-        WorkspaceError::InvalidKnowledgeTermFile { .. }
+        KnowledgeError::InvalidKnowledgeTermFile { .. }
     ));
 }
 
@@ -439,54 +441,5 @@ fn iron_sword_term(target: &str) -> KnowledgeTermInput {
         scope: Default::default(),
         tags: Vec::new(),
         note: None,
-    }
-}
-
-fn settings() -> WorkspaceSettings {
-    WorkspaceSettings {
-        game_release: parse_game_release_name("SkyrimSe").unwrap(),
-        asset_language: parse_language_name("English").unwrap(),
-        source_locale: "en".to_string(),
-        target_locale: "zh-Hans".to_string(),
-        global_knowledge_root: Some(Utf8PathBuf::from("__stringer_test_no_global_knowledge__")),
-    }
-}
-
-fn write_text(path: &Path, text: &str) {
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, text).unwrap();
-}
-
-fn utf8(path: &Path) -> Utf8PathBuf {
-    Utf8PathBuf::from_path_buf(path.to_path_buf()).unwrap()
-}
-
-struct TempRoot {
-    path: PathBuf,
-}
-
-impl TempRoot {
-    fn new(label: &str) -> Self {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "stringer_workspace_{label}_{}_{}",
-            std::process::id(),
-            unique
-        ));
-        fs::create_dir_all(&path).unwrap();
-        Self { path }
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for TempRoot {
-    fn drop(&mut self) {
-        fs::remove_dir_all(&self.path).unwrap();
     }
 }

@@ -1,5 +1,5 @@
 [package]
-name = "stringer-app"
+name = "stringer-knowledge"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -7,14 +7,19 @@ license.workspace = true
 
 [dependencies]
 camino.workspace = true
+regex.workspace = true
+rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-stringer-adapt = { path = "../stringer-adapt" }
-stringer-knowledge = { path = "../stringer-knowledge" }
 stringer-pipeline = { path = "../stringer-pipeline" }
-stringer-workspace = { path = "../stringer-workspace" }
 stringer-workspace-core = { path = "../stringer-workspace-core" }
 thiserror.workspace = true
+toml_edit.workspace = true
 
 [dev-dependencies]
+bytes.workspace = true
+stringer-core = { path = "../stringer-core" }
+stringer-pex = { path = "../stringer-pex" }
+stringer-plugin = { path = "../stringer-plugin" }
+stringer-workspace = { path = "../stringer-workspace" }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

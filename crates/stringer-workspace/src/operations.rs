@@ -11,19 +11,17 @@ use stringer_reader::{ReadModOptions, read_mod_root};
 use stringer_scaleform::{
     ScaleformTranslationBundle, read_scaleform_translations, write_scaleform_translations,
 };
+use stringer_workspace_core::{
+    PackagedTranslationRecord, WorkspaceLock, WorkspaceSettings, external_entry_id,
+    packaged_record_from_entry, read_translation_package, write_translation_package,
+};
 use tracing::debug;
 
 use crate::WorkspaceError;
-use crate::lock::WorkspaceLock;
-use crate::package::{
-    PackagedTranslationRecord, external_entry_id, packaged_record_from_entry,
-    read_translation_package, write_translation_package,
-};
 use crate::paths::{
     changed_assets, ensure_output_outside_source, ensure_workspace_outside_source,
     write_output_assets,
 };
-use crate::settings::WorkspaceSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportTranslationsOptions {

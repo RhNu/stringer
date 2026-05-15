@@ -1,9 +1,11 @@
 use rusqlite::Connection;
-use stringer_workspace::{
-    BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope, LookupKnowledgeField,
-    LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource, PipelineEntryKind,
-    WorkspaceSettings, build_knowledge_index, delete_knowledge_term, lookup_knowledge,
+use stringer_knowledge::{
+    BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope, KnowledgeTermDeleteOptions,
+    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
+    build_knowledge_index, delete_knowledge_term, lookup_knowledge,
 };
+use stringer_pipeline::PipelineEntryKind;
+use stringer_workspace_core::WorkspaceSettings;
 
 #[allow(dead_code)]
 mod support;
@@ -203,7 +205,7 @@ fn term_delete_rebuilds_workspace_index_without_creating_global_index() {
     );
     write_term(&workspace_terms, "skyrim.weapon.iron_sword", "工作区铁剑");
 
-    let summary = delete_knowledge_term(stringer_workspace::KnowledgeTermDeleteOptions {
+    let summary = delete_knowledge_term(KnowledgeTermDeleteOptions {
         workspace: utf8(root.path()),
         file: None,
         id: "skyrim.weapon.iron_sword".to_string(),
@@ -225,7 +227,7 @@ fn term_delete_workspace_rebuild_does_not_walk_global_root() {
     write_text(&global.join("terms"), "not a directory");
     write_term(&workspace_terms, "skyrim.weapon.iron_sword", "工作区铁剑");
 
-    let summary = delete_knowledge_term(stringer_workspace::KnowledgeTermDeleteOptions {
+    let summary = delete_knowledge_term(KnowledgeTermDeleteOptions {
         workspace: utf8(root.path()),
         file: None,
         id: "skyrim.weapon.iron_sword".to_string(),

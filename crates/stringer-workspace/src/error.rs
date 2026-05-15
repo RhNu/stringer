@@ -1,6 +1,7 @@
 use std::io;
 
 use camino::Utf8PathBuf;
+use stringer_workspace_core::WorkspaceCoreError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -39,37 +40,11 @@ pub enum WorkspaceError {
         source: toml::ser::Error,
     },
 
-    #[error("failed to parse knowledge terms TOML `{path}`: {source}")]
-    KnowledgeTermsToml {
-        path: Utf8PathBuf,
-        #[source]
-        source: Box<toml_edit::TomlError>,
-    },
-
-    #[error("invalid knowledge terms TOML `{path}`: {message}")]
-    InvalidKnowledgeTermsToml { path: Utf8PathBuf, message: String },
-
-    #[error("knowledge term `{id}` was not found in `{path}`")]
-    KnowledgeTermNotFound { path: Utf8PathBuf, id: String },
-
-    #[error("invalid knowledge term scope key `{key}` for term `{id}`")]
-    InvalidKnowledgeTermScope { id: String, key: String },
-
-    #[error("invalid knowledge term file `{path}`: {message}")]
-    InvalidKnowledgeTermFile { path: Utf8PathBuf, message: String },
-
     #[error("missing workspace setting `{name}`")]
     MissingSetting { name: &'static str },
 
     #[error("invalid workspace setting `{name}` value `{value}`")]
     InvalidSetting { name: &'static str, value: String },
-
-    #[error("invalid lookup regex `{pattern}`: {source}")]
-    InvalidLookupRegex {
-        pattern: String,
-        #[source]
-        source: regex::Error,
-    },
 
     #[error("failed to parse JSONL `{path}` line {line}: {source}")]
     JsonLine {
@@ -84,13 +59,6 @@ pub enum WorkspaceError {
         path: Utf8PathBuf,
         #[source]
         source: serde_json::Error,
-    },
-
-    #[error("failed to process SQLite index `{path}`: {source}")]
-    Sqlite {
-        path: Utf8PathBuf,
-        #[source]
-        source: rusqlite::Error,
     },
 
     #[error("unsupported translation package schema version {version} in `{path}`")]
@@ -144,17 +112,45 @@ pub enum WorkspaceError {
     Pex(#[from] stringer_pex::PexError),
 
     #[error(transparent)]
-    Pipeline(Box<stringer_pipeline::PipelineError>),
-
-    #[error(transparent)]
     Scaleform(#[from] stringer_scaleform::ScaleformError),
 
     #[error(transparent)]
     Bundle(#[from] stringer_core::StringerCoreError),
 }
 
-impl From<stringer_pipeline::PipelineError> for WorkspaceError {
-    fn from(source: stringer_pipeline::PipelineError) -> Self {
-        Self::Pipeline(Box::new(source))
+impl From<WorkspaceCoreError> for WorkspaceError {
+    fn from(source: WorkspaceCoreError) -> Self {
+        match source {
+            WorkspaceCoreError::ReadFile { path, source } => Self::ReadFile { path, source },
+            WorkspaceCoreError::WriteFile { path, source } => Self::WriteFile { path, source },
+            WorkspaceCoreError::CurrentDirectory { source } => Self::CurrentDirectory { source },
+            WorkspaceCoreError::ConfigToml { path, source } => Self::ConfigToml { path, source },
+            WorkspaceCoreError::Toml { path, source } => Self::Toml { path, source },
+            WorkspaceCoreError::MissingSetting { name } => Self::MissingSetting { name },
+            WorkspaceCoreError::InvalidSetting { name, value } => {
+                Self::InvalidSetting { name, value }
+            }
+            WorkspaceCoreError::JsonLine { path, line, source } => {
+                Self::JsonLine { path, line, source }
+            }
+            WorkspaceCoreError::Json { path, source } => Self::Json { path, source },
+            WorkspaceCoreError::UnsupportedTranslationSchema { path, version } => {
+                Self::UnsupportedTranslationSchema { path, version }
+            }
+            WorkspaceCoreError::LegacyTranslationWorkspace { path } => {
+                Self::LegacyTranslationWorkspace { path }
+            }
+            WorkspaceCoreError::WorkspaceLocked { path } => Self::WorkspaceLocked { path },
+            WorkspaceCoreError::InvalidTranslationPackagePath { path, message } => {
+                Self::InvalidTranslationPackagePath { path, message }
+            }
+            WorkspaceCoreError::InvalidLogicalPath { path, message } => {
+                Self::InvalidLogicalPath { path, message }
+            }
+            WorkspaceCoreError::DuplicateTranslationId { path, id } => {
+                Self::DuplicateTranslationId { path, id }
+            }
+            WorkspaceCoreError::BatchNotFound { batch_id } => Self::BatchNotFound { batch_id },
+        }
     }
 }

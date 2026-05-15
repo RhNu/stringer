@@ -6,12 +6,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
 
-use crate::WorkspaceError;
+use crate::WorkspaceCoreError;
 
 const LOCK_FILE: &str = "lock";
 
 #[derive(Debug)]
-pub(crate) struct WorkspaceLock {
+pub struct WorkspaceLock {
     path: Utf8PathBuf,
 }
 
@@ -22,8 +22,8 @@ struct LockMetadata {
 }
 
 impl WorkspaceLock {
-    pub(crate) fn acquire(root: &Utf8Path) -> Result<Self, WorkspaceError> {
-        fs::create_dir_all(root).map_err(|source| WorkspaceError::WriteFile {
+    pub fn acquire(root: &Utf8Path) -> Result<Self, WorkspaceCoreError> {
+        fs::create_dir_all(root).map_err(|source| WorkspaceCoreError::WriteFile {
             path: root.to_owned(),
             source,
         })?;
@@ -34,9 +34,9 @@ impl WorkspaceLock {
             .open(&path)
             .map_err(|source| {
                 if source.kind() == std::io::ErrorKind::AlreadyExists {
-                    WorkspaceError::WorkspaceLocked { path: path.clone() }
+                    WorkspaceCoreError::WorkspaceLocked { path: path.clone() }
                 } else {
-                    WorkspaceError::WriteFile {
+                    WorkspaceCoreError::WriteFile {
                         path: path.clone(),
                         source,
                     }
@@ -47,19 +47,20 @@ impl WorkspaceLock {
             pid: std::process::id(),
             created_at_unix_ms: unix_ms(),
         };
-        serde_json::to_writer(&mut file, &metadata).map_err(|source| WorkspaceError::Json {
+        serde_json::to_writer(&mut file, &metadata).map_err(|source| WorkspaceCoreError::Json {
             path: lock.path.clone(),
             source,
         })?;
         file.write_all(b"\n")
-            .map_err(|source| WorkspaceError::WriteFile {
+            .map_err(|source| WorkspaceCoreError::WriteFile {
                 path: lock.path.clone(),
                 source,
             })?;
-        file.flush().map_err(|source| WorkspaceError::WriteFile {
-            path: lock.path.clone(),
-            source,
-        })?;
+        file.flush()
+            .map_err(|source| WorkspaceCoreError::WriteFile {
+                path: lock.path.clone(),
+                source,
+            })?;
         Ok(lock)
     }
 }
@@ -70,7 +71,7 @@ impl Drop for WorkspaceLock {
     }
 }
 
-pub(crate) fn unix_ms() -> u128 {
+pub fn unix_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

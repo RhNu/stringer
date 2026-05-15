@@ -7,8 +7,8 @@ use rusqlite::{Connection, params, params_from_iter, types::Value};
 use serde::Serialize;
 use stringer_pipeline::PipelineDiagnostic;
 
-use crate::WorkspaceError;
-use crate::knowledge_index::{IndexedKnowledgeId, normalize_lookup_text};
+use crate::KnowledgeError;
+use crate::index::{IndexedKnowledgeId, normalize_lookup_text};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -87,7 +87,7 @@ pub(crate) fn search_knowledge_indexes(
     paths: &[Utf8PathBuf],
     options: &KnowledgeSearchOptions<'_>,
     suppressed_items: &BTreeSet<IndexedKnowledgeId>,
-) -> Result<KnowledgeSearchOutput, WorkspaceError> {
+) -> Result<KnowledgeSearchOutput, KnowledgeError> {
     search_ranked_knowledge_indexes(paths, options, suppressed_items)
 }
 
@@ -95,7 +95,7 @@ fn search_ranked_knowledge_indexes(
     paths: &[Utf8PathBuf],
     options: &KnowledgeSearchOptions<'_>,
     suppressed_items: &BTreeSet<IndexedKnowledgeId>,
-) -> Result<KnowledgeSearchOutput, WorkspaceError> {
+) -> Result<KnowledgeSearchOutput, KnowledgeError> {
     let regex = lookup_regex(options)?;
     let mut ranked = Vec::new();
     for path in paths {
@@ -125,8 +125,8 @@ fn ranked_results_for_index(
     options: &KnowledgeSearchOptions<'_>,
     regex: Option<&Regex>,
     suppressed_items: &BTreeSet<IndexedKnowledgeId>,
-) -> Result<Vec<RankedResult>, WorkspaceError> {
-    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+) -> Result<Vec<RankedResult>, KnowledgeError> {
+    let connection = Connection::open(path).map_err(|source| KnowledgeError::Sqlite {
         path: path.to_owned(),
         source,
     })?;
@@ -195,7 +195,7 @@ fn candidate_rows(
     connection: &Connection,
     path: &Utf8Path,
     options: &KnowledgeSearchOptions<'_>,
-) -> Result<Vec<IndexRow>, WorkspaceError> {
+) -> Result<Vec<IndexRow>, KnowledgeError> {
     if options.query.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -215,7 +215,7 @@ fn exact_prefix_candidate_rowids(
     path: &Utf8Path,
     options: &KnowledgeSearchOptions<'_>,
     query: &str,
-) -> Result<BTreeSet<i64>, WorkspaceError> {
+) -> Result<BTreeSet<i64>, KnowledgeError> {
     let prefix = format!("{query}%");
     let mut rowids = BTreeSet::new();
     if matches!(
@@ -252,17 +252,17 @@ fn rowids_for_text_column(
     column: &str,
     query: &str,
     prefix: &str,
-) -> Result<BTreeSet<i64>, WorkspaceError> {
+) -> Result<BTreeSet<i64>, KnowledgeError> {
     let sql = format!("SELECT rowid FROM items WHERE {column} = ?1 OR {column} LIKE ?2");
     let mut statement = connection
         .prepare(&sql)
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let rows = statement
         .query_map(params![query, prefix], |row| row.get::<_, i64>(0))
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -274,16 +274,16 @@ fn rowids_for_aliases(
     path: &Utf8Path,
     query: &str,
     prefix: &str,
-) -> Result<BTreeSet<i64>, WorkspaceError> {
+) -> Result<BTreeSet<i64>, KnowledgeError> {
     let mut statement = connection
         .prepare("SELECT item_rowid FROM aliases WHERE alias_norm = ?1 OR alias_norm LIKE ?2")
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let rows = statement
         .query_map(params![query, prefix], |row| row.get::<_, i64>(0))
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -294,17 +294,17 @@ fn fts_candidate_rowids(
     connection: &Connection,
     path: &Utf8Path,
     query: &str,
-) -> Result<BTreeSet<i64>, WorkspaceError> {
+) -> Result<BTreeSet<i64>, KnowledgeError> {
     let query = fts_phrase(query);
     let mut statement = connection
         .prepare("SELECT rowid FROM items_fts WHERE items_fts MATCH ?1")
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let rows = statement
         .query_map(params![query], |row| row.get::<_, i64>(0))
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -314,10 +314,10 @@ fn fts_candidate_rowids(
 fn collect_rowids(
     path: &Utf8Path,
     rows: impl Iterator<Item = rusqlite::Result<i64>>,
-) -> Result<BTreeSet<i64>, WorkspaceError> {
+) -> Result<BTreeSet<i64>, KnowledgeError> {
     let mut rowids = BTreeSet::new();
     for row in rows {
-        rowids.insert(row.map_err(|source| WorkspaceError::Sqlite {
+        rowids.insert(row.map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?);
@@ -330,7 +330,7 @@ fn select_candidate_rows(
     path: &Utf8Path,
     options: &KnowledgeSearchOptions<'_>,
     rowids: Option<&BTreeSet<i64>>,
-) -> Result<Vec<IndexRow>, WorkspaceError> {
+) -> Result<Vec<IndexRow>, KnowledgeError> {
     match rowids {
         Some(rowids) if rowids.is_empty() => Ok(Vec::new()),
         Some(rowids) => select_candidate_rows_by_rowid(connection, path, options, rowids),
@@ -342,10 +342,10 @@ fn select_candidate_rows_by_filter(
     connection: &Connection,
     path: &Utf8Path,
     options: &KnowledgeSearchOptions<'_>,
-) -> Result<Vec<IndexRow>, WorkspaceError> {
+) -> Result<Vec<IndexRow>, KnowledgeError> {
     let mut statement = connection
         .prepare(&candidate_rows_sql(None))
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -364,7 +364,7 @@ fn select_candidate_rows_by_filter(
             ],
             index_row_from_sql,
         )
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -376,7 +376,7 @@ fn select_candidate_rows_by_rowid(
     path: &Utf8Path,
     options: &KnowledgeSearchOptions<'_>,
     rowids: &BTreeSet<i64>,
-) -> Result<Vec<IndexRow>, WorkspaceError> {
+) -> Result<Vec<IndexRow>, KnowledgeError> {
     let source_filter = match options.source {
         LookupKnowledgeSource::All => "all",
         LookupKnowledgeSource::Memory => "memory",
@@ -396,13 +396,13 @@ fn select_candidate_rows_by_rowid(
         ]);
         let mut statement = connection
             .prepare(&candidate_rows_sql(Some(chunk.len())))
-            .map_err(|source| WorkspaceError::Sqlite {
+            .map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?;
         let rows = statement
             .query_map(params_from_iter(values), index_row_from_sql)
-            .map_err(|source| WorkspaceError::Sqlite {
+            .map_err(|source| KnowledgeError::Sqlite {
                 path: path.to_owned(),
                 source,
             })?;
@@ -433,10 +433,10 @@ fn candidate_rows_sql(rowid_count: Option<usize>) -> String {
 fn collect_index_rows(
     path: &Utf8Path,
     rows: impl Iterator<Item = rusqlite::Result<IndexRow>>,
-) -> Result<Vec<IndexRow>, WorkspaceError> {
+) -> Result<Vec<IndexRow>, KnowledgeError> {
     let mut candidates = Vec::new();
     for row in rows {
-        candidates.push(row.map_err(|source| WorkspaceError::Sqlite {
+        candidates.push(row.map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?);
@@ -464,22 +464,22 @@ fn aliases_for_row(
     connection: &Connection,
     path: &Utf8Path,
     rowid: i64,
-) -> Result<Vec<String>, WorkspaceError> {
+) -> Result<Vec<String>, KnowledgeError> {
     let mut statement = connection
         .prepare("SELECT alias FROM aliases WHERE item_rowid = ?1")
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let rows = statement
         .query_map(params![rowid], |row| row.get::<_, String>(0))
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let mut aliases = Vec::new();
     for row in rows {
-        aliases.push(row.map_err(|source| WorkspaceError::Sqlite {
+        aliases.push(row.map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?);
@@ -491,10 +491,10 @@ fn scope_for_row(
     connection: &Connection,
     path: &Utf8Path,
     rowid: i64,
-) -> Result<BTreeMap<String, Vec<String>>, WorkspaceError> {
+) -> Result<BTreeMap<String, Vec<String>>, KnowledgeError> {
     let mut statement = connection
         .prepare("SELECT key, value FROM item_scope WHERE item_rowid = ?1")
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -502,13 +502,13 @@ fn scope_for_row(
         .query_map(params![rowid], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
-        .map_err(|source| WorkspaceError::Sqlite {
+        .map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
     let mut scope = BTreeMap::<String, Vec<String>>::new();
     for row in rows {
-        let (key, value) = row.map_err(|source| WorkspaceError::Sqlite {
+        let (key, value) = row.map_err(|source| KnowledgeError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
@@ -571,7 +571,7 @@ struct ContextMatch {
     conflicts: usize,
 }
 
-fn lookup_regex(options: &KnowledgeSearchOptions<'_>) -> Result<Option<Regex>, WorkspaceError> {
+fn lookup_regex(options: &KnowledgeSearchOptions<'_>) -> Result<Option<Regex>, KnowledgeError> {
     if options.mode != LookupKnowledgeMode::Regex {
         return Ok(None);
     }
@@ -579,7 +579,7 @@ fn lookup_regex(options: &KnowledgeSearchOptions<'_>) -> Result<Option<Regex>, W
         .case_insensitive(!options.case_sensitive)
         .build()
         .map(Some)
-        .map_err(|source| WorkspaceError::InvalidLookupRegex {
+        .map_err(|source| KnowledgeError::InvalidLookupRegex {
             pattern: options.query.to_string(),
             source,
         })

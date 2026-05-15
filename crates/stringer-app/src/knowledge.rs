@@ -1,12 +1,13 @@
-use stringer_workspace::{
+use stringer_knowledge::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope,
     KnowledgeLookup, KnowledgeSummary, KnowledgeTermDeleteOptions, KnowledgeTermEditSummary,
     KnowledgeTermInput as WorkspaceTermInput, KnowledgeTermStatus, KnowledgeTermsEditSummary,
     KnowledgeTermsUpsertOptions, LookupKnowledgeMode, LookupKnowledgeOptions,
-    ValidateTranslationsOptions, WorkspaceError, annotate_translations, build_knowledge_index,
-    delete_knowledge_term, lookup_knowledge, read_workspace_settings, upsert_knowledge_terms,
-    validate_translations,
+    ValidateTranslationsOptions, annotate_translations, build_knowledge_index,
+    delete_knowledge_term, lookup_knowledge, upsert_knowledge_terms, validate_translations,
 };
+use stringer_workspace::WorkspaceError;
+use stringer_workspace_core::{WorkspaceSettings, read_workspace_settings};
 
 use crate::dto::{
     KnowledgeAnnotateRequest, KnowledgeIndexRebuildRequest, KnowledgeIndexRebuildResponse,
@@ -251,10 +252,10 @@ fn knowledge_term_workspace(
 fn knowledge_term_settings(
     workspace: &camino::Utf8Path,
     rebuild_index: bool,
-) -> Result<Option<stringer_workspace::WorkspaceSettings>, WorkspaceError> {
-    rebuild_index
+) -> Result<Option<WorkspaceSettings>, WorkspaceError> {
+    Ok(rebuild_index
         .then(|| read_workspace_settings(workspace))
-        .transpose()
+        .transpose()?)
 }
 
 fn lookup_mode(regex: bool) -> LookupKnowledgeMode {

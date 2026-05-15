@@ -1160,7 +1160,10 @@ dependencies = [
  "serde",
  "serde_json",
  "stringer-adapt",
+ "stringer-knowledge",
+ "stringer-pipeline",
  "stringer-workspace",
+ "stringer-workspace-core",
  "thiserror 2.0.18",
  "tokio",
 ]
@@ -1187,6 +1190,27 @@ dependencies = [
  "camino",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "stringer-knowledge"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "camino",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "stringer-core",
+ "stringer-pex",
+ "stringer-pipeline",
+ "stringer-plugin",
+ "stringer-workspace",
+ "stringer-workspace-core",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml_edit",
 ]
 
 [[package]]
@@ -1269,9 +1293,6 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "camino",
- "directories",
- "regex",
- "rusqlite",
  "serde",
  "serde_json",
  "stringer-core",
@@ -1280,11 +1301,26 @@ dependencies = [
  "stringer-plugin",
  "stringer-reader",
  "stringer-scaleform",
+ "stringer-workspace-core",
  "thiserror 2.0.18",
  "tokio",
  "toml",
- "toml_edit",
  "tracing",
+]
+
+[[package]]
+name = "stringer-workspace-core"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "directories",
+ "serde",
+ "serde_json",
+ "stringer-core",
+ "stringer-pipeline",
+ "stringer-plugin",
+ "thiserror 2.0.18",
+ "toml",
 ]
 
 [[package]]

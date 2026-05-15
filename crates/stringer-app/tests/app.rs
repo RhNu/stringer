@@ -1,15 +1,18 @@
+use std::collections::BTreeMap;
 use std::fs;
 
 use serde_json::Value;
 use stringer_app::{
-    AdaptFormatInput, AdaptImportRequest, InspectDiagnosticSeverityInput, InspectEntryStatusInput,
-    KnowledgeTermInput, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, SettingsInput,
-    WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest,
-    WorkspaceBatchCountRequest, WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest,
-    WorkspaceInspectEntriesRequest, WorkspaceOpenRequest, adapt_import, knowledge_term_upsert,
-    workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_finalize,
+    AdaptFormatInput, AdaptImportRequest, AppError, InspectDiagnosticSeverityInput,
+    InspectEntryStatusInput, KnowledgeTermInput, KnowledgeTermStatusInput,
+    KnowledgeTermUpsertRequest, SettingsInput, WorkspaceBatchApplyEntry,
+    WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest,
+    WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
+    WorkspaceOpenRequest, adapt_import, knowledge_term_upsert, workspace_batch_apply,
+    workspace_batch_claim, workspace_batch_count, workspace_finalize,
     workspace_inspect_diagnostics, workspace_inspect_entries, workspace_open,
 };
+use stringer_workspace_core::WorkspaceCoreError;
 
 #[tokio::test]
 async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
@@ -214,6 +217,59 @@ async fn app_knowledge_term_upsert_can_prepare_workspace_knowledge_before_open()
             .join("knowledge/terms/workspace.toml")
             .exists()
     );
+}
+
+#[tokio::test]
+async fn app_error_codes_preserve_core_and_knowledge_failures() {
+    let root = TempRoot::new("error-root");
+    let workspace = TempRoot::new("error-workspace");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n",
+    );
+
+    let core_error = workspace_open(WorkspaceOpenRequest {
+        source_root: path_string(root.path()),
+        workspace: Some(path_string(workspace.path())),
+        force: false,
+        settings: SettingsInput::default(),
+    })
+    .await
+    .unwrap_err();
+    assert_eq!(core_error.code(), "workspace.missing_setting");
+    assert_eq!(core_error.details()["name"], "game_release");
+
+    let logical_path_error = AppError::from(WorkspaceCoreError::InvalidLogicalPath {
+        path: "bad".to_string(),
+        message: "bad logical path".to_string(),
+    });
+    assert_eq!(logical_path_error.code(), "workspace.invalid_logical_path");
+    assert_eq!(logical_path_error.details()["path"], "bad");
+
+    let knowledge_error = knowledge_term_upsert(KnowledgeTermUpsertRequest {
+        workspace: Some(path_string(workspace.path())),
+        file: None,
+        terms: vec![KnowledgeTermInput {
+            id: "term:iron_sword".to_string(),
+            source: "Iron Sword".to_string(),
+            target: "熟铁剑".to_string(),
+            aliases: Vec::new(),
+            case_sensitive: false,
+            status: KnowledgeTermStatusInput::Preferred,
+            scope: BTreeMap::from([("subrecord".to_string(), vec!["FULL".to_string()])]),
+            tags: Vec::new(),
+            note: None,
+        }],
+        rebuild_index: false,
+    })
+    .unwrap_err();
+    assert_eq!(
+        knowledge_error.code(),
+        "workspace.invalid_knowledge_term_scope"
+    );
+    assert_eq!(knowledge_error.details()["key"], "subrecord");
 }
 
 #[tokio::test]

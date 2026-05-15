@@ -1,5 +1,5 @@
 [package]
-name = "stringer-workspace"
+name = "stringer-workspace-core"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -7,19 +7,11 @@ license.workspace = true
 
 [dependencies]
 camino.workspace = true
+directories.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 stringer-core = { path = "../stringer-core" }
-stringer-pex = { path = "../stringer-pex" }
 stringer-pipeline = { path = "../stringer-pipeline" }
 stringer-plugin = { path = "../stringer-plugin" }
-stringer-reader = { path = "../stringer-reader" }
-stringer-scaleform = { path = "../stringer-scaleform" }
-stringer-workspace-core = { path = "../stringer-workspace-core" }
 thiserror.workspace = true
 toml.workspace = true
-tracing.workspace = true
-
-[dev-dependencies]
-bytes.workspace = true
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -2,11 +2,12 @@ use std::fs;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::WorkspaceError;
-use crate::knowledge_index::{
+use crate::KnowledgeError;
+use crate::index::{
     KnowledgeFileKind, KnowledgeSourceFile, knowledge_index_path, source_file_from_path,
 };
-use crate::settings::WorkspaceSettings;
+use stringer_workspace_core::WorkspaceCoreError;
+use stringer_workspace_core::WorkspaceSettings;
 
 pub(crate) const GLOBAL_LAYER: &str = "global";
 pub(crate) const WORKSPACE_LAYER: &str = "workspace";
@@ -21,7 +22,7 @@ pub(crate) struct KnowledgeIndexLayer {
 pub(crate) fn collect_index_layers(
     workspace: &Utf8Path,
     settings: &WorkspaceSettings,
-) -> Result<Vec<KnowledgeIndexLayer>, WorkspaceError> {
+) -> Result<Vec<KnowledgeIndexLayer>, KnowledgeError> {
     let workspace_knowledge_root = workspace.join("knowledge");
     let mut layers = Vec::new();
     if let Some(global_root) = settings.global_knowledge_root.clone()
@@ -42,7 +43,7 @@ pub(crate) fn collect_index_layers(
 
 pub(crate) fn collect_workspace_index_layer(
     workspace: &Utf8Path,
-) -> Result<KnowledgeIndexLayer, WorkspaceError> {
+) -> Result<KnowledgeIndexLayer, KnowledgeError> {
     let workspace_knowledge_root = workspace.join("knowledge");
     Ok(KnowledgeIndexLayer {
         name: WORKSPACE_LAYER.to_string(),
@@ -61,7 +62,7 @@ pub(crate) fn collect_all_source_files(layers: &[KnowledgeIndexLayer]) -> Vec<Kn
 fn collect_files_for_layer(
     layer: &str,
     root: &Utf8Path,
-) -> Result<Vec<KnowledgeSourceFile>, WorkspaceError> {
+) -> Result<Vec<KnowledgeSourceFile>, KnowledgeError> {
     let mut files = Vec::new();
     for (kind, folder, extension) in [
         (KnowledgeFileKind::Terms, "terms", "toml"),
@@ -75,7 +76,7 @@ fn collect_files_for_layer(
     Ok(files)
 }
 
-fn sorted_files(root: &Utf8Path, extension: &str) -> Result<Vec<Utf8PathBuf>, WorkspaceError> {
+fn sorted_files(root: &Utf8Path, extension: &str) -> Result<Vec<Utf8PathBuf>, KnowledgeError> {
     if !root.exists() {
         return Ok(Vec::new());
     }
@@ -89,17 +90,17 @@ fn collect_sorted_files(
     root: &Utf8Path,
     extension: &str,
     files: &mut Vec<Utf8PathBuf>,
-) -> Result<(), WorkspaceError> {
-    for entry in fs::read_dir(root).map_err(|source| WorkspaceError::ReadFile {
+) -> Result<(), KnowledgeError> {
+    for entry in fs::read_dir(root).map_err(|source| WorkspaceCoreError::ReadFile {
         path: root.to_owned(),
         source,
     })? {
-        let entry = entry.map_err(|source| WorkspaceError::ReadFile {
+        let entry = entry.map_err(|source| WorkspaceCoreError::ReadFile {
             path: root.to_owned(),
             source,
         })?;
         let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
-            WorkspaceError::InvalidLogicalPath {
+            WorkspaceCoreError::InvalidLogicalPath {
                 path: path.display().to_string(),
                 message: "knowledge file path is not valid UTF-8".to_string(),
             }

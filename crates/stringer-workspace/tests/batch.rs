@@ -181,6 +181,37 @@ async fn force_workspace_open_clears_existing_batch_claims() {
 }
 
 #[tokio::test]
+async fn batch_count_rejects_malformed_batch_claim_files() {
+    let root = TempRoot::new("batch-malformed-claim");
+    let source_root = root.path().join("source");
+    write_text(
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n",
+    );
+    let translations = root.path().join("translations");
+    export_translations(ExportTranslationsOptions {
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
+        settings: settings(),
+        force: false,
+    })
+    .await
+    .unwrap();
+    write_text(
+        &translations.join("batches/malformed.json"),
+        r#"{"batch_id":"malformed","entry_ids":["scaleform:Interface/Translations/MyMod_English.txt:$Title"]}"#,
+    );
+
+    let error = count_batch(CountBatchOptions {
+        workspace: utf8(&translations),
+        file: None,
+    })
+    .unwrap_err();
+
+    assert!(error.to_string().contains("failed to process JSON"));
+}
+
+#[tokio::test]
 async fn batch_file_filters_accept_windows_path_separators() {
     let root = TempRoot::new("batch-windows-file-filter");
     let source_root = root.path().join("source");

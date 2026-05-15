@@ -6,13 +6,14 @@ use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, Value, value};
 
-use crate::WorkspaceError;
-use crate::fsutil::{replace_file, temp_path};
-use crate::knowledge::{
+use crate::KnowledgeError;
+use crate::translations::{
     BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope, KnowledgeIndexSummary,
     build_knowledge_index,
 };
-use crate::settings::WorkspaceSettings;
+use stringer_workspace_core::WorkspaceCoreError;
+use stringer_workspace_core::WorkspaceSettings;
+use stringer_workspace_core::fsutil::{replace_file, temp_path};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KnowledgeTermUpsertOptions {
@@ -88,7 +89,7 @@ pub struct KnowledgeTermsEditSummary {
 
 pub fn upsert_knowledge_term(
     options: KnowledgeTermUpsertOptions,
-) -> Result<KnowledgeTermEditSummary, WorkspaceError> {
+) -> Result<KnowledgeTermEditSummary, KnowledgeError> {
     let id = options.term.id.clone();
     let summary = upsert_knowledge_terms(KnowledgeTermsUpsertOptions {
         workspace: options.workspace,
@@ -107,7 +108,7 @@ pub fn upsert_knowledge_term(
 
 pub fn upsert_knowledge_terms(
     options: KnowledgeTermsUpsertOptions,
-) -> Result<KnowledgeTermsEditSummary, WorkspaceError> {
+) -> Result<KnowledgeTermsEditSummary, KnowledgeError> {
     for term in &options.terms {
         validate_scope(term)?;
     }
@@ -140,12 +141,12 @@ pub fn upsert_knowledge_terms(
 
 pub fn delete_knowledge_term(
     options: KnowledgeTermDeleteOptions,
-) -> Result<KnowledgeTermEditSummary, WorkspaceError> {
+) -> Result<KnowledgeTermEditSummary, KnowledgeError> {
     let path = term_file_path(&options.workspace, options.file)?;
     let mut document = read_terms_document(&path)?;
     let terms = terms_array_mut(&mut document, &path)?;
     if remove_matching_terms(terms, &options.id) == 0 {
-        return Err(WorkspaceError::KnowledgeTermNotFound {
+        return Err(KnowledgeError::KnowledgeTermNotFound {
             path,
             id: options.id,
         });
@@ -164,7 +165,7 @@ pub fn delete_knowledge_term(
 fn term_file_path(
     workspace: &camino::Utf8Path,
     file: Option<Utf8PathBuf>,
-) -> Result<Utf8PathBuf, WorkspaceError> {
+) -> Result<Utf8PathBuf, KnowledgeError> {
     let path = match file {
         Some(file) if file.is_relative() => workspace.join(file),
         Some(file) => file,
@@ -173,23 +174,23 @@ fn term_file_path(
     if path_is_in_workspace_terms(&path, workspace) {
         return Ok(path);
     }
-    Err(WorkspaceError::InvalidKnowledgeTermFile {
+    Err(KnowledgeError::InvalidKnowledgeTermFile {
         path,
         message: "term files must be .toml files under the workspace knowledge/terms directory"
             .to_string(),
     })
 }
 
-fn read_terms_document(path: &camino::Utf8Path) -> Result<DocumentMut, WorkspaceError> {
+fn read_terms_document(path: &camino::Utf8Path) -> Result<DocumentMut, KnowledgeError> {
     if !path.exists() {
         return Ok(DocumentMut::new());
     }
-    let text = fs::read_to_string(path).map_err(|source| WorkspaceError::ReadFile {
+    let text = fs::read_to_string(path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.to_owned(),
         source,
     })?;
     text.parse::<DocumentMut>()
-        .map_err(|source| WorkspaceError::KnowledgeTermsToml {
+        .map_err(|source| KnowledgeError::KnowledgeTermsToml {
             path: path.to_owned(),
             source: Box::new(source),
         })
@@ -198,25 +199,25 @@ fn read_terms_document(path: &camino::Utf8Path) -> Result<DocumentMut, Workspace
 fn write_terms_document(
     path: &camino::Utf8Path,
     document: &DocumentMut,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), KnowledgeError> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|source| WorkspaceError::WriteFile {
+        fs::create_dir_all(parent).map_err(|source| WorkspaceCoreError::WriteFile {
             path: parent.to_owned(),
             source,
         })?;
     }
     let temp = temp_path(path, unique_temp_suffix());
-    fs::write(&temp, document.to_string()).map_err(|source| WorkspaceError::WriteFile {
+    fs::write(&temp, document.to_string()).map_err(|source| WorkspaceCoreError::WriteFile {
         path: temp.clone(),
         source,
     })?;
-    replace_file(&temp, path)
+    Ok(replace_file(&temp, path)?)
 }
 
 fn terms_array_mut<'a>(
     document: &'a mut DocumentMut,
     path: &camino::Utf8Path,
-) -> Result<&'a mut ArrayOfTables, WorkspaceError> {
+) -> Result<&'a mut ArrayOfTables, KnowledgeError> {
     if !document.as_table().contains_key("terms") {
         document["terms"] = Item::ArrayOfTables(ArrayOfTables::new());
     }
@@ -279,11 +280,11 @@ fn rebuild_index_if_requested(
     rebuild_index: bool,
     workspace: Utf8PathBuf,
     settings: Option<WorkspaceSettings>,
-) -> Result<Option<KnowledgeIndexSummary>, WorkspaceError> {
+) -> Result<Option<KnowledgeIndexSummary>, KnowledgeError> {
     if !rebuild_index {
         return Ok(None);
     }
-    let settings = settings.ok_or(WorkspaceError::MissingSetting { name: "settings" })?;
+    let settings = settings.ok_or(WorkspaceCoreError::MissingSetting { name: "settings" })?;
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace,
         settings,
@@ -292,10 +293,10 @@ fn rebuild_index_if_requested(
     .map(Some)
 }
 
-fn validate_scope(input: &KnowledgeTermInput) -> Result<(), WorkspaceError> {
+fn validate_scope(input: &KnowledgeTermInput) -> Result<(), KnowledgeError> {
     for key in input.scope.keys() {
         if !SUPPORTED_SCOPE_KEYS.contains(&key.as_str()) {
-            return Err(WorkspaceError::InvalidKnowledgeTermScope {
+            return Err(KnowledgeError::InvalidKnowledgeTermScope {
                 id: input.id.clone(),
                 key: key.clone(),
             });
@@ -344,8 +345,8 @@ fn unique_temp_suffix() -> String {
     format!("terms-{nanos}")
 }
 
-fn invalid_terms(path: &camino::Utf8Path, message: impl Into<String>) -> WorkspaceError {
-    WorkspaceError::InvalidKnowledgeTermsToml {
+fn invalid_terms(path: &camino::Utf8Path, message: impl Into<String>) -> KnowledgeError {
+    KnowledgeError::InvalidKnowledgeTermsToml {
         path: path.to_owned(),
         message: message.into(),
     }

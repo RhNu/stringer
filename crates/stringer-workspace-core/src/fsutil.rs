@@ -1,12 +1,12 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::WorkspaceError;
+use crate::WorkspaceCoreError;
 
-pub(crate) fn replace_file(temp: &Utf8Path, path: &Utf8Path) -> Result<(), WorkspaceError> {
+pub fn replace_file(temp: &Utf8Path, path: &Utf8Path) -> Result<(), WorkspaceCoreError> {
     match std::fs::rename(temp, path) {
         Ok(()) => Ok(()),
         Err(source) if path.exists() => replace_existing_file(temp, path, source),
-        Err(source) => Err(WorkspaceError::WriteFile {
+        Err(source) => Err(WorkspaceCoreError::WriteFile {
             path: path.to_owned(),
             source,
         }),
@@ -17,9 +17,9 @@ fn replace_existing_file(
     temp: &Utf8Path,
     path: &Utf8Path,
     original_error: std::io::Error,
-) -> Result<(), WorkspaceError> {
+) -> Result<(), WorkspaceCoreError> {
     let backup = temp_path(path, format!("backup-{}", crate::lock::unix_ms()));
-    std::fs::rename(path, &backup).map_err(|source| WorkspaceError::WriteFile {
+    std::fs::rename(path, &backup).map_err(|source| WorkspaceCoreError::WriteFile {
         path: path.to_owned(),
         source,
     })?;
@@ -30,7 +30,7 @@ fn replace_existing_file(
         }
         Err(source) => {
             let _ = std::fs::rename(&backup, path);
-            Err(WorkspaceError::WriteFile {
+            Err(WorkspaceCoreError::WriteFile {
                 path: path.to_owned(),
                 source: if source.kind() == std::io::ErrorKind::AlreadyExists {
                     original_error
@@ -42,7 +42,7 @@ fn replace_existing_file(
     }
 }
 
-pub(crate) fn temp_path(path: &Utf8Path, suffix: impl AsRef<str>) -> Utf8PathBuf {
+pub fn temp_path(path: &Utf8Path, suffix: impl AsRef<str>) -> Utf8PathBuf {
     let file_name = path.file_name().unwrap_or("workspace");
     path.with_file_name(format!(
         "{file_name}.tmp-{}-{}",

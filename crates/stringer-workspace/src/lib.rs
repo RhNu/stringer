@@ -2,18 +2,9 @@
 
 mod batch;
 mod error;
-mod fsutil;
 mod inspect;
-mod knowledge;
-mod knowledge_index;
-mod knowledge_index_layers;
-mod knowledge_lookup;
-mod knowledge_terms;
-mod lock;
 mod operations;
-mod package;
 mod paths;
-mod settings;
 
 pub use batch::{
     ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
@@ -31,32 +22,15 @@ pub use inspect::{
     inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
     inspect_workspace_files,
 };
-pub use knowledge::{
-    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope,
-    KnowledgeIndexSummary, KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers,
-    LookupKnowledgeOptions, ValidateTranslationsOptions, annotate_translations,
-    build_knowledge_index, load_knowledge_layers, lookup_knowledge, validate_translations,
-};
-pub use knowledge_lookup::{
-    KnowledgeLookup, KnowledgeLookupResult, LookupKnowledgeField, LookupKnowledgeMode,
-    LookupKnowledgeSource,
-};
-pub use knowledge_terms::{
-    KnowledgeTermDeleteOptions, KnowledgeTermEditSummary, KnowledgeTermInput, KnowledgeTermStatus,
-    KnowledgeTermUpsertOptions, KnowledgeTermsEditSummary, KnowledgeTermsUpsertOptions,
-    delete_knowledge_term, upsert_knowledge_term, upsert_knowledge_terms,
-};
 pub use operations::{
     ExportSummary, ExportTranslationsOptions, ImportSummary, ImportTranslationsOptions,
     export_translations, import_translations,
 };
-pub use package::{
-    SCHEMA_VERSION, TranslationManifest, TranslationManifestFile, TranslationMeta,
-    TranslationRecord, read_workspace_settings, read_workspace_source_root,
-};
-pub use settings::{
-    LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
-    default_config_path, game_release_name, language_name, load_global_knowledge_root,
-    load_workspace_settings, parse_game_release_name, parse_language_name,
-};
 pub use stringer_pipeline::PipelineEntryKind;
+pub use stringer_workspace_core::{
+    LoadWorkspaceSettingsOptions, SCHEMA_VERSION, TranslationManifest, TranslationManifestFile,
+    TranslationMeta, TranslationRecord, WorkspaceSettings, WorkspaceSettingsOverrides,
+    default_config_path, game_release_name, language_name, load_global_knowledge_root,
+    load_workspace_settings, parse_game_release_name, parse_language_name, read_workspace_settings,
+    read_workspace_source_root,
+};
