@@ -92,7 +92,7 @@ pub struct AdaptImportCommand {
         long,
         value_name = "MEMORY_JSONL",
         help = "Output Stringer memory JSONL path",
-        long_help = "Output memory JSONL path; omit to write under the configured global knowledge root."
+        long_help = "Output memory JSONL path; omit to write under the standard user knowledge directory."
     )]
     pub out: Option<Utf8PathBuf>,
     #[arg(

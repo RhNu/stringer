@@ -32,7 +32,7 @@ pub async fn adapt_import(request: AdaptImportRequest) -> Result<AdaptImportResp
         (write_memory_jsonl(&catalog, &output)?, "wrote", output)
     } else {
         let root = load_global_knowledge_root(None)?.ok_or(WorkspaceError::MissingSetting {
-            name: "knowledge.global_root",
+            name: "user_knowledge_root",
         })?;
         let output = default_adapt_memory_path(&root, &input)?;
         (merge_memory_jsonl(&catalog, &output)?, "merged", output)

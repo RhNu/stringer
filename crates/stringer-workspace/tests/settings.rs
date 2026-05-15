@@ -38,7 +38,10 @@ target_locale = "zh-Hans"
     assert_eq!(settings.asset_language, Language::English);
     assert_eq!(settings.source_locale, "en");
     assert_eq!(settings.target_locale, "ja");
-    assert_eq!(settings.global_knowledge_root, None);
+    assert_eq!(
+        settings.global_knowledge_root,
+        Some(utf8(&root.path().join("knowledge")))
+    );
 }
 
 #[test]
@@ -81,8 +84,8 @@ target_locale = "zh-Hans"
 }
 
 #[test]
-fn load_settings_rejects_project_config_global_knowledge_root() {
-    let root = TempRoot::new("settings-project-global-rejected");
+fn load_settings_ignores_legacy_project_knowledge_config() {
+    let root = TempRoot::new("settings-project-knowledge-ignored");
     let user_config = root.path().join("user/config.toml");
     let project_config = root.path().join("project/stringer.toml");
     write_text(
@@ -100,6 +103,8 @@ global_root = "user-knowledge"
     write_text(
         &project_config,
         r#"
+target_locale = "ja"
+
 [knowledge]
 global_root = "project-knowledge"
 "#,
@@ -110,33 +115,18 @@ global_root = "project-knowledge"
         project_config_path: Some(utf8(&project_config)),
         overrides: WorkspaceSettingsOverrides::default(),
     })
-    .unwrap_err()
-    .to_string();
+    .unwrap();
 
-    assert!(settings.contains("failed to parse TOML config"));
-    assert!(settings.contains("unknown field `knowledge`"));
-}
-
-#[test]
-fn load_global_knowledge_root_uses_configured_user_root_only() {
-    let root = TempRoot::new("settings-global-root");
-    let config = root.path().join("config/stringer.toml");
-    write_text(
-        &config,
-        r#"
-[knowledge]
-global_root = "knowledge"
-"#,
+    assert_eq!(settings.target_locale, "ja");
+    assert_eq!(
+        settings.global_knowledge_root,
+        Some(utf8(&root.path().join("user/knowledge")))
     );
-
-    let global = load_global_knowledge_root(Some(utf8(&config))).unwrap();
-
-    assert_eq!(global, Some(utf8(&root.path().join("config/knowledge"))));
 }
 
 #[test]
-fn load_global_knowledge_root_returns_none_without_configured_root() {
-    let root = TempRoot::new("settings-global-root-missing");
+fn load_global_knowledge_root_uses_standard_user_directory_without_configured_root() {
+    let root = TempRoot::new("settings-global-root-default");
     let config = root.path().join("config/stringer.toml");
     write_text(
         &config,
@@ -150,5 +140,27 @@ target_locale = "zh-Hans"
 
     let global = load_global_knowledge_root(Some(utf8(&config))).unwrap();
 
-    assert_eq!(global, None);
+    assert_eq!(global, Some(utf8(&root.path().join("config/knowledge"))));
+}
+
+#[test]
+fn load_global_knowledge_root_ignores_legacy_configured_root() {
+    let root = TempRoot::new("settings-global-root-legacy");
+    let config = root.path().join("config/stringer.toml");
+    write_text(
+        &config,
+        r#"
+game_release = "SkyrimSe"
+asset_language = "English"
+source_locale = "en"
+target_locale = "zh-Hans"
+
+[knowledge]
+global_root = "custom-knowledge"
+"#,
+    );
+
+    let global = load_global_knowledge_root(Some(utf8(&config))).unwrap();
+
+    assert_eq!(global, Some(utf8(&root.path().join("config/knowledge"))));
 }

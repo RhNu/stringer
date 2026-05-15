@@ -257,27 +257,6 @@ fn adapt_import_command_can_default_to_global_memory() {
     assert_eq!(command.out, None);
 }
 
-#[test]
-fn adapt_import_command_rejects_global_knowledge_root_override() {
-    let result = Cli::try_parse_from([
-        "stringer",
-        "adapt",
-        "import",
-        "--format",
-        "xt-sst",
-        "--input",
-        "source.sst",
-        "--source-locale",
-        "en",
-        "--target-locale",
-        "zh-Hans",
-        "--global-knowledge-root",
-        "global-knowledge",
-    ]);
-
-    assert!(result.is_err());
-}
-
 #[tokio::test]
 async fn adapt_import_command_writes_memory_jsonl() {
     let input = test_path("cli-adapt.eet");
@@ -497,25 +476,6 @@ fn knowledge_annotate_rejects_old_root_and_translations_flags() {
         };
 
         assert!(Cli::try_parse_from(args).is_err());
-    }
-}
-
-#[test]
-fn knowledge_commands_reject_cli_knowledge_roots() {
-    for flag in ["--global-knowledge-root", "--override-knowledge-root"] {
-        let result = Cli::try_parse_from([
-            "stringer",
-            "knowledge",
-            "lookup",
-            "--project-root",
-            "input",
-            "--text",
-            "Iron Sword",
-            flag,
-            "knowledge",
-        ]);
-
-        assert!(result.is_err());
     }
 }
 

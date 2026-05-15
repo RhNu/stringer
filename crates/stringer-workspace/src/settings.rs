@@ -37,22 +37,14 @@ struct ConfigFile {
     asset_language: Option<String>,
     source_locale: Option<String>,
     target_locale: Option<String>,
-    #[serde(default)]
-    knowledge: KnowledgeConfigFile,
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 struct ProjectConfigFile {
     game_release: Option<String>,
     asset_language: Option<String>,
     source_locale: Option<String>,
     target_locale: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct KnowledgeConfigFile {
-    global_root: Option<String>,
 }
 
 struct LoadedConfigFile {
@@ -116,7 +108,7 @@ pub fn load_workspace_settings(
             user_config.target_locale,
             "target_locale",
         )?,
-        global_knowledge_root: global_knowledge_root(user.path.as_ref(), user_config.knowledge),
+        global_knowledge_root: user_knowledge_root(user.path.as_ref()),
     })
 }
 
@@ -177,13 +169,10 @@ pub fn load_global_knowledge_root(
         return Ok(None);
     };
     if !path.exists() && !explicit {
-        return Ok(None);
+        return Ok(user_knowledge_root(Some(&path)));
     }
     let loaded = load_user_config_file(Some(path))?;
-    Ok(global_knowledge_root(
-        loaded.path.as_ref(),
-        loaded.config.knowledge,
-    ))
+    Ok(user_knowledge_root(loaded.path.as_ref()))
 }
 
 #[cfg(windows)]
@@ -218,16 +207,10 @@ fn take_setting(
     Ok(value)
 }
 
-fn global_knowledge_root(
-    config_path: Option<&Utf8PathBuf>,
-    knowledge: KnowledgeConfigFile,
-) -> Option<Utf8PathBuf> {
-    let config_dir = config_path.and_then(|path| path.parent().map(Utf8PathBuf::from));
-    let root = Utf8PathBuf::from(knowledge.global_root?);
-    if root.is_absolute() {
-        return Some(root);
-    }
-    config_dir.map(|dir| dir.join(root))
+fn user_knowledge_root(config_path: Option<&Utf8PathBuf>) -> Option<Utf8PathBuf> {
+    config_path
+        .and_then(|path| path.parent().map(Utf8PathBuf::from))
+        .map(|dir| dir.join("knowledge"))
 }
 
 pub fn parse_game_release_name(value: &str) -> Result<GameRelease, WorkspaceError> {

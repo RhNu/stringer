@@ -60,4 +60,4 @@ Import xTranslator or ESP-ESM Translator resources as memory before bulk annotat
 stringer adapt import --format xt-sst --input <OLD_TRANSLATION.sst> --source-locale en --target-locale zh-Hans --game SkyrimSe
 ```
 
-When `--out` is omitted, the command writes to the configured user global knowledge root.
+When `--out` is omitted, the command writes under the standard user knowledge directory.

@@ -176,12 +176,9 @@ game_release = "SkyrimSe"
 asset_language = "English"
 source_locale = "en"
 target_locale = "zh-Hans"
-
-[knowledge]
-global_root = "knowledge"
 ```
 
-用户配置中的 `[knowledge].global_root` 是全局知识库位置；没有显式配置时就没有用户全局知识库。项目 `stringer.toml` 只能配置 `game_release`、`asset_language`、`source_locale` 和 `target_locale`，出现 `[knowledge]` 配置会报错。
+用户知识库位置固定为默认用户目录下的 `knowledge/`：Windows 为 `Documents/My Games/Stringer/knowledge`，其他平台为用户配置目录下的 `stringer/knowledge`。项目 `stringer.toml` 只读取 `game_release`、`asset_language`、`source_locale` 和 `target_locale`。
 
 `workspace open` 会读取 `--root` 下的 `stringer.toml`。`knowledge lookup` 和 `knowledge index rebuild` 会读取 `--project-root` 下的 `stringer.toml`；省略 `--project-root` 时使用当前目录。
 
@@ -287,7 +284,7 @@ cargo run -p stringer-cli -- knowledge term delete `
 
 `adapt import` 用于把已有翻译资源导入为 Stringer 翻译记忆 JSONL。它不会改模组文件，也不会直接改翻译包；它只读取外部资源，输出可放进 `knowledge/memory/` 的记忆文件，随后由 `knowledge annotate` 和 `knowledge lookup` 使用。
 
-省略 `--out` 时，`adapt import` 会写入用户配置的 `[knowledge].global_root` 下的 `memory/adapt/`；如果用户配置没有 `global_root`，命令会报错。
+省略 `--out` 时，`adapt import` 会写入标准用户知识库目录下的 `memory/adapt/`。
 
 支持格式：
 
