@@ -484,3 +484,70 @@ async fn writes_utf8_strings_for_skyrim_se_english_when_text_needs_unicode() {
 
     assert_eq!(parsed.get(1), Some("钢剑"));
 }
+
+#[tokio::test]
+async fn filters_empty_localized_record_sources() {
+    let plugin = build_plugin(
+        localized_header(),
+        vec![
+            build_major(
+                "WEAP",
+                0x800,
+                0,
+                vec![build_subrecord("FULL", &1u32.to_le_bytes())],
+            ),
+            build_major(
+                "ARMO",
+                0x801,
+                0,
+                vec![build_subrecord("FULL", &2u32.to_le_bytes())],
+            ),
+        ],
+    );
+    let mut strings = StringsFile::new(StringsKind::Normal, Language::English);
+    strings.insert(1, "");
+    strings.insert(2, "Iron Armor");
+    let bundle = FileBundle::new(vec![
+        FileAsset::new("Data/MyMod.esp", Bytes::from(plugin)),
+        write_strings_file(
+            "Data/Strings/MyMod_English.STRINGS",
+            &strings,
+            GameRelease::SkyrimSe,
+        )
+        .unwrap(),
+    ]);
+
+    let localization = read_localization(
+        bundle,
+        ReadOptions::new(GameRelease::SkyrimSe, Language::English),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(localization.entries().len(), 1);
+    assert_eq!(localization.entries()[0].text(), "Iron Armor");
+}
+
+#[tokio::test]
+async fn filters_whitespace_embedded_record_sources() {
+    let plugin = build_plugin_with_flags(
+        0,
+        Vec::new(),
+        vec![build_major(
+            "WEAP",
+            0x800,
+            0,
+            vec![build_subrecord("FULL", b"  \t \0")],
+        )],
+    );
+    let bundle = FileBundle::new(vec![FileAsset::new("Data/MyMod.esp", Bytes::from(plugin))]);
+
+    let localization = read_localization(
+        bundle,
+        ReadOptions::new(GameRelease::SkyrimSe, Language::English),
+    )
+    .await
+    .unwrap();
+
+    assert!(localization.entries().is_empty());
+}

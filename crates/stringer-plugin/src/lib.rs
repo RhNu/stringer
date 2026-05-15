@@ -2,6 +2,7 @@
 
 mod encoding;
 mod error;
+mod filter;
 mod high_level;
 mod plugin;
 mod registry;

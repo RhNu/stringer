@@ -5,8 +5,9 @@ use stringer_core::{
     StringEntryContext, StringEntrySource, StringEntryView,
 };
 use tokio::task;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 
+use crate::filter::{PluginStringFilter, PluginStringFilterInput};
 use crate::{
     GameRelease, Language, ParsePluginOptions, ParsedPlugin, PluginError, StringsFile, StringsKind,
     parse_plugin_file, parse_strings_file, write_plugin_file, write_strings_file,
@@ -190,6 +191,7 @@ pub async fn read_localization(
 
     let mut entries = Vec::new();
     let mut bindings = Vec::new();
+    let filter = PluginStringFilter::default_rules();
     for (plugin_entry_index, plugin_entry) in plugin.entries().iter().enumerate() {
         let kind = plugin_entry.strings_kind();
         let (string_id, text) = if let Some(string_id) = plugin_entry.string_id() {
@@ -210,6 +212,32 @@ pub async fn read_localization(
                 plugin_entry.embedded_text().unwrap_or_default().to_string(),
             )
         };
+        let storage = if plugin.is_localized() {
+            PluginStringStorage::Localized
+        } else {
+            PluginStringStorage::Embedded
+        };
+        let filter_input = PluginStringFilterInput {
+            text: &text,
+            path: plugin.path(),
+            record_type: plugin_entry.record_type(),
+            form_id: plugin_entry.form_id(),
+            subrecord: plugin_entry.subrecord(),
+            field_source: plugin_entry.source(),
+            storage,
+            strings_kind: kind,
+            string_id,
+        };
+        if let Some(reason) = filter.evaluate(&filter_input) {
+            trace!(
+                ?reason,
+                record_type = plugin_entry.record_type(),
+                form_id = plugin_entry.form_id(),
+                subrecord = plugin_entry.subrecord(),
+                "filtered plugin string"
+            );
+            continue;
+        }
         let entry_id = plugin_entry_id(plugin.path(), plugin_entry, plugin_entry_index, string_id);
         bindings.push(PluginEntryBinding {
             entry_id: entry_id.clone(),
@@ -227,11 +255,7 @@ pub async fn read_localization(
                 subrecord: plugin_entry.subrecord().to_string(),
                 strings_kind: kind.extension().to_string(),
                 field_source: localized_field_source_name(plugin_entry.source()).to_string(),
-                storage: if plugin.is_localized() {
-                    PluginStringStorage::Localized
-                } else {
-                    PluginStringStorage::Embedded
-                },
+                storage,
                 string_id,
             }),
             StringEntryContext::default(),
