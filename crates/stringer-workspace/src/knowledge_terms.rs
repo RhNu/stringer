@@ -8,7 +8,10 @@ use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, Value, value};
 
 use crate::WorkspaceError;
 use crate::fsutil::{replace_file, temp_path};
-use crate::knowledge::{BuildKnowledgeIndexOptions, KnowledgeIndexSummary, build_knowledge_index};
+use crate::knowledge::{
+    BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope, KnowledgeIndexSummary,
+    build_knowledge_index,
+};
 use crate::settings::WorkspaceSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -284,6 +287,7 @@ fn rebuild_index_if_requested(
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace,
         settings,
+        scope: KnowledgeIndexBuildScope::Workspace,
     })
     .map(Some)
 }

@@ -6,6 +6,7 @@ mod fsutil;
 mod inspect;
 mod knowledge;
 mod knowledge_index;
+mod knowledge_index_layers;
 mod knowledge_lookup;
 mod knowledge_terms;
 mod lock;
@@ -31,10 +32,10 @@ pub use inspect::{
     inspect_workspace_files,
 };
 pub use knowledge::{
-    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexSummary,
-    KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers, LookupKnowledgeOptions,
-    ValidateTranslationsOptions, annotate_translations, build_knowledge_index,
-    load_knowledge_layers, lookup_knowledge, validate_translations,
+    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope,
+    KnowledgeIndexSummary, KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers,
+    LookupKnowledgeOptions, ValidateTranslationsOptions, annotate_translations,
+    build_knowledge_index, load_knowledge_layers, lookup_knowledge, validate_translations,
 };
 pub use knowledge_lookup::{
     KnowledgeLookup, KnowledgeLookupResult, LookupKnowledgeField, LookupKnowledgeMode,

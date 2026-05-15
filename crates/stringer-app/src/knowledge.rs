@@ -1,10 +1,11 @@
 use stringer_workspace::{
-    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeLookup, KnowledgeSummary,
-    KnowledgeTermDeleteOptions, KnowledgeTermEditSummary, KnowledgeTermInput as WorkspaceTermInput,
-    KnowledgeTermStatus, KnowledgeTermsEditSummary, KnowledgeTermsUpsertOptions,
-    LookupKnowledgeMode, LookupKnowledgeOptions, ValidateTranslationsOptions, WorkspaceError,
-    annotate_translations, build_knowledge_index, delete_knowledge_term, lookup_knowledge,
-    read_workspace_settings, upsert_knowledge_terms, validate_translations,
+    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope,
+    KnowledgeLookup, KnowledgeSummary, KnowledgeTermDeleteOptions, KnowledgeTermEditSummary,
+    KnowledgeTermInput as WorkspaceTermInput, KnowledgeTermStatus, KnowledgeTermsEditSummary,
+    KnowledgeTermsUpsertOptions, LookupKnowledgeMode, LookupKnowledgeOptions,
+    ValidateTranslationsOptions, WorkspaceError, annotate_translations, build_knowledge_index,
+    delete_knowledge_term, lookup_knowledge, read_workspace_settings, upsert_knowledge_terms,
+    validate_translations,
 };
 
 use crate::dto::{
@@ -64,6 +65,7 @@ pub fn knowledge_index_rebuild(
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace,
         settings,
+        scope: KnowledgeIndexBuildScope::All,
     })?;
     Ok(KnowledgeIndexRebuildResponse {
         files: summary.files,

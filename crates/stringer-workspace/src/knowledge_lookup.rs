@@ -1,14 +1,14 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use regex::{Regex, RegexBuilder};
 use rusqlite::{Connection, params, params_from_iter, types::Value};
 use serde::Serialize;
 use stringer_pipeline::PipelineDiagnostic;
 
 use crate::WorkspaceError;
-use crate::knowledge_index::normalize_lookup_text;
+use crate::knowledge_index::{IndexedKnowledgeId, normalize_lookup_text};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -83,11 +83,49 @@ pub(crate) struct KnowledgeSearchOutput {
     pub results: Vec<KnowledgeLookupResult>,
 }
 
-pub(crate) fn search_knowledge_index(
-    path: &Utf8Path,
+pub(crate) fn search_knowledge_indexes(
+    paths: &[Utf8PathBuf],
     options: &KnowledgeSearchOptions<'_>,
+    suppressed_items: &BTreeSet<IndexedKnowledgeId>,
+) -> Result<KnowledgeSearchOutput, WorkspaceError> {
+    search_ranked_knowledge_indexes(paths, options, suppressed_items)
+}
+
+fn search_ranked_knowledge_indexes(
+    paths: &[Utf8PathBuf],
+    options: &KnowledgeSearchOptions<'_>,
+    suppressed_items: &BTreeSet<IndexedKnowledgeId>,
 ) -> Result<KnowledgeSearchOutput, WorkspaceError> {
     let regex = lookup_regex(options)?;
+    let mut ranked = Vec::new();
+    for path in paths {
+        ranked.extend(ranked_results_for_index(
+            path,
+            options,
+            regex.as_ref(),
+            suppressed_items,
+        )?);
+    }
+    ranked.sort_by(compare_ranked_results);
+
+    let total_matches = ranked.len();
+    let results = ranked
+        .into_iter()
+        .take(options.limit)
+        .map(|ranked| ranked.result)
+        .collect();
+    Ok(KnowledgeSearchOutput {
+        total_matches,
+        results,
+    })
+}
+
+fn ranked_results_for_index(
+    path: &Utf8Path,
+    options: &KnowledgeSearchOptions<'_>,
+    regex: Option<&Regex>,
+    suppressed_items: &BTreeSet<IndexedKnowledgeId>,
+) -> Result<Vec<RankedResult>, WorkspaceError> {
     let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
         path: path.to_owned(),
         source,
@@ -95,9 +133,16 @@ pub(crate) fn search_knowledge_index(
     let rows = candidate_rows(&connection, path, options)?;
     let mut ranked = Vec::new();
     for mut row in rows {
+        if suppressed_items.contains(&IndexedKnowledgeId {
+            kind: row.item_kind.clone(),
+            id: row.id.clone(),
+            layer: row.layer.clone(),
+        }) {
+            continue;
+        }
         row.aliases = aliases_for_row(&connection, path, row.rowid)?;
         row.scope = scope_for_row(&connection, path, row.rowid)?;
-        let Some(field_match) = best_index_row_match(&row, options, regex.as_ref()) else {
+        let Some(field_match) = best_index_row_match(&row, options, regex) else {
             continue;
         };
         let context = scope_match(options.context, &row.scope);
@@ -128,18 +173,7 @@ pub(crate) fn search_knowledge_index(
             },
         });
     }
-    ranked.sort_by(compare_ranked_results);
-
-    let total_matches = ranked.len();
-    let results = ranked
-        .into_iter()
-        .take(options.limit)
-        .map(|ranked| ranked.result)
-        .collect();
-    Ok(KnowledgeSearchOutput {
-        total_matches,
-        results,
-    })
+    Ok(ranked)
 }
 
 #[derive(Debug, Clone)]

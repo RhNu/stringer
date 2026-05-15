@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params, params_from_iter, types::Value};
 use stringer_pipeline::{
     KnowledgeBase, MemoryQuality, PipelineDiagnostic, PipelineDiagnosticSeverity,
 };
@@ -12,8 +12,9 @@ use crate::WorkspaceError;
 use crate::knowledge::KnowledgeIndexSummary;
 use crate::settings::{WorkspaceSettings, game_release_name};
 
-pub(crate) const KNOWLEDGE_INDEX_SCHEMA_VERSION: &str = "2";
+pub(crate) const KNOWLEDGE_INDEX_SCHEMA_VERSION: &str = "3";
 const INDEX_COMPLETE_KEY: &str = "index_complete";
+const KNOWLEDGE_ID_MATCH_CHUNK: usize = 250;
 
 type IndexedFileManifest = BTreeMap<String, (String, String, u64, Option<i64>)>;
 
@@ -36,6 +37,13 @@ pub(crate) struct KnowledgeSourceFile {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct KnowledgeIndexState {
     pub(crate) path: Utf8PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct IndexedKnowledgeId {
+    pub(crate) kind: String,
+    pub(crate) id: String,
+    pub(crate) layer: String,
 }
 
 pub(crate) fn knowledge_index_path(root: &Utf8Path) -> Utf8PathBuf {
@@ -140,6 +148,8 @@ fn build_replacement_index(
     create_schema(&transaction, path)?;
     write_source_files(&transaction, path, files)?;
     write_items(&transaction, path, knowledge)?;
+    populate_fts(&transaction, path)?;
+    write_knowledge_ids(&transaction, path, knowledge)?;
     write_diagnostics(&transaction, path, knowledge)?;
     write_meta(&transaction, settings, path)?;
     let fts_rows = fts_row_count(&transaction, path)?;
@@ -226,6 +236,95 @@ pub(crate) fn read_index_diagnostics(
     Ok(diagnostics)
 }
 
+pub(crate) fn read_index_knowledge_ids(
+    path: &Utf8Path,
+) -> Result<Vec<IndexedKnowledgeId>, WorkspaceError> {
+    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut statement = connection
+        .prepare("SELECT kind, id, layer FROM knowledge_ids ORDER BY layer, kind, id")
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(IndexedKnowledgeId {
+                kind: row.get::<_, String>(0)?,
+                id: row.get::<_, String>(1)?,
+                layer: row.get::<_, String>(2)?,
+            })
+        })
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    let mut ids = Vec::new();
+    for row in rows {
+        ids.push(row.map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?);
+    }
+    Ok(ids)
+}
+
+pub(crate) fn read_matching_index_knowledge_ids(
+    path: &Utf8Path,
+    keys: &BTreeSet<(String, String)>,
+) -> Result<Vec<IndexedKnowledgeId>, WorkspaceError> {
+    if keys.is_empty() {
+        return Ok(Vec::new());
+    }
+    let connection = Connection::open(path).map_err(|source| WorkspaceError::Sqlite {
+        path: path.to_owned(),
+        source,
+    })?;
+    let mut ids = Vec::new();
+    let keys = keys.iter().cloned().collect::<Vec<_>>();
+    for chunk in keys.chunks(KNOWLEDGE_ID_MATCH_CHUNK) {
+        let predicates = (0..chunk.len())
+            .map(|_| "(kind = ? AND id = ?)")
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let sql = format!("SELECT kind, id, layer FROM knowledge_ids WHERE {predicates}");
+        let mut values = Vec::with_capacity(chunk.len() * 2);
+        for (kind, id) in chunk {
+            values.push(Value::Text(kind.clone()));
+            values.push(Value::Text(id.clone()));
+        }
+        let mut statement = connection
+            .prepare(&sql)
+            .map_err(|source| WorkspaceError::Sqlite {
+                path: path.to_owned(),
+                source,
+            })?;
+        let rows = statement
+            .query_map(params_from_iter(values), |row| {
+                Ok(IndexedKnowledgeId {
+                    kind: row.get::<_, String>(0)?,
+                    id: row.get::<_, String>(1)?,
+                    layer: row.get::<_, String>(2)?,
+                })
+            })
+            .map_err(|source| WorkspaceError::Sqlite {
+                path: path.to_owned(),
+                source,
+            })?;
+        for row in rows {
+            ids.push(row.map_err(|source| WorkspaceError::Sqlite {
+                path: path.to_owned(),
+                source,
+            })?);
+        }
+    }
+    ids.sort();
+    ids.dedup();
+    Ok(ids)
+}
+
 pub(crate) fn normalize_lookup_text(value: &str) -> String {
     value
         .split_whitespace()
@@ -254,8 +353,7 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Workspa
                 layer TEXT NOT NULL,
                 kind TEXT NOT NULL,
                 size INTEGER NOT NULL,
-                modified_unix_ms INTEGER,
-                fingerprint TEXT NOT NULL
+                modified_unix_ms INTEGER
             );
             CREATE TABLE items(
                 rowid INTEGER PRIMARY KEY,
@@ -293,11 +391,17 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Workspa
                 layer TEXT,
                 rule_id TEXT
             );
+            CREATE TABLE knowledge_ids(
+                kind TEXT NOT NULL,
+                id TEXT NOT NULL,
+                layer TEXT NOT NULL
+            );
             CREATE INDEX idx_items_kind_locale ON items(item_kind, source_locale, target_locale);
             CREATE INDEX idx_items_source_norm ON items(source_norm);
             CREATE INDEX idx_items_target_norm ON items(target_norm);
             CREATE INDEX idx_aliases_alias_norm ON aliases(alias_norm);
             CREATE INDEX idx_scope_item_key ON item_scope(item_rowid, key);
+            CREATE INDEX idx_knowledge_ids_kind_id ON knowledge_ids(kind, id);
             CREATE VIRTUAL TABLE items_fts USING fts5(
                 source_norm,
                 target_norm,
@@ -352,8 +456,8 @@ fn write_source_files(
         connection
             .execute(
                 concat!(
-                    "INSERT INTO source_files(path, layer, kind, size, modified_unix_ms, fingerprint) ",
-                    "VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+                    "INSERT INTO source_files(path, layer, kind, size, modified_unix_ms) ",
+                    "VALUES (?1, ?2, ?3, ?4, ?5)"
                 ),
                 params![
                     file.path.as_str(),
@@ -361,10 +465,6 @@ fn write_source_files(
                     file_kind_name(file.kind),
                     file.size as i64,
                     file.modified_unix_ms,
-                    fingerprint(&fs::read(&file.path).map_err(|source| WorkspaceError::ReadFile {
-                        path: file.path.clone(),
-                        source,
-                    })?),
                 ],
             )
             .map_err(|source| WorkspaceError::Sqlite {
@@ -503,16 +603,53 @@ fn insert_item(
             source,
         })?;
     let rowid = connection.last_insert_rowid();
+    Ok(rowid)
+}
+
+fn populate_fts(connection: &Connection, path: &Utf8Path) -> Result<(), WorkspaceError> {
     connection
         .execute(
-            "INSERT INTO items_fts(rowid, source_norm, target_norm, alias_norm) SELECT rowid, source_norm, target_norm, alias_norm FROM items WHERE rowid = ?1",
-            params![rowid],
+            "INSERT INTO items_fts(rowid, source_norm, target_norm, alias_norm) SELECT rowid, source_norm, target_norm, alias_norm FROM items",
+            [],
         )
         .map_err(|source| WorkspaceError::Sqlite {
             path: path.to_owned(),
             source,
         })?;
-    Ok(rowid)
+    Ok(())
+}
+
+fn write_knowledge_ids(
+    connection: &Connection,
+    path: &Utf8Path,
+    knowledge: &KnowledgeBase,
+) -> Result<(), WorkspaceError> {
+    for term in knowledge.terms() {
+        insert_knowledge_id(connection, path, "term", term.id(), term.layer())?;
+    }
+    for rule in knowledge.rules() {
+        insert_knowledge_id(connection, path, "rule", rule.id(), rule.layer())?;
+    }
+    Ok(())
+}
+
+fn insert_knowledge_id(
+    connection: &Connection,
+    path: &Utf8Path,
+    kind: &str,
+    id: &str,
+    layer: &str,
+) -> Result<(), WorkspaceError> {
+    connection
+        .execute(
+            "INSERT INTO knowledge_ids(kind, id, layer) VALUES (?1, ?2, ?3)",
+            params![kind, id, layer],
+        )
+        .map_err(|source| WorkspaceError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })?;
+    Ok(())
 }
 
 fn insert_scope(
@@ -687,26 +824,12 @@ fn replace_file(temp_path: &std::path::Path, path: &std::path::Path) -> std::io:
 
 fn settings_fingerprint(settings: &WorkspaceSettings) -> String {
     format!(
-        "game={};asset={};source={};target={};global={}",
+        "game={};asset={};source={};target={}",
         game_release_name(settings.game_release),
         settings.asset_language.full_name(),
         settings.source_locale,
         settings.target_locale,
-        settings
-            .global_knowledge_root
-            .as_ref()
-            .map(|path| path.as_str())
-            .unwrap_or("")
     )
-}
-
-fn fingerprint(bytes: &[u8]) -> String {
-    let mut hash = 0xcbf29ce484222325u64;
-    for byte in bytes {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    format!("{hash:016x}")
 }
 
 fn modified_unix_ms(modified: std::time::SystemTime) -> Option<i64> {

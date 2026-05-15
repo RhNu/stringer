@@ -3,10 +3,11 @@ use std::fs;
 use serde_json::Value;
 use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ClaimBatchOptions,
-    ExportTranslationsOptions, ImportTranslationsOptions, LookupKnowledgeField,
-    LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource, PipelineEntryKind,
-    ValidateTranslationsOptions, WorkspaceSettings, annotate_translations, build_knowledge_index,
-    claim_batch, export_translations, import_translations, lookup_knowledge, validate_translations,
+    ExportTranslationsOptions, ImportTranslationsOptions, KnowledgeIndexBuildScope,
+    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
+    PipelineEntryKind, ValidateTranslationsOptions, WorkspaceSettings, annotate_translations,
+    build_knowledge_index, claim_batch, export_translations, import_translations, lookup_knowledge,
+    validate_translations,
 };
 
 #[allow(dead_code)]
@@ -464,6 +465,7 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
     assert_eq!(summary.files, 1);
@@ -526,6 +528,7 @@ fn lookup_refreshes_changed_knowledge_index_without_stale_diagnostic() {
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
     write_term(&terms, "skyrim.weapon.iron_sword", "熟铁剑");
@@ -632,6 +635,7 @@ fn build_index_preserves_duplicate_memory_ids_across_layers() {
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
+        scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
 
@@ -652,6 +656,7 @@ fn fresh_index_preserves_duplicate_memory_ids_across_files_in_same_layer() {
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
 
