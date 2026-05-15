@@ -59,6 +59,10 @@ cargo run -p stringer-cli -- workspace batch count `
   --workspace path/to/translations `
   --json
 
+cargo run -p stringer-cli -- workspace inspect diagnostics `
+  --workspace path/to/translations `
+  --severity warning
+
 cargo run -p stringer-cli -- workspace batch claim `
   --workspace path/to/translations `
   --limit 50
@@ -121,7 +125,35 @@ translations/
 
 `workspace finalize` 只读取 `id` 和 `translation`。`hints`、`diagnostics` 和其他扩展字段不会影响写回。
 
-直接编辑 `entries/**/*.jsonl` 仍可作为人工 fallback，但推荐 Agent 使用 `workspace batch count/claim/apply/release`，避免破坏 JSONL 格式或频繁逐行调用 CLI。
+直接编辑 `entries/**/*.jsonl` 仍可作为人工 fallback。Agent 应优先使用 `workspace inspect ...` 做只读查看和审阅，并使用 `workspace batch count/claim/apply/release` 写入翻译，避免破坏 JSONL 格式或频繁逐行调用 CLI。
+
+## 工作区只读查看
+
+`workspace inspect` 提供结构化 JSON 输出，用于让 Agent 查看工作区而不直接读取 `workspace.json`、`entries/**/*.jsonl` 或 `batches/*.json`：
+
+```powershell
+cargo run -p stringer-cli -- workspace inspect files `
+  --workspace path/to/translations
+
+cargo run -p stringer-cli -- workspace inspect entries `
+  --workspace path/to/translations `
+  --status diagnostic `
+  --limit 50
+
+cargo run -p stringer-cli -- workspace inspect entry `
+  --workspace path/to/translations `
+  --id "plugin:Example.esp:WEAP:0x00001234:FULL:0"
+
+cargo run -p stringer-cli -- workspace inspect batch `
+  --workspace path/to/translations `
+  --batch-id b1770000000000-1234
+
+cargo run -p stringer-cli -- workspace inspect diagnostics `
+  --workspace path/to/translations `
+  --severity warning
+```
+
+`entries --status` 支持 `all`、`empty`、`memory`、`translated`、`claimed` 和 `diagnostic`。`diagnostics --severity` 支持 `all`、`error`、`warning` 和 `info`。Inspect 命令只读，不会创建 claim、释放 batch 或写入译文。
 
 ## 配置
 
@@ -322,6 +354,7 @@ cargo run -p stringer-cli -- knowledge term delete --help
 
 - `workspace open`：扫描模组根目录，打开翻译工作区。
 - `workspace finalize`：读取翻译工作区，把译文写到覆盖目录。
+- `workspace inspect`：只读查看 entry files、条目、batch 和 diagnostics，默认输出 JSON。
 - `adapt import`：把 EET、EET XML、EET JSON 或 xTranslator SST 转成翻译记忆 JSONL。
 - `knowledge annotate`：给翻译工作区写入术语、记忆和知识提示，默认自动填充高置信记忆；需要只写提示时加 `--skip-fill-memory`。
 - `knowledge validate`：重算诊断信息，检查术语、禁用译法、占位符、空译文等风险。
@@ -338,6 +371,8 @@ cargo run -p stringer-mcp -- serve
 ```
 
 术语编辑对应 MCP tools：
+
+- `workspace_inspect_files`、`workspace_inspect_entries`、`workspace_inspect_entry`、`workspace_inspect_batch`、`workspace_inspect_diagnostics`：只读查看工作区，不直接暴露原始 JSONL 文件操作。
 
 - `knowledge_term_upsert`：参数包含 `project_root`、可选 `file`、`term`、`rebuild_index` 和 `settings`。
 - `knowledge_term_delete`：参数包含 `project_root`、可选 `file`、`id`、`rebuild_index` 和 `settings`。

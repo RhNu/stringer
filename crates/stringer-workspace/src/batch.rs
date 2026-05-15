@@ -269,6 +269,25 @@ pub(crate) fn claimed_entry_ids(workspace: &Utf8Path) -> Result<BTreeSet<String>
     Ok(ids)
 }
 
+pub(crate) fn claimed_entry_batches(
+    workspace: &Utf8Path,
+) -> Result<BTreeMap<String, String>, WorkspaceError> {
+    let mut claims = BTreeMap::new();
+    for batch in read_batch_files(workspace)? {
+        for id in batch.entry_ids {
+            claims.insert(id, batch.batch_id.clone());
+        }
+    }
+    Ok(claims)
+}
+
+pub(crate) fn batch_entry_ids(
+    workspace: &Utf8Path,
+    batch_id: &str,
+) -> Result<Vec<String>, WorkspaceError> {
+    Ok(read_batch_file(workspace, batch_id)?.entry_ids)
+}
+
 fn validate_file_filter(
     package: &crate::package::TranslationPackageRecords,
     file: Option<&str>,

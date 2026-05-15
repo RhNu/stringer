@@ -7,7 +7,7 @@ description: Use when agent needs to operate Stringer CLI or MCP server for Beth
 
 ## Core Rules
 
-- Prefer Stringer batch commands or MCP batch tools for agent edits. Use direct JSONL editing only as a fallback.
+- Prefer Stringer inspect, batch, and MCP tools. Use inspect tools for read-only review, batch tools for edits, and direct JSONL editing only as a fallback.
 - Preserve `id`, `source`, `context`, `hints`, and `diagnostics`. Write translations through `translation` only.
 - Use `knowledge lookup` for uncertain names, terminology, repeated phrases, or diagnostic review.
 - Use `knowledge term upsert/delete` or MCP `knowledge_term_upsert/delete` for project terminology edits; do not hand-edit term TOML unless the command/tool is unavailable.
@@ -18,7 +18,7 @@ description: Use when agent needs to operate Stringer CLI or MCP server for Beth
 
 1. Open or receive a workspace.
 2. Annotate it with project knowledge.
-3. Count remaining work.
+3. Inspect files, remaining work, and diagnostics without reading raw JSONL.
 4. Claim a batch, translate with evidence from hints and lookup, then apply the batch.
 5. Validate the workspace and review diagnostics.
 6. Finalize to an override directory only after validation.

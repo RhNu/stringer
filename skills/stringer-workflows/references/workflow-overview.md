@@ -8,6 +8,7 @@ Run commands with full settings when possible:
 stringer workspace open --root <MOD_ROOT> --workspace <WORKSPACE> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
 stringer knowledge annotate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
 stringer workspace batch count --workspace <WORKSPACE> --json
+stringer workspace inspect diagnostics --workspace <WORKSPACE> --severity warning
 stringer workspace batch claim --workspace <WORKSPACE> --limit 50
 stringer workspace batch apply --workspace <WORKSPACE> --input <PATCH_JSON>
 stringer knowledge validate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
@@ -26,6 +27,11 @@ Use MCP tools when the host exposes the Stringer server:
 | `workspace batch claim`   | `workspace_batch_claim`   |
 | `workspace batch apply`   | `workspace_batch_apply`   |
 | `workspace batch release` | `workspace_batch_release` |
+| `workspace inspect files` | `workspace_inspect_files` |
+| `workspace inspect entries` | `workspace_inspect_entries` |
+| `workspace inspect entry` | `workspace_inspect_entry` |
+| `workspace inspect batch` | `workspace_inspect_batch` |
+| `workspace inspect diagnostics` | `workspace_inspect_diagnostics` |
 | `adapt import`            | `adapt_import`            |
 | `knowledge annotate`      | `knowledge_annotate`      |
 | `knowledge validate`      | `knowledge_validate`      |
@@ -40,4 +46,4 @@ MCP results are structured JSON. Prefer them over parsing CLI text when both are
 
 `workspace open` writes `workspace.json`, `batches/`, and `entries/**/*.jsonl`.
 
-Agents should normally use batch tools. If direct JSONL inspection is needed, read `source`, `context`, `hints`, and `diagnostics`; write only `translation`.
+Agents should normally use inspect tools for read-only review and batch tools for edits. If direct JSONL inspection is needed as a fallback, read `source`, `context`, `hints`, and `diagnostics`; write only `translation`.

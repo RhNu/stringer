@@ -116,6 +116,130 @@ pub struct WorkspaceBatchReleaseResponse {
     pub released_entries: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInspectFilesRequest {
+    pub workspace: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInspectFilesResponse {
+    pub files: Vec<WorkspaceInspectFileResponse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInspectFileResponse {
+    pub path: String,
+    pub kind: String,
+    pub asset_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InspectEntryStatusInput {
+    #[default]
+    All,
+    Empty,
+    Memory,
+    Translated,
+    Claimed,
+    Diagnostic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInspectEntriesRequest {
+    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub status: InspectEntryStatusInput,
+    #[serde(default = "default_inspect_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceInspectEntriesResponse {
+    pub total: usize,
+    pub entries: Vec<WorkspaceInspectEntryResponse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceInspectEntryResponse {
+    pub file: String,
+    pub id: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation_meta: Option<Value>,
+    pub context: BTreeMap<String, String>,
+    pub hints: Vec<Value>,
+    pub diagnostics: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInspectEntryRequest {
+    pub workspace: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInspectBatchRequest {
+    pub workspace: String,
+    pub batch_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceInspectBatchResponse {
+    pub batch_id: String,
+    pub entries: Vec<WorkspaceInspectEntryResponse>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum InspectDiagnosticSeverityInput {
+    #[default]
+    All,
+    Error,
+    Warning,
+    Info,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceInspectDiagnosticsRequest {
+    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub severity: InspectDiagnosticSeverityInput,
+    #[serde(default = "default_inspect_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceInspectDiagnosticsResponse {
+    pub total: usize,
+    pub diagnostics: Vec<WorkspaceInspectDiagnosticResponse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceInspectDiagnosticResponse {
+    pub entry_id: String,
+    pub file: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
+    pub context: BTreeMap<String, String>,
+    pub diagnostic: Value,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AdaptFormatInput {
@@ -340,4 +464,8 @@ pub struct KnowledgeTermEditResponse {
 
 fn default_lookup_limit() -> usize {
     20
+}
+
+fn default_inspect_limit() -> usize {
+    50
 }

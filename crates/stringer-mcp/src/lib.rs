@@ -17,7 +17,8 @@ use stringer_app::{
     AppError, adapt_import, knowledge_annotate, knowledge_index_rebuild, knowledge_lookup,
     knowledge_term_delete, knowledge_term_upsert, knowledge_validate, workspace_batch_apply,
     workspace_batch_claim, workspace_batch_count, workspace_batch_release, workspace_finalize,
-    workspace_open,
+    workspace_inspect_batch, workspace_inspect_diagnostics, workspace_inspect_entries,
+    workspace_inspect_entry, workspace_inspect_files, workspace_open,
 };
 
 pub use schema::*;
@@ -103,6 +104,71 @@ impl StringerMcp {
         Parameters(request): Parameters<WorkspaceBatchReleaseParams>,
     ) -> Result<Json<WorkspaceBatchReleaseResult>, ErrorData> {
         app_json(workspace_batch_release(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_inspect_files",
+        description = "List workspace entry files without reading raw workspace files directly.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectFilesParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectFilesResult>()
+    )]
+    pub async fn workspace_inspect_files(
+        &self,
+        Parameters(request): Parameters<WorkspaceInspectFilesParams>,
+    ) -> Result<Json<WorkspaceInspectFilesResult>, ErrorData> {
+        app_json(workspace_inspect_files(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_inspect_entries",
+        description = "List workspace entries without creating a translation claim.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectEntriesParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectEntriesResult>()
+    )]
+    pub async fn workspace_inspect_entries(
+        &self,
+        Parameters(request): Parameters<WorkspaceInspectEntriesParams>,
+    ) -> Result<Json<WorkspaceInspectEntriesResult>, ErrorData> {
+        app_json(workspace_inspect_entries(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_inspect_entry",
+        description = "Read one workspace entry by id without editing the workspace.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectEntryParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectEntry>()
+    )]
+    pub async fn workspace_inspect_entry(
+        &self,
+        Parameters(request): Parameters<WorkspaceInspectEntryParams>,
+    ) -> Result<Json<WorkspaceInspectEntry>, ErrorData> {
+        app_json(workspace_inspect_entry(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_inspect_batch",
+        description = "Read a claimed batch without applying or releasing it.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectBatchParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectBatchResult>()
+    )]
+    pub async fn workspace_inspect_batch(
+        &self,
+        Parameters(request): Parameters<WorkspaceInspectBatchParams>,
+    ) -> Result<Json<WorkspaceInspectBatchResult>, ErrorData> {
+        app_json(workspace_inspect_batch(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_inspect_diagnostics",
+        description = "List workspace diagnostics expanded with entry context for review.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectDiagnosticsParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectDiagnosticsResult>()
+    )]
+    pub async fn workspace_inspect_diagnostics(
+        &self,
+        Parameters(request): Parameters<WorkspaceInspectDiagnosticsParams>,
+    ) -> Result<Json<WorkspaceInspectDiagnosticsResult>, ErrorData> {
+        app_json(workspace_inspect_diagnostics(app_request(request)?))
     }
 
     #[tool(

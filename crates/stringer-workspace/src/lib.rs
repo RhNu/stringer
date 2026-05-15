@@ -3,6 +3,7 @@
 mod batch;
 mod error;
 mod fsutil;
+mod inspect;
 mod knowledge;
 mod knowledge_index;
 mod knowledge_lookup;
@@ -20,6 +21,15 @@ pub use batch::{
     release_batch,
 };
 pub use error::WorkspaceError;
+pub use inspect::{
+    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceBatchOptions,
+    InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
+    InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, WorkspaceInspectBatch,
+    WorkspaceInspectDiagnostic, WorkspaceInspectDiagnostics, WorkspaceInspectEntries,
+    WorkspaceInspectEntry, WorkspaceInspectFiles, inspect_workspace_batch,
+    inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
+    inspect_workspace_files,
+};
 pub use knowledge::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexSummary,
     KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers, LookupKnowledgeOptions,

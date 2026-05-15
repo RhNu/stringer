@@ -12,7 +12,10 @@ pub use app::{
     KnowledgeTermStatusArg, KnowledgeTermUpsertCommand, KnowledgeValidateCommand, run,
 };
 pub use workspace::{
-    WorkspaceBatchApplyCommand, WorkspaceBatchClaimCommand, WorkspaceBatchCommand,
-    WorkspaceBatchCountCommand, WorkspaceBatchReleaseCommand, WorkspaceCommand,
-    WorkspaceFinalizeCommand, WorkspaceOpenCommand, WorkspaceUpgradeCommand,
+    InspectDiagnosticSeverityArg, InspectEntryStatusArg, WorkspaceBatchApplyCommand,
+    WorkspaceBatchClaimCommand, WorkspaceBatchCommand, WorkspaceBatchCountCommand,
+    WorkspaceBatchReleaseCommand, WorkspaceCommand, WorkspaceFinalizeCommand,
+    WorkspaceInspectBatchCommand, WorkspaceInspectCommand, WorkspaceInspectDiagnosticsCommand,
+    WorkspaceInspectEntriesCommand, WorkspaceInspectEntryCommand, WorkspaceInspectFilesCommand,
+    WorkspaceOpenCommand, WorkspaceUpgradeCommand,
 };

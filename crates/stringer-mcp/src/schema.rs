@@ -117,6 +117,130 @@ pub struct WorkspaceBatchReleaseResult {
     pub released_entries: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectFilesParams {
+    pub workspace: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectFilesResult {
+    pub files: Vec<WorkspaceInspectFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectFile {
+    pub path: String,
+    pub kind: String,
+    pub asset_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum InspectEntryStatusParam {
+    #[default]
+    All,
+    Empty,
+    Memory,
+    Translated,
+    Claimed,
+    Diagnostic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectEntriesParams {
+    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub status: InspectEntryStatusParam,
+    #[serde(default = "default_inspect_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectEntriesResult {
+    pub total: usize,
+    pub entries: Vec<WorkspaceInspectEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectEntry {
+    pub file: String,
+    pub id: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation_meta: Option<Value>,
+    pub context: BTreeMap<String, String>,
+    pub hints: Vec<Value>,
+    pub diagnostics: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectEntryParams {
+    pub workspace: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectBatchParams {
+    pub workspace: String,
+    pub batch_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectBatchResult {
+    pub batch_id: String,
+    pub entries: Vec<WorkspaceInspectEntry>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum InspectDiagnosticSeverityParam {
+    #[default]
+    All,
+    Error,
+    Warning,
+    Info,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectDiagnosticsParams {
+    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub severity: InspectDiagnosticSeverityParam,
+    #[serde(default = "default_inspect_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectDiagnosticsResult {
+    pub total: usize,
+    pub diagnostics: Vec<WorkspaceInspectDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectDiagnostic {
+    pub entry_id: String,
+    pub file: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
+    pub context: BTreeMap<String, String>,
+    pub diagnostic: Value,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum AdaptFormatParam {
@@ -341,4 +465,8 @@ pub struct KnowledgeTermEditResult {
 
 fn default_lookup_limit() -> usize {
     20
+}
+
+fn default_inspect_limit() -> usize {
+    50
 }

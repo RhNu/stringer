@@ -1,11 +1,15 @@
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use stringer_app::{
-    SettingsInput, WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest,
-    WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchReleaseRequest,
-    WorkspaceFinalizeRequest, WorkspaceOpenRequest, workspace_batch_apply, workspace_batch_claim,
-    workspace_batch_count, workspace_batch_release, workspace_finalize, workspace_open,
-    workspace_upgrade_unsupported,
+    InspectDiagnosticSeverityInput, InspectEntryStatusInput, SettingsInput,
+    WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest,
+    WorkspaceBatchCountRequest, WorkspaceBatchReleaseRequest, WorkspaceFinalizeRequest,
+    WorkspaceInspectBatchRequest, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectEntriesRequest, WorkspaceInspectEntryRequest, WorkspaceInspectFilesRequest,
+    WorkspaceOpenRequest, workspace_batch_apply, workspace_batch_claim, workspace_batch_count,
+    workspace_batch_release, workspace_finalize, workspace_inspect_batch,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
+    workspace_inspect_files, workspace_open, workspace_upgrade_unsupported,
 };
 
 use crate::app::{CliError, print_json, read_input};
@@ -33,6 +37,14 @@ pub enum WorkspaceCommand {
     Batch {
         #[command(subcommand)]
         command: WorkspaceBatchCommand,
+    },
+    #[command(
+        about = "Read workspace files, entries, batches, and diagnostics without editing",
+        arg_required_else_help = true
+    )]
+    Inspect {
+        #[command(subcommand)]
+        command: WorkspaceInspectCommand,
     },
     #[command(
         about = "Upgrade a legacy workspace to the current schema",
@@ -135,6 +147,90 @@ pub enum WorkspaceBatchCommand {
         long_about = WORKSPACE_BATCH_RELEASE_LONG_ABOUT
     )]
     Release(WorkspaceBatchReleaseCommand),
+}
+
+#[derive(Debug, Subcommand)]
+pub enum WorkspaceInspectCommand {
+    #[command(about = "List workspace entry files as JSON")]
+    Files(WorkspaceInspectFilesCommand),
+    #[command(about = "List workspace entries as JSON")]
+    Entries(WorkspaceInspectEntriesCommand),
+    #[command(about = "Read one workspace entry by id as JSON")]
+    Entry(WorkspaceInspectEntryCommand),
+    #[command(about = "Read a claimed batch as JSON")]
+    Batch(WorkspaceInspectBatchCommand),
+    #[command(about = "List workspace diagnostics as JSON")]
+    Diagnostics(WorkspaceInspectDiagnosticsCommand),
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceInspectFilesCommand {
+    #[arg(long, value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceInspectEntriesCommand {
+    #[arg(long, value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
+    #[arg(long, value_name = "ENTRY_FILE")]
+    pub file: Option<String>,
+    #[arg(long, default_value = "all", value_name = "STATUS")]
+    pub status: InspectEntryStatusArg,
+    #[arg(long, default_value_t = 50, value_name = "N")]
+    pub limit: usize,
+    #[arg(long, default_value_t = 0, value_name = "N")]
+    pub offset: usize,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceInspectEntryCommand {
+    #[arg(long, value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
+    #[arg(long, value_name = "ENTRY_ID")]
+    pub id: String,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceInspectBatchCommand {
+    #[arg(long, value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
+    #[arg(long, value_name = "BATCH_ID")]
+    pub batch_id: String,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceInspectDiagnosticsCommand {
+    #[arg(long, value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
+    #[arg(long, value_name = "ENTRY_FILE")]
+    pub file: Option<String>,
+    #[arg(long, default_value = "all", value_name = "SEVERITY")]
+    pub severity: InspectDiagnosticSeverityArg,
+    #[arg(long, default_value_t = 50, value_name = "N")]
+    pub limit: usize,
+    #[arg(long, default_value_t = 0, value_name = "N")]
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum InspectEntryStatusArg {
+    #[default]
+    All,
+    Empty,
+    Memory,
+    Translated,
+    Claimed,
+    Diagnostic,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum InspectDiagnosticSeverityArg {
+    #[default]
+    All,
+    Error,
+    Warning,
+    Info,
 }
 
 #[derive(Debug, Parser)]
@@ -247,8 +343,54 @@ pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), CliError> {
             Ok(())
         }
         WorkspaceCommand::Batch { command } => run_workspace_batch(command),
+        WorkspaceCommand::Inspect { command } => run_workspace_inspect(command),
         WorkspaceCommand::Upgrade(command) => {
             Err(workspace_upgrade_unsupported(command.workspace.to_string()).into())
+        }
+    }
+}
+
+fn run_workspace_inspect(command: WorkspaceInspectCommand) -> Result<(), CliError> {
+    match command {
+        WorkspaceInspectCommand::Files(command) => {
+            let inspected = workspace_inspect_files(WorkspaceInspectFilesRequest {
+                workspace: command.workspace.to_string(),
+            })?;
+            print_json(&inspected)
+        }
+        WorkspaceInspectCommand::Entries(command) => {
+            let inspected = workspace_inspect_entries(WorkspaceInspectEntriesRequest {
+                workspace: command.workspace.to_string(),
+                file: command.file,
+                status: command.status.into(),
+                limit: command.limit,
+                offset: command.offset,
+            })?;
+            print_json(&inspected)
+        }
+        WorkspaceInspectCommand::Entry(command) => {
+            let inspected = workspace_inspect_entry(WorkspaceInspectEntryRequest {
+                workspace: command.workspace.to_string(),
+                id: command.id,
+            })?;
+            print_json(&inspected)
+        }
+        WorkspaceInspectCommand::Batch(command) => {
+            let inspected = workspace_inspect_batch(WorkspaceInspectBatchRequest {
+                workspace: command.workspace.to_string(),
+                batch_id: command.batch_id,
+            })?;
+            print_json(&inspected)
+        }
+        WorkspaceInspectCommand::Diagnostics(command) => {
+            let inspected = workspace_inspect_diagnostics(WorkspaceInspectDiagnosticsRequest {
+                workspace: command.workspace.to_string(),
+                file: command.file,
+                severity: command.severity.into(),
+                limit: command.limit,
+                offset: command.offset,
+            })?;
+            print_json(&inspected)
         }
     }
 }
@@ -338,5 +480,53 @@ fn settings_input(
         asset_language,
         source_locale,
         target_locale,
+    }
+}
+
+impl From<InspectEntryStatusArg> for InspectEntryStatusInput {
+    fn from(value: InspectEntryStatusArg) -> Self {
+        match value {
+            InspectEntryStatusArg::All => Self::All,
+            InspectEntryStatusArg::Empty => Self::Empty,
+            InspectEntryStatusArg::Memory => Self::Memory,
+            InspectEntryStatusArg::Translated => Self::Translated,
+            InspectEntryStatusArg::Claimed => Self::Claimed,
+            InspectEntryStatusArg::Diagnostic => Self::Diagnostic,
+        }
+    }
+}
+
+impl From<InspectDiagnosticSeverityArg> for InspectDiagnosticSeverityInput {
+    fn from(value: InspectDiagnosticSeverityArg) -> Self {
+        match value {
+            InspectDiagnosticSeverityArg::All => Self::All,
+            InspectDiagnosticSeverityArg::Error => Self::Error,
+            InspectDiagnosticSeverityArg::Warning => Self::Warning,
+            InspectDiagnosticSeverityArg::Info => Self::Info,
+        }
+    }
+}
+
+impl std::fmt::Display for InspectEntryStatusArg {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::All => "all",
+            Self::Empty => "empty",
+            Self::Memory => "memory",
+            Self::Translated => "translated",
+            Self::Claimed => "claimed",
+            Self::Diagnostic => "diagnostic",
+        })
+    }
+}
+
+impl std::fmt::Display for InspectDiagnosticSeverityArg {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::All => "all",
+            Self::Error => "error",
+            Self::Warning => "warning",
+            Self::Info => "info",
+        })
     }
 }

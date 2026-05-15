@@ -30,6 +30,11 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
             "workspace_batch_count",
             "workspace_batch_release",
             "workspace_finalize",
+            "workspace_inspect_batch",
+            "workspace_inspect_diagnostics",
+            "workspace_inspect_entries",
+            "workspace_inspect_entry",
+            "workspace_inspect_files",
             "workspace_open",
         ]
     );
@@ -43,6 +48,85 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
             Some("object")
         );
     }
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_workspace_inspect_entries_and_diagnostics_return_structured_content() {
+    let root = TempRoot::new("mcp-inspect-root");
+    let workspace = TempRoot::new("mcp-inspect-workspace");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n");
+
+    let (client, server_handle) = connect().await;
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
+                "root": path_string(root.path()),
+                "workspace": path_string(workspace.path()),
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+    let workspace_json: Value =
+        serde_json::from_str(&fs::read_to_string(workspace.path().join("workspace.json")).unwrap())
+            .unwrap();
+    let entry_path = workspace
+        .path()
+        .join(workspace_json["files"][0]["path"].as_str().unwrap());
+    write_text(
+        &entry_path,
+        concat!(
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Iron Sword\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source\":\"Steel Sword\",\"translation\":\"钢剑\",\"translation_meta\":{\"origin\":\"memory\"},\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"memory.conflict\",\"message\":\"check\"}]}\n",
+        ),
+    );
+
+    let entries = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_inspect_entries").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "status": "memory"
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(entries["total"], 1);
+    assert_eq!(entries["entries"][0]["source"], "Steel Sword");
+
+    let diagnostics = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_inspect_diagnostics").with_arguments(args(
+                json!({
+                    "workspace": path_string(workspace.path()),
+                    "severity": "warning"
+                }),
+            )),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(diagnostics["total"], 1);
+    assert_eq!(
+        diagnostics["diagnostics"][0]["diagnostic"]["code"],
+        "memory.conflict"
+    );
 
     client.cancel().await.unwrap();
     server_handle.await.unwrap();

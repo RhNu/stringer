@@ -190,15 +190,7 @@ pub fn write_translation_package(
 pub fn read_translation_package(
     path: &Utf8Path,
 ) -> Result<(WorkspaceSettings, BTreeMap<String, String>), WorkspaceError> {
-    let manifest_path = path.join(WORKSPACE_FILE);
-    let manifest = read_manifest(path, &manifest_path)?;
-    if manifest.schema_version != SCHEMA_VERSION {
-        return Err(WorkspaceError::UnsupportedTranslationSchema {
-            path: manifest_path,
-            version: manifest.schema_version,
-        });
-    }
-
+    let manifest = read_translation_manifest(path)?;
     let settings = WorkspaceSettings {
         game_release: parse_game_release_name(&manifest.game_release)?,
         asset_language: parse_language_name(&manifest.asset_language)?,
@@ -228,6 +220,125 @@ pub fn read_translation_package(
 pub(crate) fn read_translation_package_records(
     path: &Utf8Path,
 ) -> Result<TranslationPackageRecords, WorkspaceError> {
+    read_translation_package_records_filtered(path, None)
+}
+
+pub(crate) fn read_translation_package_records_filtered(
+    path: &Utf8Path,
+    file_filter: Option<&str>,
+) -> Result<TranslationPackageRecords, WorkspaceError> {
+    let manifest = read_translation_manifest(path)?;
+    let settings = settings_from_manifest(&manifest)?;
+    let manifest_files = validate_manifest_files(path, manifest.files)?;
+    let mut files = Vec::new();
+    visit_manifest_records(
+        path,
+        manifest_files,
+        file_filter,
+        |manifest_file, records| {
+            files.push(TranslationPackageFileRecords {
+                manifest_file: manifest_file.clone(),
+                records,
+            });
+            Ok(())
+        },
+    )?;
+
+    Ok(TranslationPackageRecords { settings, files })
+}
+
+pub(crate) fn visit_translation_package_records_filtered<F>(
+    path: &Utf8Path,
+    file_filter: Option<&str>,
+    mut visit: F,
+) -> Result<WorkspaceSettings, WorkspaceError>
+where
+    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceError>,
+{
+    let manifest = read_translation_manifest(path)?;
+    let settings = settings_from_manifest(&manifest)?;
+    let manifest_files = validate_manifest_files(path, manifest.files)?;
+    visit_manifest_records_streaming(path, manifest_files, file_filter, &mut visit)?;
+    Ok(settings)
+}
+
+pub(crate) fn read_translation_manifest_files(
+    path: &Utf8Path,
+) -> Result<Vec<TranslationManifestFile>, WorkspaceError> {
+    let manifest = read_translation_manifest(path)?;
+    validate_manifest_files(path, manifest.files)
+}
+
+fn visit_manifest_records<F>(
+    path: &Utf8Path,
+    manifest_files: Vec<TranslationManifestFile>,
+    file_filter: Option<&str>,
+    mut visit: F,
+) -> Result<(), WorkspaceError>
+where
+    F: FnMut(&TranslationManifestFile, Vec<TranslationRecord>) -> Result<(), WorkspaceError>,
+{
+    let normalized_filter = file_filter.map(normalize_path);
+    let mut found_filter = normalized_filter.is_none();
+    let mut seen_ids = BTreeSet::new();
+    for manifest_file in manifest_files {
+        let normalized_file = normalize_path(&manifest_file.path);
+        let should_read = normalized_filter
+            .as_deref()
+            .is_none_or(|expected| expected == normalized_file);
+        if !should_read {
+            continue;
+        }
+        found_filter = true;
+        let entry_path = package_entry_path(path, &manifest_file.path)?;
+        let records = read_record_file(&entry_path, &mut seen_ids)?;
+        visit(&manifest_file, records)?;
+    }
+    if !found_filter {
+        return Err(WorkspaceError::InvalidTranslationPackagePath {
+            path: file_filter.unwrap_or_default().to_string(),
+            message: "entry file is not listed in workspace.json".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn visit_manifest_records_streaming<F>(
+    path: &Utf8Path,
+    manifest_files: Vec<TranslationManifestFile>,
+    file_filter: Option<&str>,
+    visit: &mut F,
+) -> Result<(), WorkspaceError>
+where
+    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceError>,
+{
+    let normalized_filter = file_filter.map(normalize_path);
+    let mut found_filter = normalized_filter.is_none();
+    let mut seen_ids = BTreeSet::new();
+    for manifest_file in manifest_files {
+        let normalized_file = normalize_path(&manifest_file.path);
+        let should_read = normalized_filter
+            .as_deref()
+            .is_none_or(|expected| expected == normalized_file);
+        if !should_read {
+            continue;
+        }
+        found_filter = true;
+        let entry_path = package_entry_path(path, &manifest_file.path)?;
+        visit_record_file(&entry_path, &manifest_file, &mut seen_ids, visit)?;
+    }
+    if !found_filter {
+        return Err(WorkspaceError::InvalidTranslationPackagePath {
+            path: file_filter.unwrap_or_default().to_string(),
+            message: "entry file is not listed in workspace.json".to_string(),
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn read_translation_manifest(
+    path: &Utf8Path,
+) -> Result<TranslationManifest, WorkspaceError> {
     let manifest_path = path.join(WORKSPACE_FILE);
     let manifest = read_manifest(path, &manifest_path)?;
     if manifest.schema_version != SCHEMA_VERSION {
@@ -237,27 +348,25 @@ pub(crate) fn read_translation_package_records(
         });
     }
 
-    let settings = settings_from_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn validate_manifest_files(
+    root: &Utf8Path,
+    files: Vec<TranslationManifestFile>,
+) -> Result<Vec<TranslationManifestFile>, WorkspaceError> {
     let mut seen_files = BTreeSet::new();
-    let mut seen_ids = BTreeSet::new();
-    let mut files = Vec::new();
-    for manifest_file in manifest.files {
-        let entry_path = package_entry_path(path, &manifest_file.path)?;
-        let normalized_file = normalize_path(&manifest_file.path);
+    for file in &files {
+        let normalized_file = normalize_path(&file.path);
         if !seen_files.insert(normalized_file) {
             return Err(WorkspaceError::InvalidTranslationPackagePath {
-                path: manifest_file.path,
+                path: file.path.clone(),
                 message: "workspace.json lists the same entry file more than once".to_string(),
             });
         }
-        let records = read_record_file(&entry_path, &mut seen_ids)?;
-        files.push(TranslationPackageFileRecords {
-            manifest_file,
-            records,
-        });
+        package_entry_path(root, &file.path)?;
     }
-
-    Ok(TranslationPackageRecords { settings, files })
+    Ok(files)
 }
 
 pub(crate) fn write_translation_package_records(
@@ -441,6 +550,46 @@ fn read_record_file(
         records.push(record);
     }
     Ok(records)
+}
+
+fn visit_record_file<F>(
+    path: &Utf8Path,
+    manifest_file: &TranslationManifestFile,
+    seen_ids: &mut BTreeSet<String>,
+    visit: &mut F,
+) -> Result<(), WorkspaceError>
+where
+    F: FnMut(&TranslationManifestFile, TranslationRecord) -> Result<(), WorkspaceError>,
+{
+    let file = fs::File::open(path).map_err(|source| WorkspaceError::ReadFile {
+        path: path.to_owned(),
+        source,
+    })?;
+    let reader = BufReader::new(file);
+    for (index, line) in reader.lines().enumerate() {
+        let line_number = index + 1;
+        let line = line.map_err(|source| WorkspaceError::ReadFile {
+            path: path.to_owned(),
+            source,
+        })?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record: TranslationRecord =
+            serde_json::from_str(&line).map_err(|source| WorkspaceError::JsonLine {
+                path: path.to_owned(),
+                line: line_number,
+                source,
+            })?;
+        if !seen_ids.insert(record.id.clone()) {
+            return Err(WorkspaceError::DuplicateTranslationId {
+                path: path.to_owned(),
+                id: record.id,
+            });
+        }
+        visit(manifest_file, record)?;
+    }
+    Ok(())
 }
 
 fn package_entry_path(root: &Utf8Path, path: &str) -> Result<Utf8PathBuf, WorkspaceError> {

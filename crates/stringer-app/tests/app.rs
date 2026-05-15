@@ -2,10 +2,12 @@ use std::fs;
 
 use serde_json::Value;
 use stringer_app::{
-    AdaptFormatInput, AdaptImportRequest, SettingsInput, WorkspaceBatchApplyEntry,
-    WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest,
-    WorkspaceOpenRequest, adapt_import, workspace_batch_apply, workspace_batch_claim,
-    workspace_batch_count, workspace_open,
+    AdaptFormatInput, AdaptImportRequest, InspectDiagnosticSeverityInput, InspectEntryStatusInput,
+    SettingsInput, WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest,
+    WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectEntriesRequest, WorkspaceOpenRequest, adapt_import, workspace_batch_apply,
+    workspace_batch_claim, workspace_batch_count, workspace_inspect_diagnostics,
+    workspace_inspect_entries, workspace_open,
 };
 
 #[tokio::test]
@@ -88,6 +90,69 @@ async fn app_adapt_import_returns_action_output_and_summary() {
     assert_eq!(row["target"], "铁剑");
 }
 
+#[tokio::test]
+async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_values() {
+    let root = TempRoot::new("inspect-root");
+    let workspace = TempRoot::new("inspect-output");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n");
+
+    workspace_open(WorkspaceOpenRequest {
+        root: path_string(root.path()),
+        workspace: path_string(workspace.path()),
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+    let entry_file = entry_file_path(workspace.path());
+    write_text(
+        &entry_file,
+        concat!(
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Iron Sword\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source\":\"Steel Sword\",\"translation\":\"钢剑\",\"translation_meta\":{\"origin\":\"memory\"},\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"memory.conflict\",\"message\":\"check\"}]}\n",
+        ),
+    );
+
+    let entries = workspace_inspect_entries(WorkspaceInspectEntriesRequest {
+        workspace: path_string(workspace.path()),
+        file: None,
+        status: InspectEntryStatusInput::Memory,
+        limit: 10,
+        offset: 0,
+    })
+    .unwrap();
+    assert_eq!(entries.total, 1);
+    assert_eq!(entries.entries[0].source, "Steel Sword");
+    assert_eq!(entries.entries[0].translation.as_deref(), Some("钢剑"));
+    assert_eq!(
+        entries.entries[0].translation_meta.as_ref().unwrap()["origin"],
+        "memory"
+    );
+
+    let diagnostics = workspace_inspect_diagnostics(WorkspaceInspectDiagnosticsRequest {
+        workspace: path_string(workspace.path()),
+        file: None,
+        severity: InspectDiagnosticSeverityInput::Warning,
+        limit: 10,
+        offset: 0,
+    })
+    .unwrap();
+    assert_eq!(diagnostics.total, 1);
+    assert_eq!(
+        diagnostics.diagnostics[0].entry_id,
+        "scaleform:Interface/Translations/MyMod_English.txt:$Desc"
+    );
+    assert_eq!(
+        diagnostics.diagnostics[0].diagnostic["code"],
+        "memory.conflict"
+    );
+}
+
 fn settings() -> SettingsInput {
     SettingsInput {
         game_release: Some("SkyrimSe".to_string()),
@@ -104,6 +169,13 @@ fn write_text(path: &std::path::Path, text: &str) {
 
 fn path_string(path: &std::path::Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn entry_file_path(workspace: &std::path::Path) -> std::path::PathBuf {
+    let workspace_json: Value =
+        serde_json::from_str(&fs::read_to_string(workspace.join("workspace.json")).unwrap())
+            .unwrap();
+    workspace.join(workspace_json["files"][0]["path"].as_str().unwrap())
 }
 
 struct TempRoot {
