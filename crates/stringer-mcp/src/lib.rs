@@ -2,12 +2,15 @@
 
 mod schema;
 
+use std::{any::Any, sync::Arc};
+
 use rmcp::{
     ErrorData, ServiceExt,
     handler::server::wrapper::{Json, Parameters},
+    model::JsonObject,
     tool, tool_router,
 };
-use schemars::JsonSchema;
+use schemars::{JsonSchema, generate::SchemaSettings, transform::Transform};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
 use stringer_app::{
@@ -25,7 +28,9 @@ pub struct StringerMcp;
 impl StringerMcp {
     #[tool(
         name = "workspace_open",
-        description = "Open a translation workspace from a Bethesda mod root."
+        description = "Open a translation workspace from a Bethesda mod root.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceOpenParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceOpenResult>()
     )]
     pub async fn workspace_open(
         &self,
@@ -36,7 +41,9 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_finalize",
-        description = "Finalize a translation workspace into an override directory."
+        description = "Finalize a translation workspace into an override directory.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceFinalizeParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceFinalizeResult>()
     )]
     pub async fn workspace_finalize(
         &self,
@@ -47,7 +54,9 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_count",
-        description = "Count translation rows, claims, and diagnostics in a workspace."
+        description = "Count translation rows, claims, and diagnostics in a workspace.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchCountParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchCountResult>()
     )]
     pub async fn workspace_batch_count(
         &self,
@@ -58,7 +67,9 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_claim",
-        description = "Claim eligible translation rows for agent work."
+        description = "Claim eligible translation rows for agent work.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchClaimParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchClaimResult>()
     )]
     pub async fn workspace_batch_claim(
         &self,
@@ -69,7 +80,9 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_apply",
-        description = "Apply translations for a claimed batch."
+        description = "Apply translations for a claimed batch.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchApplyParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchApplyResult>()
     )]
     pub async fn workspace_batch_apply(
         &self,
@@ -80,7 +93,9 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_release",
-        description = "Release a claimed batch without applying translations."
+        description = "Release a claimed batch without applying translations.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReleaseParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchReleaseResult>()
     )]
     pub async fn workspace_batch_release(
         &self,
@@ -91,7 +106,9 @@ impl StringerMcp {
 
     #[tool(
         name = "adapt_import",
-        description = "Import an external translation resource as memory JSONL."
+        description = "Import an external translation resource as memory JSONL.",
+        input_schema = compatible_schema_for_type::<Parameters<AdaptImportParams>>(),
+        output_schema = compatible_output_schema_for_type::<AdaptImportResult>()
     )]
     pub async fn adapt_import(
         &self,
@@ -102,7 +119,9 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_annotate",
-        description = "Annotate workspace rows with terminology, memory, and diagnostics."
+        description = "Annotate workspace rows with terminology, memory, and diagnostics.",
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeAnnotateParams>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeOperationResult>()
     )]
     pub async fn knowledge_annotate(
         &self,
@@ -113,7 +132,9 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_validate",
-        description = "Validate workspace translations and rewrite diagnostics."
+        description = "Validate workspace translations and rewrite diagnostics.",
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeValidateParams>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeOperationResult>()
     )]
     pub async fn knowledge_validate(
         &self,
@@ -124,7 +145,9 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_lookup",
-        description = "Search terminology and translation memory."
+        description = "Search terminology and translation memory.",
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeLookupParams>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeLookupResult>()
     )]
     pub async fn knowledge_lookup(
         &self,
@@ -135,7 +158,9 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_index_rebuild",
-        description = "Rebuild the derived knowledge index for a project root."
+        description = "Rebuild the derived knowledge index for a project root.",
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeIndexRebuildParams>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeIndexRebuildResult>()
     )]
     pub async fn knowledge_index_rebuild(
         &self,
@@ -152,6 +177,35 @@ pub async fn serve_stdio() -> Result<(), Box<dyn std::error::Error>> {
         .waiting()
         .await?;
     Ok(())
+}
+
+fn compatible_schema_for_type<T>() -> Arc<JsonObject>
+where
+    T: JsonSchema + Any,
+{
+    let generator = SchemaSettings::draft2020_12().into_generator();
+    let mut schema = generator.into_root_schema_for::<T>();
+    schemars::transform::RestrictFormats::default().transform(&mut schema);
+    let value = serde_json::to_value(schema).expect("failed to serialize schema");
+    let object = match value {
+        serde_json::Value::Object(object) => object,
+        _ => panic!("schema serialization produced non-object value"),
+    };
+    Arc::new(object)
+}
+
+fn compatible_output_schema_for_type<T>() -> Arc<JsonObject>
+where
+    T: JsonSchema + Any,
+{
+    let schema = compatible_schema_for_type::<T>();
+    match schema.get("type") {
+        Some(serde_json::Value::String(kind)) if kind == "object" => schema,
+        Some(serde_json::Value::String(kind)) => {
+            panic!("MCP output schema root type must be object, found {kind}")
+        }
+        _ => panic!("MCP output schema is missing object root type"),
+    }
 }
 
 fn app_request<T, U>(request: T) -> Result<U, ErrorData>

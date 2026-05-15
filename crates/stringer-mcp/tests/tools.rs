@@ -33,7 +33,9 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
     );
     assert!(!names.contains(&"run_command"));
     for tool in &tools.tools {
+        assert_schema_has_no_uint_format(&tool.input_schema);
         let output_schema = tool.output_schema.as_ref().expect("output schema");
+        assert_schema_has_no_uint_format(output_schema);
         assert_eq!(
             output_schema.get("type").and_then(Value::as_str),
             Some("object")
@@ -105,6 +107,32 @@ async fn mcp_errors_include_app_code_message_and_details() {
 
 fn args(value: Value) -> serde_json::Map<String, Value> {
     value.as_object().unwrap().clone()
+}
+
+fn assert_schema_has_no_uint_format(schema: &serde_json::Map<String, Value>) {
+    assert_value_has_no_uint_format(&Value::Object(schema.clone()));
+}
+
+fn assert_value_has_no_uint_format(value: &Value) {
+    match value {
+        Value::Object(object) => {
+            if let Some(format) = object.get("format").and_then(Value::as_str) {
+                assert!(
+                    !format.starts_with("uint"),
+                    "schema contains unsigned integer format `{format}`"
+                );
+            }
+            for value in object.values() {
+                assert_value_has_no_uint_format(value);
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                assert_value_has_no_uint_format(value);
+            }
+        }
+        _ => {}
+    }
 }
 
 async fn connect() -> (
