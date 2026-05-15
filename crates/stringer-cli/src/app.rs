@@ -5,12 +5,11 @@ use stringer_adapt::{
     write_memory_jsonl,
 };
 use stringer_workspace::{
-    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeLayerOverrides,
-    LoadWorkspaceSettingsOptions, LookupKnowledgeField, LookupKnowledgeMode,
-    LookupKnowledgeOptions, LookupKnowledgeSource, PipelineEntryKind, ValidateTranslationsOptions,
-    WorkspaceError, annotate_translations, build_knowledge_index, game_release_name,
-    load_global_knowledge_root, load_workspace_settings, lookup_knowledge, parse_game_release_name,
-    validate_translations,
+    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, LoadWorkspaceSettingsOptions,
+    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
+    PipelineEntryKind, ValidateTranslationsOptions, WorkspaceError, annotate_translations,
+    build_knowledge_index, game_release_name, load_global_knowledge_root, load_workspace_settings,
+    lookup_knowledge, parse_game_release_name, validate_translations,
 };
 use thiserror::Error;
 
@@ -117,13 +116,6 @@ pub struct AdaptImportCommand {
         long_help = "Optional game context. Accepted names follow the same normalization as --game-release, for example SkyrimSe or skyrim-se. When valid, the generated memory context includes game=SkyrimSe or game=SkyrimLe."
     )]
     pub game: Option<String>,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Override the global user knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub global_knowledge_root: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -197,81 +189,53 @@ pub enum KnowledgeIndexCommand {
 pub struct KnowledgeAnnotateCommand {
     #[arg(
         long,
-        value_name = "MOD_ROOT",
-        help = "Source mod root directory",
-        long_help = "Source mod root directory. Used to locate project knowledge at <MOD_ROOT>/knowledge and, when present, read knowledge.global_root from <MOD_ROOT>/stringer.toml."
+        value_name = "PROJECT_ROOT",
+        help = "Project root directory",
+        long_help = "Project root directory. Used to locate project knowledge at <PROJECT_ROOT>/knowledge and the derived knowledge index at <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite. Defaults to the current directory."
     )]
-    pub root: Utf8PathBuf,
+    pub project_root: Option<Utf8PathBuf>,
     #[arg(
         long,
-        value_name = "TRANSLATIONS",
-        help = "Translation package directory",
-        long_help = "Translation package directory. annotate updates entries/**/*.jsonl in place, writing hints, diagnostics, and optionally filling translation."
+        value_name = "WORKSPACE",
+        help = "Translation workspace directory",
+        long_help = "Translation workspace directory. annotate updates entries/**/*.jsonl in place, writing hints, diagnostics, and optionally filling translation."
     )]
-    pub translations: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     #[arg(
         long,
         help = "Allow high-confidence memory to fill empty translations",
         long_help = "Allow high-confidence translation memory to fill translation. Disabled by default. When enabled, it only fills empty translations that meet the threshold and does not overwrite existing agent translations."
     )]
     pub auto_fill_memory: bool,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Override the global knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub global_knowledge_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Add a highest-priority knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub override_knowledge_root: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, Parser)]
 pub struct KnowledgeValidateCommand {
     #[arg(
         long,
-        value_name = "MOD_ROOT",
-        help = "Source mod root directory",
-        long_help = "Source mod root directory. Used to locate project knowledge at <MOD_ROOT>/knowledge and, when present, read knowledge.global_root from <MOD_ROOT>/stringer.toml."
+        value_name = "PROJECT_ROOT",
+        help = "Project root directory",
+        long_help = "Project root directory. Used to locate project knowledge at <PROJECT_ROOT>/knowledge and the derived knowledge index at <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite. Defaults to the current directory."
     )]
-    pub root: Utf8PathBuf,
+    pub project_root: Option<Utf8PathBuf>,
     #[arg(
         long,
-        value_name = "TRANSLATIONS",
-        help = "Translation package directory",
-        long_help = "Translation package directory. validate updates entries/**/*.jsonl in place and recomputes diagnostics for each row."
+        value_name = "WORKSPACE",
+        help = "Translation workspace directory",
+        long_help = "Translation workspace directory. validate updates entries/**/*.jsonl in place and recomputes diagnostics for each row."
     )]
-    pub translations: Utf8PathBuf,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Override the global knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub global_knowledge_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Add a highest-priority knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub override_knowledge_root: Option<Utf8PathBuf>,
+    pub workspace: Utf8PathBuf,
 }
 
 #[derive(Debug, Parser)]
 pub struct KnowledgeLookupCommand {
     #[arg(
         long,
-        value_name = "MOD_ROOT",
-        help = "Source mod root directory",
-        long_help = "Source mod root directory. lookup uses it to locate project knowledge, the knowledge index, and optional stringer.toml."
+        value_name = "PROJECT_ROOT",
+        help = "Project root directory",
+        long_help = "Project root directory. lookup uses it to locate project knowledge, the knowledge index, and optional stringer.toml. Defaults to the current directory."
     )]
-    pub root: Utf8PathBuf,
+    pub project_root: Option<Utf8PathBuf>,
     #[arg(
         long,
         value_name = "TEXT",
@@ -331,20 +295,6 @@ pub struct KnowledgeLookupCommand {
     pub target_locale: Option<String>,
     #[arg(
         long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Override the global knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub global_knowledge_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Add a highest-priority knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub override_knowledge_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
         help = "Treat --text as a regex pattern instead of a contains query",
         long_help = "Treat --text as a regex pattern instead of a contains query. Matching is case-insensitive by default unless --case-sensitive is also passed."
     )]
@@ -388,11 +338,11 @@ pub struct KnowledgeLookupCommand {
 pub struct KnowledgeIndexRebuildCommand {
     #[arg(
         long,
-        value_name = "MOD_ROOT",
-        help = "Source mod root directory",
-        long_help = "Source mod root directory. The index is written to <MOD_ROOT>/.stringer/indexes/knowledge.sqlite."
+        value_name = "PROJECT_ROOT",
+        help = "Project root directory",
+        long_help = "Project root directory. The index is written to <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite. Defaults to the current directory."
     )]
-    pub root: Utf8PathBuf,
+    pub project_root: Option<Utf8PathBuf>,
     #[arg(
         long,
         value_name = "GAME",
@@ -421,20 +371,6 @@ pub struct KnowledgeIndexRebuildCommand {
         long_help = SETTINGS_LONG_HELP
     )]
     pub target_locale: Option<String>,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Override the global knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub global_knowledge_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
-        value_name = "KNOWLEDGE_ROOT",
-        help = "Add a highest-priority knowledge root",
-        long_help = KNOWLEDGE_ROOTS_LONG_HELP
-    )]
-    pub override_knowledge_root: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, Error)]
@@ -480,10 +416,8 @@ async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
             let (summary, action, output) = if let Some(output) = command.out {
                 (write_memory_jsonl(&catalog, &output)?, "wrote", output)
             } else {
-                let root = command
-                    .global_knowledge_root
-                    .or(load_global_knowledge_root(None)?)
-                    .ok_or(WorkspaceError::MissingSetting {
+                let root =
+                    load_global_knowledge_root(None)?.ok_or(WorkspaceError::MissingSetting {
                         name: "knowledge.global_root",
                     })?;
                 let output = default_adapt_memory_path(&root, &input)?;
@@ -506,14 +440,11 @@ async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
 async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
     match command {
         KnowledgeCommand::Annotate(command) => {
+            let project_root = project_root_or_current(command.project_root)?;
             let summary = annotate_translations(AnnotateTranslationsOptions {
-                root: command.root,
-                translations: command.translations,
+                project_root,
+                workspace: command.workspace,
                 allow_memory_auto_fill: command.auto_fill_memory,
-                knowledge: knowledge_overrides(
-                    command.global_knowledge_root,
-                    command.override_knowledge_root,
-                ),
             })?;
             println!(
                 "annotated {} entries, added {} hints, wrote {} diagnostics, auto-filled {} entries",
@@ -522,13 +453,10 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             Ok(())
         }
         KnowledgeCommand::Validate(command) => {
+            let project_root = project_root_or_current(command.project_root)?;
             let summary = validate_translations(ValidateTranslationsOptions {
-                root: command.root,
-                translations: command.translations,
-                knowledge: knowledge_overrides(
-                    command.global_knowledge_root,
-                    command.override_knowledge_root,
-                ),
+                project_root,
+                workspace: command.workspace,
             })?;
             println!(
                 "validated {} entries and wrote {} diagnostics",
@@ -537,9 +465,11 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             Ok(())
         }
         KnowledgeCommand::Lookup(command) => {
-            let config_path = project_config_path(&command.root);
+            let project_root = project_root_or_current(command.project_root)?;
+            let project_config_path = project_config_path(&project_root);
             let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                config_path,
+                user_config_path: None,
+                project_config_path,
                 overrides: overrides(
                     command.game_release,
                     command.asset_language,
@@ -548,15 +478,11 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
                 )?,
             })?;
             let lookup = lookup_knowledge(LookupKnowledgeOptions {
-                root: command.root,
+                project_root,
                 settings,
                 text: command.text,
                 kind: parse_pipeline_kind(command.kind)?,
                 context: lookup_context(command.record_type, command.subrecord),
-                knowledge: knowledge_overrides(
-                    command.global_knowledge_root,
-                    command.override_knowledge_root,
-                ),
                 mode: lookup_mode(command.regex),
                 source: command.source.into(),
                 field: command.field.into(),
@@ -611,9 +537,11 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
 async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliError> {
     match command {
         KnowledgeIndexCommand::Rebuild(command) => {
-            let config_path = project_config_path(&command.root);
+            let project_root = project_root_or_current(command.project_root)?;
+            let project_config_path = project_config_path(&project_root);
             let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                config_path,
+                user_config_path: None,
+                project_config_path,
                 overrides: overrides(
                     command.game_release,
                     command.asset_language,
@@ -622,12 +550,8 @@ async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliEr
                 )?,
             })?;
             let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-                root: command.root,
+                project_root,
                 settings,
-                knowledge: knowledge_overrides(
-                    command.global_knowledge_root,
-                    command.override_knowledge_root,
-                ),
             })?;
             println!(
                 "indexed {} files, {} terms, {} memory entries, {} rules, {} diagnostics",
@@ -695,19 +619,21 @@ fn lookup_context(record_type: Option<String>, subrecord: Option<String>) -> Vec
     context
 }
 
-fn knowledge_overrides(
-    global_root: Option<Utf8PathBuf>,
-    override_root: Option<Utf8PathBuf>,
-) -> KnowledgeLayerOverrides {
-    KnowledgeLayerOverrides {
-        global_root,
-        override_root,
-    }
-}
-
 fn project_config_path(root: &Utf8PathBuf) -> Option<Utf8PathBuf> {
     let path = root.join("stringer.toml");
     path.exists().then_some(path)
+}
+
+fn project_root_or_current(root: Option<Utf8PathBuf>) -> Result<Utf8PathBuf, WorkspaceError> {
+    if let Some(root) = root {
+        return Ok(root);
+    }
+    let current =
+        std::env::current_dir().map_err(|source| WorkspaceError::CurrentDirectory { source })?;
+    Utf8PathBuf::from_path_buf(current).map_err(|path| WorkspaceError::InvalidLogicalPath {
+        path: path.display().to_string(),
+        message: "current directory is not valid UTF-8".to_string(),
+    })
 }
 
 fn default_adapt_memory_path(

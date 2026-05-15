@@ -4,43 +4,13 @@ use serde_json::Value;
 use stringer_core::Language;
 use stringer_plugin::{GameRelease, StringsFile, StringsKind, write_strings_file};
 use stringer_workspace::{
-    ExportTranslationsOptions, ImportTranslationsOptions, LoadWorkspaceSettingsOptions,
-    WorkspaceSettings, WorkspaceSettingsOverrides, WriteTarget, export_translations,
-    import_translations, load_workspace_settings,
+    ExportTranslationsOptions, ImportTranslationsOptions, WorkspaceSettings, WriteTarget,
+    export_translations, import_translations,
 };
 
 mod support;
 
 use support::*;
-
-#[test]
-fn load_settings_reads_toml_config_and_applies_explicit_overrides() {
-    let root = TempRoot::new("settings");
-    let config = root.path().join("config.toml");
-    write_text(
-        &config,
-        r#"
-game_release = "SkyrimSe"
-asset_language = "English"
-source_locale = "en"
-target_locale = "zh-Hans"
-"#,
-    );
-
-    let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-        config_path: Some(utf8(&config)),
-        overrides: WorkspaceSettingsOverrides {
-            target_locale: Some("ja".to_string()),
-            ..WorkspaceSettingsOverrides::default()
-        },
-    })
-    .unwrap();
-
-    assert_eq!(settings.game_release, GameRelease::SkyrimSe);
-    assert_eq!(settings.asset_language, Language::English);
-    assert_eq!(settings.source_locale, "en");
-    assert_eq!(settings.target_locale, "ja");
-}
 
 #[tokio::test]
 async fn exports_scaleform_package_with_manifest_and_clean_entry_rows() {

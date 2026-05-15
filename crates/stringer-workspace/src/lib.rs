@@ -12,9 +12,9 @@ mod settings;
 pub use error::WorkspaceError;
 pub use knowledge::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexSummary,
-    KnowledgeLayerOverrides, KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers,
-    LookupKnowledgeOptions, ValidateTranslationsOptions, annotate_translations,
-    build_knowledge_index, load_knowledge_layers, lookup_knowledge, validate_translations,
+    KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers, LookupKnowledgeOptions,
+    ValidateTranslationsOptions, annotate_translations, build_knowledge_index,
+    load_knowledge_layers, lookup_knowledge, validate_translations,
 };
 pub use knowledge_lookup::{
     KnowledgeLookup, KnowledgeLookupResult, LookupKnowledgeField, LookupKnowledgeMode,

@@ -5,31 +5,29 @@ It opens translatable mod assets into a JSONL translation workspace, lets a huma
 Recommended agent workflow:
   1. Run `stringer --help` to understand the whole flow.
   2. Run a subcommand help page, for example `stringer workspace open --help`.
-  3. Prefer explicit game, language, and locale arguments so the command does not depend on local machine defaults."#;
+  3. Prefer explicit game, language, and locale arguments or a project stringer.toml so the command does not depend on local machine defaults."#;
 
 pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
   stringer workspace open --root <MOD_ROOT> --workspace <WORKSPACE> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
   stringer adapt import --format xt-sst --input <OLD_TRANSLATION.sst> --source-locale en --target-locale zh-Hans --game SkyrimSe
-  stringer knowledge annotate --root <MOD_ROOT> --translations <WORKSPACE>
+  stringer knowledge annotate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
   # Edit the translation fields in <WORKSPACE>/entries/**/*.jsonl.
-  stringer knowledge validate --root <MOD_ROOT> --translations <WORKSPACE>
+  stringer knowledge validate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
   stringer workspace finalize --root <MOD_ROOT> --workspace <WORKSPACE> --override-root <OVERRIDE_ROOT>
 
 Default knowledge locations:
-  <MOD_ROOT>/knowledge/terms/*.toml
-  <MOD_ROOT>/knowledge/memory/*.jsonl
-  <MOD_ROOT>/knowledge/rules/*.toml
+  <PROJECT_ROOT>/knowledge/terms/*.toml
+  <PROJECT_ROOT>/knowledge/memory/*.jsonl
+  <PROJECT_ROOT>/knowledge/rules/*.toml
 
 See README.md for project documentation."#;
 
 pub(crate) const SETTINGS_LONG_HELP: &str = r#"These settings decide how Stringer interprets Bethesda localized assets and translation package locales.
 
-When omitted, commands try to read the default configuration file. For reproducible agent runs, pass these explicitly to workspace open, lookup, and index rebuild:
-  --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans"#;
+When omitted, commands try to read the default user configuration file and, for project-aware commands, <PROJECT_ROOT>/stringer.toml. For reproducible agent runs, pass these explicitly to workspace open, lookup, and index rebuild:
+  --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
 
-pub(crate) const KNOWLEDGE_ROOTS_LONG_HELP: &str = r#"Knowledge layers are loaded in this order: built-in < global < library < project < override.
-
-The project layer is always <MOD_ROOT>/knowledge. The global layer comes from the default config, project stringer.toml, or --global-knowledge-root. The library layer is global/libraries/<GameRelease>/<target_locale>. The override layer is only used when --override-knowledge-root is passed and is intended for temporary highest-priority terminology or memory overrides."#;
+Only the user configuration file may define [knowledge].global_root. Project stringer.toml files may define only game_release, asset_language, source_locale, and target_locale."#;
 
 pub(crate) const WORKSPACE_LONG_ABOUT: &str = r#"Workspace commands manage the editable translation workspace lifecycle.
 
@@ -39,7 +37,7 @@ pub(crate) const WORKSPACE_OPEN_LONG_ABOUT: &str = r#"Scan a mod root and open a
 
 The workspace is a directory containing manifest.json and entries/**/*.jsonl. Each JSONL row usually contains id, source, translation, context, hints, and diagnostics. Fresh workspaces usually leave translation empty for a human or agent to fill.
 
-workspace open currently reads the default config and command-line overrides; it does not read <MOD_ROOT>/stringer.toml."#;
+workspace open reads the default user config, <MOD_ROOT>/stringer.toml, and command-line overrides. Project settings override user settings, and command-line settings override both."#;
 
 pub(crate) const WORKSPACE_OPEN_AFTER_LONG_HELP: &str = r#"Example:
   stringer workspace open --root ./MyMod --workspace ./translations --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
@@ -51,7 +49,7 @@ Output layout:
   <WORKSPACE>/entries/scaleform/<asset>.jsonl
 
 Common next step:
-  stringer knowledge annotate --root ./MyMod --translations ./translations"#;
+  stringer knowledge annotate --project-root ./MyMod --workspace ./translations"#;
 
 pub(crate) const WORKSPACE_FINALIZE_LONG_ABOUT: &str = r#"Read id and translation fields from a translation workspace, apply them to source mod assets, and write changed files into an override directory.
 
@@ -66,7 +64,7 @@ Recommended:
 
 pub(crate) const ADAPT_LONG_ABOUT: &str = r#"Adapt external translation resources into Stringer translation memory.
 
-adapt commands do not edit mod assets or translation packages. They read external translator files, normalize usable source/target pairs, and merge Stringer memory JSONL into the global user knowledge root by default."#;
+adapt commands do not edit mod assets or translation packages. They read external translator files, normalize usable source/target pairs, and merge Stringer memory JSONL into the configured user global knowledge root when --out is omitted."#;
 
 pub(crate) const ADAPT_IMPORT_LONG_ABOUT: &str = r#"Import an external translation resource as Stringer translation memory JSONL.
 
@@ -76,25 +74,25 @@ Supported formats:
   eet-json  EET JSON or DDS-style export
   xt-sst    xTranslator SST file
 
-The output rows contain id, source, target, source_locale, target_locale, context, origin, and quality. Empty source or target rows are skipped and counted as diagnostics. When --out is omitted, rows are merged into <GLOBAL_KNOWLEDGE_ROOT>/memory/adapt/<INPUT_FILE_NAME>.jsonl so repeated imports of the same source stay isolated and idempotent. Use --out to write a specific JSONL file instead."#;
+The output rows contain id, source, target, source_locale, target_locale, context, origin, and quality. Empty source or target rows are skipped and counted as diagnostics. When --out is omitted, rows are merged into the configured user global knowledge root under memory/adapt/<INPUT_FILE_NAME>.jsonl so repeated imports of the same source stay isolated and idempotent. Use --out to write a specific JSONL file instead."#;
 
 pub(crate) const ADAPT_IMPORT_AFTER_LONG_HELP: &str = r#"Example:
   stringer adapt import --format xt-sst --input ./old.sst --source-locale en --target-locale zh-Hans --game SkyrimSe
 
 Common next step:
-  stringer knowledge index rebuild --root ./MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans"#;
+  stringer knowledge index rebuild --project-root ./MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans"#;
 
 pub(crate) const KNOWLEDGE_LONG_ABOUT: &str = r#"Knowledge commands provide translation packages and single-text queries with context.
 
-Knowledge sources include terminology TOML, translation-memory JSONL, replacement-rule TOML, and a rebuildable .stringer/indexes/knowledge.sqlite cache. annotate, validate, and lookup prefer a fresh index; if the index is missing or stale, they fall back to file-backed knowledge and report knowledge.index_stale."#;
+Knowledge sources include terminology TOML, translation-memory JSONL, replacement-rule TOML, and a rebuildable .stringer/indexes/knowledge.sqlite cache. Layers load as built-in, user global, library, then project. annotate, validate, and lookup prefer a fresh index; if the index is missing or stale, they fall back to file-backed knowledge and report knowledge.index_stale."#;
 
 pub(crate) const ANNOTATE_LONG_ABOUT: &str = r#"Write hints into a translation package and optionally auto-fill translations from high-confidence translation memory.
 
 annotate reads the translation package, loads knowledge, removes stale hints and diagnostics written by Stringer's built-in processors, then writes current terminology hints, memory candidates, and related diagnostics. It does not overwrite agent-written translations by default; --auto-fill-memory only permits high-confidence memory to fill empty translations."#;
 
 pub(crate) const ANNOTATE_AFTER_LONG_HELP: &str = r#"Examples:
-  stringer knowledge annotate --root ./MyMod --translations ./translations
-  stringer knowledge annotate --root ./MyMod --translations ./translations --auto-fill-memory
+  stringer knowledge annotate --project-root ./MyMod --workspace ./translations
+  stringer knowledge annotate --workspace ./translations --auto-fill-memory
 
 Agent editing guidance:
   When reading entries/**/*.jsonl, inspect source, context, hints, and diagnostics first.
@@ -105,7 +103,7 @@ pub(crate) const VALIDATE_LONG_ABOUT: &str = r#"Recompute translation package di
 validate does not trust old diagnostics already present in the package. It recomputes diagnostics from the current knowledge files, writes them back, and reports risks without blocking a later workspace finalize."#;
 
 pub(crate) const VALIDATE_AFTER_LONG_HELP: &str = r#"Example:
-  stringer knowledge validate --root ./MyMod --translations ./translations
+  stringer knowledge validate --project-root ./MyMod --workspace ./translations
 
 Common diagnostics:
   term.preferred_missing  preferred terminology was not used
@@ -120,8 +118,8 @@ pub(crate) const LOOKUP_LONG_ABOUT: &str = r#"Search terminology and translation
 lookup searches loaded knowledge tables by source and target text. By default it performs case-insensitive contains matching across both terminology and memory, ranks normalized exact source matches first, and emits compact results for agent lookup. Use --regex for regex matching and --json for machine-readable results."#;
 
 pub(crate) const LOOKUP_AFTER_LONG_HELP: &str = r#"Example:
-  stringer knowledge lookup --root ./MyMod --text "Altmer" --kind plugin --record-type NPC_ --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans --json
-  stringer knowledge lookup --root ./MyMod --text "^(Alt|Bos)mer$" --regex --source memory --field source --json
+  stringer knowledge lookup --project-root ./MyMod --text "Altmer" --kind plugin --record-type NPC_ --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans --json
+  stringer knowledge lookup --text "^(Alt|Bos)mer$" --regex --source memory --field source --json
 
 Available kind values:
   plugin
@@ -138,11 +136,11 @@ pub(crate) const INDEX_LONG_ABOUT: &str = r#"Knowledge index maintenance command
 
 The index is a derived cache, not the source of truth. It can be deleted and rebuilt at any time."#;
 
-pub(crate) const INDEX_REBUILD_LONG_ABOUT: &str = r#"Rebuild <MOD_ROOT>/.stringer/indexes/knowledge.sqlite.
+pub(crate) const INDEX_REBUILD_LONG_ABOUT: &str = r#"Rebuild <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite.
 
 rebuild reads the current knowledge-layer files and writes a derived index for terms, memory, rules, and diagnostics. Later annotate, validate, and lookup commands prefer the index when it is fresh."#;
 
 pub(crate) const INDEX_REBUILD_AFTER_LONG_HELP: &str = r#"Example:
-  stringer knowledge index rebuild --root ./MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
+  stringer knowledge index rebuild --project-root ./MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
 
 If knowledge files change often, agents can rebuild before bulk annotate or lookup operations."#;

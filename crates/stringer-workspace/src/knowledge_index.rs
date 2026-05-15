@@ -124,7 +124,7 @@ pub(crate) fn read_knowledge_index(path: &Utf8Path) -> Result<KnowledgeBase, Wor
     read_index_memory(&connection, path, &mut layers)?;
     read_index_rules(&connection, path, &mut layers)?;
     let mut knowledge_layers = Vec::new();
-    for layer_name in ["built-in", "global", "library", "project", "override"] {
+    for layer_name in ["built-in", "global", "library", "project"] {
         let mut layer = KnowledgeLayer::new(layer_name);
         if let Some(data) = layers.remove(layer_name) {
             if !data.terms.is_empty() {

@@ -1,4 +1,5 @@
 use std::fs;
+use std::process::Command as ProcessCommand;
 
 use clap::{CommandFactory, Parser};
 use serde_json::Value;
@@ -151,8 +152,6 @@ fn adapt_import_command_can_default_to_global_memory() {
         "en",
         "--target-locale",
         "zh-Hans",
-        "--global-knowledge-root",
-        "global-knowledge",
     ]);
 
     let Command::Adapt { command } = cli.command else {
@@ -162,10 +161,27 @@ fn adapt_import_command_can_default_to_global_memory() {
     assert_eq!(command.format, AdaptFormatArg::XtSst);
     assert_eq!(command.input.as_str(), "source.sst");
     assert_eq!(command.out, None);
-    assert_eq!(
-        command.global_knowledge_root.as_deref(),
-        Some("global-knowledge".into())
-    );
+}
+
+#[test]
+fn adapt_import_command_rejects_global_knowledge_root_override() {
+    let result = Cli::try_parse_from([
+        "stringer",
+        "adapt",
+        "import",
+        "--format",
+        "xt-sst",
+        "--input",
+        "source.sst",
+        "--source-locale",
+        "en",
+        "--target-locale",
+        "zh-Hans",
+        "--global-knowledge-root",
+        "global-knowledge",
+    ]);
+
+    assert!(result.is_err());
 }
 
 #[tokio::test]
@@ -204,105 +220,17 @@ async fn adapt_import_command_writes_memory_jsonl() {
     assert_eq!(row["context"]["game"], "SkyrimSe");
 }
 
-#[tokio::test]
-async fn adapt_import_command_merges_into_source_named_global_memory_by_default() {
-    let input = test_path("cli-adapt-source.eet");
-    let global = test_path("cli-adapt-global");
-    fs::write(&input, eet_v1_fixture()).unwrap();
-
-    let args = [
-        "stringer",
-        "adapt",
-        "import",
-        "--format",
-        "eet",
-        "--input",
-        input.as_str(),
-        "--source-locale",
-        "en",
-        "--target-locale",
-        "zh-Hans",
-        "--game",
-        "skyrim-se",
-        "--global-knowledge-root",
-        global.as_str(),
-    ];
-
-    stringer_cli::run(Cli::parse_from(args)).await.unwrap();
-    stringer_cli::run(Cli::parse_from(args)).await.unwrap();
-
-    let output = global
-        .join("memory")
-        .join("adapt")
-        .join(format!("{}.jsonl", input.file_name().unwrap()));
-    let text = fs::read_to_string(output).unwrap();
-    let rows = text
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0]["source"], "Iron Sword");
-    assert_eq!(rows[0]["target"], "铁剑");
-}
-
-#[tokio::test]
-async fn adapt_import_command_keeps_different_sources_in_separate_global_memory_files() {
-    let first = test_path("first-source.eet");
-    let second = test_path("second-source.eet");
-    let global = test_path("separate-global");
-    fs::write(&first, eet_v1_fixture()).unwrap();
-    fs::write(&second, eet_v1_fixture()).unwrap();
-
-    for input in [&first, &second] {
-        let cli = Cli::parse_from([
-            "stringer",
-            "adapt",
-            "import",
-            "--format",
-            "eet",
-            "--input",
-            input.as_str(),
-            "--source-locale",
-            "en",
-            "--target-locale",
-            "zh-Hans",
-            "--global-knowledge-root",
-            global.as_str(),
-        ]);
-        stringer_cli::run(cli).await.unwrap();
-    }
-
-    assert!(
-        global
-            .join("memory")
-            .join("adapt")
-            .join(format!("{}.jsonl", first.file_name().unwrap()))
-            .exists()
-    );
-    assert!(
-        global
-            .join("memory")
-            .join("adapt")
-            .join(format!("{}.jsonl", second.file_name().unwrap()))
-            .exists()
-    );
-}
-
 #[test]
-fn knowledge_annotate_command_uses_root_translations_and_auto_fill_flag() {
+fn knowledge_annotate_command_uses_project_root_workspace_and_auto_fill_flag() {
     let cli = Cli::parse_from([
         "stringer",
         "knowledge",
         "annotate",
-        "--root",
+        "--project-root",
         "input",
-        "--translations",
+        "--workspace",
         "translations",
         "--auto-fill-memory",
-        "--global-knowledge-root",
-        "global",
-        "--override-knowledge-root",
-        "override",
     ]);
 
     let Command::Knowledge { command } = cli.command else {
@@ -311,33 +239,98 @@ fn knowledge_annotate_command_uses_root_translations_and_auto_fill_flag() {
     let KnowledgeCommand::Annotate(command) = command else {
         panic!("expected knowledge annotate command");
     };
-    assert_eq!(command.root.as_str(), "input");
-    assert_eq!(command.translations.as_str(), "translations");
+    assert_eq!(command.project_root.as_deref(), Some("input".into()));
+    assert_eq!(command.workspace.as_str(), "translations");
     assert!(command.auto_fill_memory);
-    assert_eq!(
-        command.global_knowledge_root.as_deref(),
-        Some("global".into())
-    );
-    assert_eq!(
-        command.override_knowledge_root.as_deref(),
-        Some("override".into())
-    );
 }
 
 #[test]
-fn knowledge_validate_command_uses_root_and_translations() {
+fn knowledge_annotate_accepts_project_root_and_workspace() {
+    let result = Cli::try_parse_from([
+        "stringer",
+        "knowledge",
+        "annotate",
+        "--project-root",
+        "input",
+        "--workspace",
+        "translations",
+        "--auto-fill-memory",
+    ]);
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn knowledge_annotate_accepts_current_directory_project_root_default() {
+    let result = Cli::try_parse_from([
+        "stringer",
+        "knowledge",
+        "annotate",
+        "--workspace",
+        "translations",
+    ]);
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn knowledge_annotate_rejects_old_root_and_translations_flags() {
+    for flag in ["--root", "--translations"] {
+        let args = if flag == "--root" {
+            [
+                "stringer",
+                "knowledge",
+                "annotate",
+                "--root",
+                "input",
+                "--workspace",
+                "translations",
+            ]
+        } else {
+            [
+                "stringer",
+                "knowledge",
+                "annotate",
+                "--project-root",
+                "input",
+                "--translations",
+                "translations",
+            ]
+        };
+
+        assert!(Cli::try_parse_from(args).is_err());
+    }
+}
+
+#[test]
+fn knowledge_commands_reject_cli_knowledge_roots() {
+    for flag in ["--global-knowledge-root", "--override-knowledge-root"] {
+        let result = Cli::try_parse_from([
+            "stringer",
+            "knowledge",
+            "lookup",
+            "--project-root",
+            "input",
+            "--text",
+            "Iron Sword",
+            flag,
+            "knowledge",
+        ]);
+
+        assert!(result.is_err());
+    }
+}
+
+#[test]
+fn knowledge_validate_command_uses_project_root_and_workspace() {
     let cli = Cli::parse_from([
         "stringer",
         "knowledge",
         "validate",
-        "--root",
+        "--project-root",
         "input",
-        "--translations",
+        "--workspace",
         "translations",
-        "--global-knowledge-root",
-        "global",
-        "--override-knowledge-root",
-        "override",
     ]);
 
     let Command::Knowledge { command } = cli.command else {
@@ -346,16 +339,8 @@ fn knowledge_validate_command_uses_root_and_translations() {
     let KnowledgeCommand::Validate(command) = command else {
         panic!("expected knowledge validate command");
     };
-    assert_eq!(command.root.as_str(), "input");
-    assert_eq!(command.translations.as_str(), "translations");
-    assert_eq!(
-        command.global_knowledge_root.as_deref(),
-        Some("global".into())
-    );
-    assert_eq!(
-        command.override_knowledge_root.as_deref(),
-        Some("override".into())
-    );
+    assert_eq!(command.project_root.as_deref(), Some("input".into()));
+    assert_eq!(command.workspace.as_str(), "translations");
 }
 
 #[test]
@@ -364,7 +349,7 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
         "stringer",
         "knowledge",
         "lookup",
-        "--root",
+        "--project-root",
         "input",
         "--text",
         "Iron Sword",
@@ -382,10 +367,6 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
         "en",
         "--target-locale",
         "zh-Hans",
-        "--global-knowledge-root",
-        "global",
-        "--override-knowledge-root",
-        "override",
         "--regex",
         "--limit",
         "5",
@@ -403,19 +384,11 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
     let KnowledgeCommand::Lookup(command) = command else {
         panic!("expected knowledge lookup command");
     };
-    assert_eq!(command.root.as_str(), "input");
+    assert_eq!(command.project_root.as_deref(), Some("input".into()));
     assert_eq!(command.text, "Iron Sword");
     assert_eq!(command.kind, "plugin");
     assert_eq!(command.record_type.as_deref(), Some("WEAP"));
     assert_eq!(command.subrecord.as_deref(), Some("FULL"));
-    assert_eq!(
-        command.global_knowledge_root.as_deref(),
-        Some("global".into())
-    );
-    assert_eq!(
-        command.override_knowledge_root.as_deref(),
-        Some("override".into())
-    );
     assert!(command.regex);
     assert_eq!(command.limit, 5);
     assert!(command.case_sensitive);
@@ -426,15 +399,7 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
 
 #[test]
 fn knowledge_lookup_command_defaults_to_agent_search_options() {
-    let cli = Cli::parse_from([
-        "stringer",
-        "knowledge",
-        "lookup",
-        "--root",
-        "input",
-        "--text",
-        "altmer",
-    ]);
+    let cli = Cli::parse_from(["stringer", "knowledge", "lookup", "--text", "altmer"]);
 
     let Command::Knowledge { command } = cli.command else {
         panic!("expected knowledge command");
@@ -450,13 +415,56 @@ fn knowledge_lookup_command_defaults_to_agent_search_options() {
 }
 
 #[test]
-fn knowledge_index_rebuild_command_uses_root_settings_and_knowledge_roots() {
+fn knowledge_lookup_uses_current_directory_as_default_project_root() {
+    let project = test_path("cli-lookup-current-project");
+    let terms = project.join("knowledge/terms/base.toml");
+    fs::create_dir_all(terms.parent().unwrap()).unwrap();
+    fs::write(
+        &terms,
+        r#"
+[[terms]]
+id = "term:stringer-current"
+source = "Stringer Current Root"
+target = "当前目录"
+status = "preferred"
+"#,
+    )
+    .unwrap();
+
+    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+        .args([
+            "knowledge",
+            "lookup",
+            "--text",
+            "Stringer Current Root",
+            "--game-release",
+            "SkyrimSe",
+            "--asset-language",
+            "English",
+            "--source-locale",
+            "en",
+            "--target-locale",
+            "zh-Hans",
+            "--json",
+        ])
+        .current_dir(project)
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("\"total_matches\": 1"));
+    assert!(stdout.contains("当前目录"));
+}
+
+#[test]
+fn knowledge_index_rebuild_command_uses_project_root_and_settings() {
     let cli = Cli::parse_from([
         "stringer",
         "knowledge",
         "index",
         "rebuild",
-        "--root",
+        "--project-root",
         "input",
         "--game-release",
         "SkyrimSe",
@@ -466,10 +474,6 @@ fn knowledge_index_rebuild_command_uses_root_settings_and_knowledge_roots() {
         "en",
         "--target-locale",
         "zh-Hans",
-        "--global-knowledge-root",
-        "global",
-        "--override-knowledge-root",
-        "override",
     ]);
 
     let Command::Knowledge { command } = cli.command else {
@@ -479,15 +483,7 @@ fn knowledge_index_rebuild_command_uses_root_settings_and_knowledge_roots() {
         panic!("expected knowledge index command");
     };
     let KnowledgeIndexCommand::Rebuild(command) = command;
-    assert_eq!(command.root.as_str(), "input");
-    assert_eq!(
-        command.global_knowledge_root.as_deref(),
-        Some("global".into())
-    );
-    assert_eq!(
-        command.override_knowledge_root.as_deref(),
-        Some("override".into())
-    );
+    assert_eq!(command.project_root.as_deref(), Some("input".into()));
 }
 
 #[test]

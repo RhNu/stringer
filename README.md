@@ -48,8 +48,8 @@ cargo run -p stringer-cli -- workspace open `
 
 ```powershell
 cargo run -p stringer-cli -- knowledge annotate `
-  --root path/to/mod-root `
-  --translations path/to/translations
+  --project-root path/to/mod-root `
+  --workspace path/to/translations
 ```
 
 3. 编辑 `path/to/translations/entries/**/*.jsonl`。每行是一个翻译记录，通常只需要填写或修改 `translation`：
@@ -62,8 +62,8 @@ cargo run -p stringer-cli -- knowledge annotate `
 
 ```powershell
 cargo run -p stringer-cli -- knowledge validate `
-  --root path/to/mod-root `
-  --translations path/to/translations
+  --project-root path/to/mod-root `
+  --workspace path/to/translations
 ```
 
 5. 完成翻译工作区并写回覆盖目录：
@@ -103,7 +103,7 @@ translations/
 
 ## 配置
 
-CLI 支持从默认配置文件读取基础设置，也支持命令行覆盖。为了让 Agent 自洽，推荐显式传入这些参数：
+CLI 支持从默认用户配置文件和项目 `stringer.toml` 读取基础设置，也支持命令行覆盖。覆盖顺序为：用户配置 < 项目配置 < 命令行参数。为了让 Agent 自洽，推荐显式传入这些参数，或把项目固定设置写入项目 `stringer.toml`：
 
 - `--game-release`：`SkyrimLe` 或 `SkyrimSe`。
 - `--asset-language`：Bethesda 资产语言，例如 `English`、`Chinese`、`ChineseSimplified`。
@@ -127,7 +127,9 @@ target_locale = "zh-Hans"
 global_root = "knowledge"
 ```
 
-`knowledge lookup` 和 `knowledge index rebuild` 也会尝试读取模组根目录下的 `stringer.toml`。`workspace open` 当前只读取默认配置和命令行覆盖参数；如果需要可复现的 Agent 调用，请直接传入四个设置参数。
+用户配置中的 `[knowledge].global_root` 是全局知识库位置；没有显式配置时就没有用户全局知识库。项目 `stringer.toml` 只能配置 `game_release`、`asset_language`、`source_locale` 和 `target_locale`，出现 `[knowledge]` 配置会报错。
+
+`workspace open` 会读取 `--root` 下的 `stringer.toml`。`knowledge lookup` 和 `knowledge index rebuild` 会读取 `--project-root` 下的 `stringer.toml`；省略 `--project-root` 时使用当前目录。
 
 ## 知识库
 
@@ -146,7 +148,7 @@ knowledge/
     knowledge.sqlite
 ```
 
-知识层加载顺序为：内置默认值、全局知识库、游戏/语言库、项目知识库、命令行 override。后加载的层可以覆盖先加载的同 ID 项，覆盖会产生 diagnostic。
+知识层加载顺序为：内置默认值、用户全局知识库、游戏/语言库、项目知识库。后加载的层可以覆盖先加载的同 ID 项，覆盖会产生 diagnostic。
 
 术语文件示例：
 
@@ -187,7 +189,7 @@ note = "预留规则；默认不执行。"
 
 ```powershell
 cargo run -p stringer-cli -- knowledge index rebuild `
-  --root path/to/mod-root `
+  --project-root path/to/mod-root `
   --game-release SkyrimSe `
   --asset-language English `
   --source-locale en `
@@ -199,6 +201,8 @@ cargo run -p stringer-cli -- knowledge index rebuild `
 ## 迁移旧翻译资源
 
 `adapt import` 用于把已有翻译资源导入为 Stringer 翻译记忆 JSONL。它不会改模组文件，也不会直接改翻译包；它只读取外部资源，输出可放进 `knowledge/memory/` 的记忆文件，随后由 `knowledge annotate` 和 `knowledge lookup` 使用。
+
+省略 `--out` 时，`adapt import` 会写入用户配置的 `[knowledge].global_root` 下的 `memory/adapt/`；如果用户配置没有 `global_root`，命令会报错。
 
 支持格式：
 
@@ -232,7 +236,7 @@ cargo run -p stringer-cli -- adapt import `
 
 ```powershell
 cargo run -p stringer-cli -- knowledge index rebuild `
-  --root path/to/mod-root `
+  --project-root path/to/mod-root `
   --game-release SkyrimSe `
   --asset-language English `
   --source-locale en `

@@ -99,7 +99,8 @@ pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), WorkspaceErr
     match command {
         WorkspaceCommand::Open(command) => {
             let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                config_path: None,
+                user_config_path: None,
+                project_config_path: project_config_path(&command.root),
                 overrides: overrides(
                     command.game_release,
                     command.asset_language,
@@ -132,4 +133,9 @@ pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), WorkspaceErr
             Ok(())
         }
     }
+}
+
+fn project_config_path(root: &Utf8PathBuf) -> Option<Utf8PathBuf> {
+    let path = root.join("stringer.toml");
+    path.exists().then_some(path)
 }

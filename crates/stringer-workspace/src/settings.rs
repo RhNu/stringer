@@ -26,7 +26,8 @@ pub struct WorkspaceSettingsOverrides {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LoadWorkspaceSettingsOptions {
-    pub config_path: Option<Utf8PathBuf>,
+    pub user_config_path: Option<Utf8PathBuf>,
+    pub project_config_path: Option<Utf8PathBuf>,
     pub overrides: WorkspaceSettingsOverrides,
 }
 
@@ -38,6 +39,15 @@ struct ConfigFile {
     target_locale: Option<String>,
     #[serde(default)]
     knowledge: KnowledgeConfigFile,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct ProjectConfigFile {
+    game_release: Option<String>,
+    asset_language: Option<String>,
+    source_locale: Option<String>,
+    target_locale: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -53,14 +63,25 @@ struct LoadedConfigFile {
 pub fn load_workspace_settings(
     options: LoadWorkspaceSettingsOptions,
 ) -> Result<WorkspaceSettings, WorkspaceError> {
-    let loaded = load_config_file(options.config_path)?;
-    let config = loaded.config;
-    let config_game_release = config
+    let user = load_user_config_file(options.user_config_path)?;
+    let project_config = load_project_config_file(options.project_config_path)?;
+    let user_config = user.config;
+    let user_game_release = user_config
         .game_release
         .as_deref()
         .map(parse_game_release_name)
         .transpose()?;
-    let config_asset_language = config
+    let project_game_release = project_config
+        .game_release
+        .as_deref()
+        .map(parse_game_release_name)
+        .transpose()?;
+    let user_asset_language = user_config
+        .asset_language
+        .as_deref()
+        .map(parse_language_name)
+        .transpose()?;
+    let project_asset_language = project_config
         .asset_language
         .as_deref()
         .map(parse_language_name)
@@ -70,32 +91,36 @@ pub fn load_workspace_settings(
         game_release: options
             .overrides
             .game_release
-            .or(config_game_release)
+            .or(project_game_release)
+            .or(user_game_release)
             .ok_or(WorkspaceError::MissingSetting {
                 name: "game_release",
             })?,
         asset_language: options
             .overrides
             .asset_language
-            .or(config_asset_language)
+            .or(project_asset_language)
+            .or(user_asset_language)
             .ok_or(WorkspaceError::MissingSetting {
                 name: "asset_language",
             })?,
         source_locale: take_setting(
             options.overrides.source_locale,
-            config.source_locale,
+            project_config.source_locale,
+            user_config.source_locale,
             "source_locale",
         )?,
         target_locale: take_setting(
             options.overrides.target_locale,
-            config.target_locale,
+            project_config.target_locale,
+            user_config.target_locale,
             "target_locale",
         )?,
-        global_knowledge_root: global_knowledge_root(loaded.path.as_ref(), config.knowledge),
+        global_knowledge_root: global_knowledge_root(user.path.as_ref(), user_config.knowledge),
     })
 }
 
-fn load_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, WorkspaceError> {
+fn load_user_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, WorkspaceError> {
     let explicit = path.is_some();
     let Some(path) = path.or_else(default_config_path) else {
         return Ok(LoadedConfigFile {
@@ -123,6 +148,23 @@ fn load_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, Works
     })
 }
 
+fn load_project_config_file(
+    path: Option<Utf8PathBuf>,
+) -> Result<ProjectConfigFile, WorkspaceError> {
+    let Some(path) = path else {
+        return Ok(ProjectConfigFile::default());
+    };
+    let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::ReadFile {
+        path: path.clone(),
+        source,
+    })?;
+    let config = toml::from_str(&text).map_err(|source| WorkspaceError::ConfigToml {
+        path: path.clone(),
+        source,
+    })?;
+    Ok(config)
+}
+
 pub fn default_config_path() -> Option<Utf8PathBuf> {
     platform_default_config_path()
 }
@@ -134,14 +176,14 @@ pub fn load_global_knowledge_root(
     let Some(path) = config_path.or_else(default_config_path) else {
         return Ok(None);
     };
-    if path.exists() || explicit {
-        let loaded = load_config_file(Some(path))?;
-        return Ok(global_knowledge_root(
-            loaded.path.as_ref(),
-            loaded.config.knowledge,
-        ));
+    if !path.exists() && !explicit {
+        return Ok(None);
     }
-    Ok(path.parent().map(|parent| parent.join("knowledge")))
+    let loaded = load_user_config_file(Some(path))?;
+    Ok(global_knowledge_root(
+        loaded.path.as_ref(),
+        loaded.config.knowledge,
+    ))
 }
 
 #[cfg(windows)]
@@ -162,11 +204,13 @@ fn platform_default_config_path() -> Option<Utf8PathBuf> {
 
 fn take_setting(
     override_value: Option<String>,
-    config_value: Option<String>,
+    project_value: Option<String>,
+    user_value: Option<String>,
     name: &'static str,
 ) -> Result<String, WorkspaceError> {
     let value = override_value
-        .or(config_value)
+        .or(project_value)
+        .or(user_value)
         .ok_or(WorkspaceError::MissingSetting { name })?;
     if value.trim().is_empty() {
         return Err(WorkspaceError::InvalidSetting { name, value });
@@ -179,14 +223,11 @@ fn global_knowledge_root(
     knowledge: KnowledgeConfigFile,
 ) -> Option<Utf8PathBuf> {
     let config_dir = config_path.and_then(|path| path.parent().map(Utf8PathBuf::from));
-    if let Some(root) = knowledge.global_root {
-        let root = Utf8PathBuf::from(root);
-        if root.is_absolute() {
-            return Some(root);
-        }
-        return config_dir.map(|dir| dir.join(root));
+    let root = Utf8PathBuf::from(knowledge.global_root?);
+    if root.is_absolute() {
+        return Some(root);
     }
-    config_dir.map(|dir| dir.join("knowledge"))
+    config_dir.map(|dir| dir.join(root))
 }
 
 pub fn parse_game_release_name(value: &str) -> Result<GameRelease, WorkspaceError> {

@@ -3,11 +3,10 @@ use std::fs;
 use serde_json::Value;
 use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ExportTranslationsOptions,
-    ImportTranslationsOptions, KnowledgeLayerOverrides, LoadWorkspaceSettingsOptions,
-    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
-    PipelineEntryKind, ValidateTranslationsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
+    ImportTranslationsOptions, LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions,
+    LookupKnowledgeSource, PipelineEntryKind, ValidateTranslationsOptions, WorkspaceSettings,
     WriteTarget, annotate_translations, build_knowledge_index, export_translations,
-    import_translations, load_workspace_settings, lookup_knowledge, validate_translations,
+    import_translations, lookup_knowledge, validate_translations,
 };
 
 #[allow(dead_code)]
@@ -45,10 +44,9 @@ scope = { game = "SkyrimSe" }
     .unwrap();
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
         allow_memory_auto_fill: false,
-        knowledge: KnowledgeLayerOverrides::default(),
     })
     .unwrap();
 
@@ -91,10 +89,9 @@ async fn annotate_translations_removes_stale_diagnostics() {
     );
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
         allow_memory_auto_fill: false,
-        knowledge: KnowledgeLayerOverrides::default(),
     })
     .unwrap();
 
@@ -110,13 +107,13 @@ async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_
         &root
             .path()
             .join("Data/Interface/Translations/MyMod_English.txt"),
-        "$Title\tIron Sword\n$Desc\tSteel Sword\n",
+        "$Title\tStringer Test Iron Source\n$Desc\tStringer Test Steel Source\n",
     );
     write_text(
         &root.path().join("knowledge/memory/project.jsonl"),
         concat!(
-            "{\"id\":\"tm:1\",\"source\":\"Iron Sword\",\"target\":\"铁剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
-            "{\"id\":\"tm:2\",\"source\":\"Steel Sword\",\"target\":\"钢剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
+            "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
+            "{\"id\":\"tm:2\",\"source\":\"Stringer Test Steel Source\",\"target\":\"测试钢源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
         ),
     );
     let translations = root.path().join("translations");
@@ -131,16 +128,15 @@ async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_
         &translations,
         "scaleform",
         concat!(
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Iron Sword\",\"translation\":\"手工铁剑\"}\n",
-            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source\":\"Steel Sword\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Stringer Test Iron Source\",\"translation\":\"手工铁剑\"}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source\":\"Stringer Test Steel Source\"}\n",
         ),
     );
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
         allow_memory_auto_fill: true,
-        knowledge: KnowledgeLayerOverrides::default(),
     })
     .unwrap();
 
@@ -155,7 +151,7 @@ async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_
         "scaleform:Interface/Translations/MyMod_English.txt:$Desc",
     );
     assert_eq!(title["translation"], "手工铁剑");
-    assert_eq!(desc["translation"], "钢剑");
+    assert_eq!(desc["translation"], "测试钢源");
 }
 
 #[tokio::test]
@@ -203,9 +199,8 @@ status = "forbidden"
     );
 
     let summary = validate_translations(ValidateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        knowledge: KnowledgeLayerOverrides::default(),
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
     })
     .unwrap();
 
@@ -241,9 +236,8 @@ async fn validate_translations_reports_missing_translation() {
     .unwrap();
 
     let summary = validate_translations(ValidateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        knowledge: KnowledgeLayerOverrides::default(),
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
     })
     .unwrap();
 
@@ -301,36 +295,9 @@ async fn import_ignores_annotations_and_diagnostics() {
 }
 
 #[test]
-fn load_settings_defaults_global_knowledge_root_to_config_directory() {
-    let root = TempRoot::new("settings-global-knowledge");
-    let config = root.path().join("config/stringer.toml");
-    write_text(
-        &config,
-        r#"
-game_release = "SkyrimSe"
-asset_language = "English"
-source_locale = "en"
-target_locale = "zh-Hans"
-"#,
-    );
-
-    let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-        config_path: Some(utf8(&config)),
-        overrides: WorkspaceSettingsOverrides::default(),
-    })
-    .unwrap();
-
-    assert_eq!(
-        settings.global_knowledge_root,
-        Some(utf8(&root.path().join("config").join("knowledge")))
-    );
-}
-
-#[test]
-fn lookup_uses_global_library_project_and_override_layers_in_order() {
+fn lookup_uses_global_library_and_project_layers_in_order() {
     let root = TempRoot::new("knowledge-layer-order");
     let global = root.path().join("global-knowledge");
-    let override_root = root.path().join("override-knowledge");
     write_term(
         &global.join("terms/base.toml"),
         "skyrim.weapon.iron_sword",
@@ -346,22 +313,13 @@ fn lookup_uses_global_library_project_and_override_layers_in_order() {
         "skyrim.weapon.iron_sword",
         "项目铁剑",
     );
-    write_term(
-        &override_root.join("terms/override.toml"),
-        "skyrim.weapon.iron_sword",
-        "覆盖铁剑",
-    );
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        root: utf8(root.path()),
-        settings: settings_with_global(None),
+        project_root: utf8(root.path()),
+        settings: settings_with_global(Some(global)),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: vec![("record_type".to_string(), "WEAP".to_string())],
-        knowledge: KnowledgeLayerOverrides {
-            global_root: Some(utf8(&global)),
-            override_root: Some(utf8(&override_root)),
-        },
         mode: LookupKnowledgeMode::Contains,
         source: LookupKnowledgeSource::All,
         field: LookupKnowledgeField::Both,
@@ -371,7 +329,7 @@ fn lookup_uses_global_library_project_and_override_layers_in_order() {
     .unwrap();
 
     assert!(lookup.results.iter().any(|result| {
-        result.kind == "term" && result.layer == "override" && result.target == "覆盖铁剑"
+        result.kind == "term" && result.layer == "project" && result.target == "项目铁剑"
     }));
     assert!(lookup.diagnostics.iter().any(|diagnostic| {
         diagnostic.code() == "knowledge.override"
@@ -389,9 +347,8 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
     );
 
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-        root: utf8(root.path()),
+        project_root: utf8(root.path()),
         settings: settings_with_global(None),
-        knowledge: KnowledgeLayerOverrides::default(),
     })
     .unwrap();
     assert_eq!(summary.files, 1);
@@ -403,12 +360,11 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
     );
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        root: utf8(root.path()),
+        project_root: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
-        knowledge: KnowledgeLayerOverrides::default(),
         mode: LookupKnowledgeMode::Contains,
         source: LookupKnowledgeSource::All,
         field: LookupKnowledgeField::Both,
@@ -428,20 +384,18 @@ fn lookup_falls_back_to_files_and_reports_stale_index_when_knowledge_changes() {
     let terms = root.path().join("knowledge/terms/project.toml");
     write_term(&terms, "skyrim.weapon.iron_sword", "铁剑");
     build_knowledge_index(BuildKnowledgeIndexOptions {
-        root: utf8(root.path()),
+        project_root: utf8(root.path()),
         settings: settings_with_global(None),
-        knowledge: KnowledgeLayerOverrides::default(),
     })
     .unwrap();
     write_term(&terms, "skyrim.weapon.iron_sword", "熟铁剑");
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        root: utf8(root.path()),
+        project_root: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
-        knowledge: KnowledgeLayerOverrides::default(),
         mode: LookupKnowledgeMode::Contains,
         source: LookupKnowledgeSource::All,
         field: LookupKnowledgeField::Both,
@@ -484,10 +438,9 @@ async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diag
     .unwrap();
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
         allow_memory_auto_fill: false,
-        knowledge: KnowledgeLayerOverrides::default(),
     })
     .unwrap();
 
@@ -498,54 +451,6 @@ async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diag
             .iter()
             .any(|diagnostic| diagnostic.code() == "knowledge.index_stale")
     );
-}
-
-#[tokio::test]
-async fn annotate_uses_project_config_default_library_knowledge() {
-    let root = TempRoot::new("annotate-project-config-library");
-    write_text(
-        &root.path().join("stringer.toml"),
-        r#"
-game_release = "SkyrimSe"
-asset_language = "English"
-source_locale = "en"
-target_locale = "zh-Hans"
-"#,
-    );
-    write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
-        "$Title\tIron Sword\n",
-    );
-    write_term(
-        &root
-            .path()
-            .join("knowledge/libraries/SkyrimSe/zh-Hans/terms/library.toml"),
-        "skyrim.weapon.iron_sword",
-        "库铁剑",
-    );
-    let translations = root.path().join("translations");
-    export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
-        settings: settings_with_global(None),
-    })
-    .await
-    .unwrap();
-
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        allow_memory_auto_fill: false,
-        knowledge: KnowledgeLayerOverrides::default(),
-    })
-    .unwrap();
-
-    assert_eq!(summary.annotations, 1);
-    let rows = entry_rows(&translations, "scaleform", None);
-    assert_eq!(rows[0]["hints"][0]["layer"], "library");
-    assert_eq!(rows[0]["hints"][0]["payload"]["target"], "库铁剑");
 }
 
 #[test]
@@ -562,12 +467,11 @@ fn lookup_falls_back_to_files_when_index_is_corrupt() {
     );
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        root: utf8(root.path()),
+        project_root: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
-        knowledge: KnowledgeLayerOverrides::default(),
         mode: LookupKnowledgeMode::Contains,
         source: LookupKnowledgeSource::All,
         field: LookupKnowledgeField::Both,
@@ -600,12 +504,8 @@ fn build_index_preserves_duplicate_memory_ids_across_layers() {
     );
 
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-        root: utf8(root.path()),
-        settings: settings_with_global(None),
-        knowledge: KnowledgeLayerOverrides {
-            global_root: Some(utf8(&global)),
-            override_root: None,
-        },
+        project_root: utf8(root.path()),
+        settings: settings_with_global(Some(global)),
     })
     .unwrap();
 
@@ -624,19 +524,17 @@ fn fresh_index_preserves_duplicate_memory_ids_across_files_in_same_layer() {
         "{\"id\":\"tm:1\",\"source\":\"Steel Sword\",\"target\":\"钢剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
     );
     build_knowledge_index(BuildKnowledgeIndexOptions {
-        root: utf8(root.path()),
+        project_root: utf8(root.path()),
         settings: settings_with_global(None),
-        knowledge: KnowledgeLayerOverrides::default(),
     })
     .unwrap();
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        root: utf8(root.path()),
+        project_root: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Steel Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
-        knowledge: KnowledgeLayerOverrides::default(),
         mode: LookupKnowledgeMode::Contains,
         source: LookupKnowledgeSource::All,
         field: LookupKnowledgeField::Both,
@@ -654,16 +552,10 @@ fn fresh_index_preserves_duplicate_memory_ids_across_files_in_same_layer() {
     );
 }
 
-#[tokio::test]
-async fn annotate_reports_merge_diagnostics_once_as_knowledge_diagnostics() {
-    let root = TempRoot::new("annotate-merge-diagnostics-once");
+#[test]
+fn lookup_reports_merge_diagnostics_once() {
+    let root = TempRoot::new("lookup-merge-diagnostics-once");
     let global = root.path().join("global-knowledge");
-    write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
-        "$Title\tIron Sword\n$Desc\tIron Sword\n",
-    );
     write_term(
         &global.join("terms/base.toml"),
         "skyrim.weapon.iron_sword",
@@ -674,30 +566,24 @@ async fn annotate_reports_merge_diagnostics_once_as_knowledge_diagnostics() {
         "skyrim.weapon.iron_sword",
         "项目铁剑",
     );
-    let translations = root.path().join("translations");
-    export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
-        settings: settings_with_global(None),
-    })
-    .await
-    .unwrap();
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        allow_memory_auto_fill: false,
-        knowledge: KnowledgeLayerOverrides {
-            global_root: Some(utf8(&global)),
-            override_root: None,
-        },
+    let lookup = lookup_knowledge(LookupKnowledgeOptions {
+        project_root: utf8(root.path()),
+        settings: settings_with_global(Some(global)),
+        text: "Iron Sword".to_string(),
+        kind: PipelineEntryKind::Plugin,
+        context: Vec::new(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
     })
     .unwrap();
 
-    assert_eq!(summary.diagnostics, 0);
     assert_eq!(
-        summary
-            .knowledge_diagnostics
+        lookup
+            .diagnostics
             .iter()
             .filter(|diagnostic| diagnostic.code() == "knowledge.override")
             .count(),

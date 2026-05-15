@@ -20,7 +20,7 @@ use crate::knowledge_lookup::{
 use crate::package::{
     TranslationRecord, read_translation_package_records, write_translation_package_records,
 };
-use crate::settings::{WorkspaceSettings, game_release_name};
+use crate::settings::{WorkspaceSettings, game_release_name, load_global_knowledge_root};
 
 const BUILTIN_PROCESSORS: &[&str] = &[
     "stringer.term",
@@ -31,27 +31,24 @@ const BUILTIN_PROCESSORS: &[&str] = &[
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnnotateTranslationsOptions {
-    pub root: Utf8PathBuf,
-    pub translations: Utf8PathBuf,
+    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub allow_memory_auto_fill: bool,
-    pub knowledge: KnowledgeLayerOverrides,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidateTranslationsOptions {
-    pub root: Utf8PathBuf,
-    pub translations: Utf8PathBuf,
-    pub knowledge: KnowledgeLayerOverrides,
+    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LookupKnowledgeOptions {
-    pub root: Utf8PathBuf,
+    pub project_root: Utf8PathBuf,
     pub settings: WorkspaceSettings,
     pub text: String,
     pub kind: PipelineEntryKind,
     pub context: Vec<(String, String)>,
-    pub knowledge: KnowledgeLayerOverrides,
     pub mode: LookupKnowledgeMode,
     pub source: LookupKnowledgeSource,
     pub field: LookupKnowledgeField,
@@ -59,25 +56,17 @@ pub struct LookupKnowledgeOptions {
     pub case_sensitive: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct KnowledgeLayerOverrides {
-    pub global_root: Option<Utf8PathBuf>,
-    pub override_root: Option<Utf8PathBuf>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadKnowledgeLayersOptions {
-    pub root: Utf8PathBuf,
+    pub project_root: Utf8PathBuf,
     pub settings: WorkspaceSettings,
-    pub knowledge: KnowledgeLayerOverrides,
     pub prefer_index: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuildKnowledgeIndexOptions {
-    pub root: Utf8PathBuf,
+    pub project_root: Utf8PathBuf,
     pub settings: WorkspaceSettings,
-    pub knowledge: KnowledgeLayerOverrides,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -109,13 +98,11 @@ pub struct KnowledgeSummary {
 pub fn annotate_translations(
     options: AnnotateTranslationsOptions,
 ) -> Result<KnowledgeSummary, WorkspaceError> {
-    let mut package = read_translation_package_records(&options.translations)?;
-    let settings =
-        settings_with_project_knowledge_defaults(&options.root, package.settings.clone())?;
+    let mut package = read_translation_package_records(&options.workspace)?;
+    let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        root: options.root.clone(),
+        project_root: options.project_root.clone(),
         settings,
-        knowledge: options.knowledge,
         prefer_index: true,
     })?;
     let pipeline = default_pipeline();
@@ -160,20 +147,18 @@ pub fn annotate_translations(
         }
     }
 
-    write_translation_package_records(&options.translations, &package)?;
+    write_translation_package_records(&options.workspace, &package)?;
     Ok(summary)
 }
 
 pub fn validate_translations(
     options: ValidateTranslationsOptions,
 ) -> Result<KnowledgeSummary, WorkspaceError> {
-    let mut package = read_translation_package_records(&options.translations)?;
-    let settings =
-        settings_with_project_knowledge_defaults(&options.root, package.settings.clone())?;
+    let mut package = read_translation_package_records(&options.workspace)?;
+    let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        root: options.root.clone(),
+        project_root: options.project_root.clone(),
         settings,
-        knowledge: options.knowledge,
         prefer_index: true,
     })?;
     let pipeline = default_pipeline();
@@ -206,7 +191,7 @@ pub fn validate_translations(
         }
     }
 
-    write_translation_package_records(&options.translations, &package)?;
+    write_translation_package_records(&options.workspace, &package)?;
     Ok(summary)
 }
 
@@ -214,12 +199,10 @@ pub fn lookup_knowledge(
     options: LookupKnowledgeOptions,
 ) -> Result<KnowledgeLookup, WorkspaceError> {
     let query = options.text.clone();
-    let settings =
-        settings_with_project_knowledge_defaults(&options.root, options.settings.clone())?;
+    let settings = options.settings.clone();
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        root: options.root.clone(),
+        project_root: options.project_root.clone(),
         settings: settings.clone(),
-        knowledge: options.knowledge,
         prefer_index: true,
     })?;
     let mut context = BTreeMap::new();
@@ -262,10 +245,10 @@ pub fn lookup_knowledge(
 pub fn build_knowledge_index(
     options: BuildKnowledgeIndexOptions,
 ) -> Result<KnowledgeIndexSummary, WorkspaceError> {
-    let settings = settings_with_project_knowledge_defaults(&options.root, options.settings)?;
-    let files = collect_source_files(&options.root, &settings, &options.knowledge)?;
+    let settings = options.settings;
+    let files = collect_source_files(&options.project_root, &settings)?;
     let knowledge = load_knowledge_from_files(&files)?;
-    let index_path = knowledge_index_path(&options.root);
+    let index_path = knowledge_index_path(&options.project_root);
     write_knowledge_index(&index_path, &files, &knowledge)?;
     Ok(KnowledgeIndexSummary {
         files: files.len(),
@@ -279,9 +262,9 @@ pub fn build_knowledge_index(
 pub fn load_knowledge_layers(
     options: LoadKnowledgeLayersOptions,
 ) -> Result<LoadedKnowledgeLayers, WorkspaceError> {
-    let settings = settings_with_project_knowledge_defaults(&options.root, options.settings)?;
-    let files = collect_source_files(&options.root, &settings, &options.knowledge)?;
-    let index_path = knowledge_index_path(&options.root);
+    let settings = options.settings;
+    let files = collect_source_files(&options.project_root, &settings)?;
+    let index_path = knowledge_index_path(&options.project_root);
     if options.prefer_index
         && index_path.exists()
         && let Ok(true) = index_is_fresh(&index_path, &files)
@@ -329,67 +312,34 @@ fn knowledge_diagnostics(loaded: &LoadedKnowledgeLayers) -> Vec<PipelineDiagnost
     diagnostics
 }
 
-fn settings_with_project_knowledge_defaults(
-    root: &Utf8Path,
+fn settings_with_user_knowledge_defaults(
     mut settings: WorkspaceSettings,
 ) -> Result<WorkspaceSettings, WorkspaceError> {
     if settings.global_knowledge_root.is_none() {
-        settings.global_knowledge_root = project_config_global_root(root)?;
+        settings.global_knowledge_root = load_global_knowledge_root(None)?;
     }
     Ok(settings)
 }
 
-fn project_config_global_root(root: &Utf8Path) -> Result<Option<Utf8PathBuf>, WorkspaceError> {
-    let config_path = root.join("stringer.toml");
-    if !config_path.exists() {
-        return Ok(None);
-    }
-    let text = fs::read_to_string(&config_path).map_err(|source| WorkspaceError::ReadFile {
-        path: config_path.clone(),
-        source,
-    })?;
-    let value: toml::Value =
-        toml::from_str(&text).map_err(|source| WorkspaceError::ConfigToml {
-            path: config_path.clone(),
-            source,
-        })?;
-    let configured = value
-        .get("knowledge")
-        .and_then(|knowledge| knowledge.get("global_root"))
-        .and_then(toml::Value::as_str)
-        .map(Utf8PathBuf::from);
-    Ok(Some(match configured {
-        Some(path) if path.is_absolute() => path,
-        Some(path) => root.join(path),
-        None => root.join("knowledge"),
-    }))
-}
-
 fn collect_source_files(
-    root: &Utf8Path,
+    project_root: &Utf8Path,
     settings: &WorkspaceSettings,
-    overrides: &KnowledgeLayerOverrides,
 ) -> Result<Vec<KnowledgeSourceFile>, WorkspaceError> {
     let mut files = Vec::new();
-    for (layer, root) in knowledge_roots(root, settings, overrides) {
+    for (layer, root) in knowledge_roots(project_root, settings) {
         collect_files_for_layer(&mut files, &layer, &root)?;
     }
     Ok(files)
 }
 
 fn knowledge_roots(
-    root: &Utf8Path,
+    project_root: &Utf8Path,
     settings: &WorkspaceSettings,
-    overrides: &KnowledgeLayerOverrides,
 ) -> Vec<(String, Utf8PathBuf)> {
     let mut roots = Vec::new();
-    let project_root = root.join("knowledge");
-    let global_root = overrides
-        .global_root
-        .clone()
-        .or_else(|| settings.global_knowledge_root.clone());
-    if let Some(global_root) = global_root {
-        if !same_path(&global_root, &project_root) {
+    let project_knowledge_root = project_root.join("knowledge");
+    if let Some(global_root) = settings.global_knowledge_root.clone() {
+        if !same_path(&global_root, &project_knowledge_root) {
             roots.push(("global".to_string(), global_root.clone()));
         }
         roots.push((
@@ -400,10 +350,7 @@ fn knowledge_roots(
                 .join(&settings.target_locale),
         ));
     }
-    roots.push(("project".to_string(), project_root));
-    if let Some(override_root) = &overrides.override_root {
-        roots.push(("override".to_string(), override_root.clone()));
-    }
+    roots.push(("project".to_string(), project_knowledge_root));
     roots
 }
 
@@ -457,7 +404,7 @@ fn load_knowledge_from_files(
             KnowledgeFileKind::Rules => layer.add_rules_toml(file.path.as_str(), &text)?,
         }
     }
-    let ordered = ["built-in", "global", "library", "project", "override"]
+    let ordered = ["built-in", "global", "library", "project"]
         .into_iter()
         .filter_map(|name| layers.remove(name))
         .collect::<Vec<_>>();

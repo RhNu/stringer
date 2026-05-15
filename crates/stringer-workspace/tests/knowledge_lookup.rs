@@ -1,6 +1,6 @@
 use stringer_workspace::{
-    KnowledgeLayerOverrides, LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions,
-    LookupKnowledgeSource, PipelineEntryKind, WorkspaceSettings, lookup_knowledge,
+    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
+    PipelineEntryKind, WorkspaceSettings, lookup_knowledge,
 };
 
 #[allow(dead_code)]
@@ -141,12 +141,11 @@ fn lookup_context_conflict_does_not_outrank_context_match() {
 
 fn lookup_options(root: &std::path::Path, text: &str) -> LookupKnowledgeOptions {
     LookupKnowledgeOptions {
-        root: utf8(root),
+        project_root: utf8(root),
         settings: settings_with_global(None),
         text: text.to_string(),
         kind: PipelineEntryKind::Plugin,
         context: vec![("record_type".to_string(), "WEAP".to_string())],
-        knowledge: KnowledgeLayerOverrides::default(),
         mode: LookupKnowledgeMode::Contains,
         source: LookupKnowledgeSource::All,
         field: LookupKnowledgeField::Both,
