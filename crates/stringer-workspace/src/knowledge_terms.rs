@@ -13,7 +13,7 @@ use crate::settings::WorkspaceSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KnowledgeTermUpsertOptions {
-    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub file: Option<Utf8PathBuf>,
     pub term: KnowledgeTermInput,
     pub rebuild_index: bool,
@@ -22,7 +22,7 @@ pub struct KnowledgeTermUpsertOptions {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KnowledgeTermsUpsertOptions {
-    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub file: Option<Utf8PathBuf>,
     pub terms: Vec<KnowledgeTermInput>,
     pub rebuild_index: bool,
@@ -31,7 +31,7 @@ pub struct KnowledgeTermsUpsertOptions {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KnowledgeTermDeleteOptions {
-    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub file: Option<Utf8PathBuf>,
     pub id: String,
     pub rebuild_index: bool,
@@ -88,7 +88,7 @@ pub fn upsert_knowledge_term(
 ) -> Result<KnowledgeTermEditSummary, WorkspaceError> {
     let id = options.term.id.clone();
     let summary = upsert_knowledge_terms(KnowledgeTermsUpsertOptions {
-        project_root: options.project_root,
+        workspace: options.workspace,
         file: options.file,
         terms: vec![options.term],
         rebuild_index: options.rebuild_index,
@@ -109,7 +109,7 @@ pub fn upsert_knowledge_terms(
         validate_scope(term)?;
     }
 
-    let path = term_file_path(&options.project_root, options.file)?;
+    let path = term_file_path(&options.workspace, options.file)?;
     let mut document = read_terms_document(&path)?;
     let terms = terms_array_mut(&mut document, &path)?;
     let ids = options
@@ -124,11 +124,8 @@ pub fn upsert_knowledge_terms(
     }
 
     write_terms_document(&path, &document)?;
-    let index_summary = rebuild_index_if_requested(
-        options.rebuild_index,
-        options.project_root,
-        options.settings,
-    )?;
+    let index_summary =
+        rebuild_index_if_requested(options.rebuild_index, options.workspace, options.settings)?;
     Ok(KnowledgeTermsEditSummary {
         action: "upserted".to_string(),
         count: ids.len(),
@@ -141,7 +138,7 @@ pub fn upsert_knowledge_terms(
 pub fn delete_knowledge_term(
     options: KnowledgeTermDeleteOptions,
 ) -> Result<KnowledgeTermEditSummary, WorkspaceError> {
-    let path = term_file_path(&options.project_root, options.file)?;
+    let path = term_file_path(&options.workspace, options.file)?;
     let mut document = read_terms_document(&path)?;
     let terms = terms_array_mut(&mut document, &path)?;
     if remove_matching_terms(terms, &options.id) == 0 {
@@ -151,11 +148,8 @@ pub fn delete_knowledge_term(
         });
     }
     write_terms_document(&path, &document)?;
-    let index_summary = rebuild_index_if_requested(
-        options.rebuild_index,
-        options.project_root,
-        options.settings,
-    )?;
+    let index_summary =
+        rebuild_index_if_requested(options.rebuild_index, options.workspace, options.settings)?;
     Ok(KnowledgeTermEditSummary {
         action: "deleted".to_string(),
         id: options.id,
@@ -165,20 +159,20 @@ pub fn delete_knowledge_term(
 }
 
 fn term_file_path(
-    project_root: &camino::Utf8Path,
+    workspace: &camino::Utf8Path,
     file: Option<Utf8PathBuf>,
 ) -> Result<Utf8PathBuf, WorkspaceError> {
     let path = match file {
-        Some(file) if file.is_relative() => project_root.join(file),
+        Some(file) if file.is_relative() => workspace.join(file),
         Some(file) => file,
-        None => project_root.join("knowledge/terms/project.toml"),
+        None => workspace.join("knowledge/terms/workspace.toml"),
     };
-    if path_is_in_project_terms(&path, project_root) {
+    if path_is_in_workspace_terms(&path, workspace) {
         return Ok(path);
     }
     Err(WorkspaceError::InvalidKnowledgeTermFile {
         path,
-        message: "term files must be .toml files under the project knowledge/terms directory"
+        message: "term files must be .toml files under the workspace knowledge/terms directory"
             .to_string(),
     })
 }
@@ -280,7 +274,7 @@ fn string_array(values: &[String]) -> Item {
 
 fn rebuild_index_if_requested(
     rebuild_index: bool,
-    project_root: Utf8PathBuf,
+    workspace: Utf8PathBuf,
     settings: Option<WorkspaceSettings>,
 ) -> Result<Option<KnowledgeIndexSummary>, WorkspaceError> {
     if !rebuild_index {
@@ -288,7 +282,7 @@ fn rebuild_index_if_requested(
     }
     let settings = settings.ok_or(WorkspaceError::MissingSetting { name: "settings" })?;
     build_knowledge_index(BuildKnowledgeIndexOptions {
-        project_root,
+        workspace,
         settings,
     })
     .map(Some)
@@ -306,14 +300,14 @@ fn validate_scope(input: &KnowledgeTermInput) -> Result<(), WorkspaceError> {
     Ok(())
 }
 
-fn path_is_in_project_terms(path: &camino::Utf8Path, project_root: &camino::Utf8Path) -> bool {
+fn path_is_in_workspace_terms(path: &camino::Utf8Path, workspace: &camino::Utf8Path) -> bool {
     if !path
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("toml"))
     {
         return false;
     }
-    let terms_root = project_root.join("knowledge/terms");
+    let terms_root = workspace.join("knowledge/terms");
     let Some(path) = normalized_components(path) else {
         return false;
     };

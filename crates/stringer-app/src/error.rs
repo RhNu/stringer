@@ -87,7 +87,7 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::BatchEntryNotClaimed { .. } => "workspace.batch_entry_not_claimed",
         WorkspaceError::DuplicateOutputPath { .. } => "workspace.duplicate_output_path",
         WorkspaceError::InvalidLogicalPath { .. } => "workspace.invalid_logical_path",
-        WorkspaceError::InvalidOverrideRoot { .. } => "workspace.invalid_override_root",
+        WorkspaceError::InvalidOutputRoot { .. } => "workspace.invalid_output_root",
         WorkspaceError::Reader(_) => "workspace.reader",
         WorkspaceError::Plugin(_) => "workspace.plugin",
         WorkspaceError::Pex(_) => "workspace.pex",
@@ -148,7 +148,7 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         WorkspaceError::InvalidLogicalPath { path, message } => {
             json!({ "path": path, "message": message })
         }
-        WorkspaceError::InvalidOverrideRoot { root, message } => {
+        WorkspaceError::InvalidOutputRoot { root, message } => {
             json!({ "root": json_path(root), "message": message })
         }
         WorkspaceError::CurrentDirectory { .. }

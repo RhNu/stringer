@@ -5,14 +5,16 @@ pub(crate) fn path(value: String) -> Utf8PathBuf {
     Utf8PathBuf::from(value)
 }
 
-pub(crate) fn project_config_path(root: &Utf8PathBuf) -> Option<Utf8PathBuf> {
+pub(crate) fn workspace_config_path(root: &Utf8PathBuf) -> Option<Utf8PathBuf> {
     let candidate = root.join("stringer.toml");
     candidate.exists().then_some(candidate)
 }
 
-pub(crate) fn project_root_or_current(root: Option<String>) -> Result<Utf8PathBuf, WorkspaceError> {
-    if let Some(root) = root {
-        return Ok(path(root));
+pub(crate) fn workspace_or_current(
+    workspace: Option<String>,
+) -> Result<Utf8PathBuf, WorkspaceError> {
+    if let Some(workspace) = workspace {
+        return Ok(path(workspace));
     }
     let current =
         std::env::current_dir().map_err(|source| WorkspaceError::CurrentDirectory { source })?;
@@ -20,6 +22,23 @@ pub(crate) fn project_root_or_current(root: Option<String>) -> Result<Utf8PathBu
         path: path.display().to_string(),
         message: "current directory is not valid UTF-8".to_string(),
     })
+}
+
+pub(crate) fn initialized_workspace_or_current(
+    workspace: Option<String>,
+) -> Result<Utf8PathBuf, WorkspaceError> {
+    let workspace = workspace_or_current(workspace)?;
+    if workspace.join("workspace.json").exists() {
+        return Ok(workspace);
+    }
+    Err(WorkspaceError::InvalidTranslationPackagePath {
+        path: workspace.to_string(),
+        message: "workspace.json was not found; run workspace open first".to_string(),
+    })
+}
+
+pub(crate) fn default_output_path(workspace: &Utf8PathBuf) -> Utf8PathBuf {
+    workspace.join("output")
 }
 
 pub(crate) fn default_adapt_memory_path(

@@ -34,20 +34,18 @@ const BUILTIN_PROCESSORS: &[&str] = &[
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnnotateTranslationsOptions {
-    pub project_root: Utf8PathBuf,
     pub workspace: Utf8PathBuf,
     pub skip_memory_fill: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidateTranslationsOptions {
-    pub project_root: Utf8PathBuf,
     pub workspace: Utf8PathBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LookupKnowledgeOptions {
-    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub settings: WorkspaceSettings,
     pub text: String,
     pub kind: PipelineEntryKind,
@@ -61,14 +59,14 @@ pub struct LookupKnowledgeOptions {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadKnowledgeLayersOptions {
-    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub settings: WorkspaceSettings,
     pub prefer_index: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuildKnowledgeIndexOptions {
-    pub project_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub settings: WorkspaceSettings,
 }
 
@@ -109,7 +107,7 @@ pub fn annotate_translations(
     let claimed = claimed_entry_ids(&options.workspace)?;
     let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        project_root: options.project_root.clone(),
+        workspace: options.workspace.clone(),
         settings,
         prefer_index: true,
     })?;
@@ -175,7 +173,7 @@ pub fn validate_translations(
     let mut package = read_translation_package_records(&options.workspace)?;
     let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        project_root: options.project_root.clone(),
+        workspace: options.workspace.clone(),
         settings,
         prefer_index: true,
     })?;
@@ -217,7 +215,7 @@ pub fn lookup_knowledge(
     options: LookupKnowledgeOptions,
 ) -> Result<KnowledgeLookup, WorkspaceError> {
     let query = options.text.clone();
-    let settings = options.settings.clone();
+    let settings = settings_with_user_knowledge_defaults(options.settings.clone())?;
     let mut context = BTreeMap::new();
     context.insert(
         "game".to_string(),
@@ -229,8 +227,8 @@ pub fn lookup_knowledge(
     for (key, value) in options.context {
         context.insert(key, value);
     }
-    let files = collect_source_files(&options.project_root, &settings)?;
-    let index_path = knowledge_index_path(&options.project_root);
+    let files = collect_source_files(&options.workspace, &settings)?;
+    let index_path = knowledge_index_path(&options.workspace);
     let index = ensure_knowledge_index(&index_path, &files, &settings, || {
         load_knowledge_from_files(&files)
     })?;
@@ -262,19 +260,19 @@ pub fn lookup_knowledge(
 pub fn build_knowledge_index(
     options: BuildKnowledgeIndexOptions,
 ) -> Result<KnowledgeIndexSummary, WorkspaceError> {
-    let settings = options.settings;
-    let files = collect_source_files(&options.project_root, &settings)?;
+    let settings = settings_with_user_knowledge_defaults(options.settings)?;
+    let files = collect_source_files(&options.workspace, &settings)?;
     let knowledge = load_knowledge_from_files(&files)?;
-    let index_path = knowledge_index_path(&options.project_root);
+    let index_path = knowledge_index_path(&options.workspace);
     rebuild_knowledge_index(&index_path, &files, &settings, &knowledge, Some("explicit"))
 }
 
 pub fn load_knowledge_layers(
     options: LoadKnowledgeLayersOptions,
 ) -> Result<LoadedKnowledgeLayers, WorkspaceError> {
-    let settings = options.settings;
-    let files = collect_source_files(&options.project_root, &settings)?;
-    let index_path = knowledge_index_path(&options.project_root);
+    let settings = settings_with_user_knowledge_defaults(options.settings)?;
+    let files = collect_source_files(&options.workspace, &settings)?;
+    let index_path = knowledge_index_path(&options.workspace);
     let knowledge = load_knowledge_from_files(&files)?;
     let mut diagnostics = Vec::new();
     let index_used =
@@ -325,35 +323,28 @@ fn settings_with_user_knowledge_defaults(
 }
 
 fn collect_source_files(
-    project_root: &Utf8Path,
+    workspace: &Utf8Path,
     settings: &WorkspaceSettings,
 ) -> Result<Vec<KnowledgeSourceFile>, WorkspaceError> {
     let mut files = Vec::new();
-    for (layer, root) in knowledge_roots(project_root, settings) {
+    for (layer, root) in knowledge_roots(workspace, settings) {
         collect_files_for_layer(&mut files, &layer, &root)?;
     }
     Ok(files)
 }
 
 fn knowledge_roots(
-    project_root: &Utf8Path,
+    workspace: &Utf8Path,
     settings: &WorkspaceSettings,
 ) -> Vec<(String, Utf8PathBuf)> {
     let mut roots = Vec::new();
-    let project_knowledge_root = project_root.join("knowledge");
-    if let Some(global_root) = settings.global_knowledge_root.clone() {
-        if !same_path(&global_root, &project_knowledge_root) {
-            roots.push(("global".to_string(), global_root.clone()));
-        }
-        roots.push((
-            "library".to_string(),
-            global_root
-                .join("libraries")
-                .join(game_release_name(settings.game_release))
-                .join(&settings.target_locale),
-        ));
+    let workspace_knowledge_root = workspace.join("knowledge");
+    if let Some(global_root) = settings.global_knowledge_root.clone()
+        && !same_path(&global_root, &workspace_knowledge_root)
+    {
+        roots.push(("global".to_string(), global_root.clone()));
     }
-    roots.push(("project".to_string(), project_knowledge_root));
+    roots.push(("workspace".to_string(), workspace_knowledge_root));
     roots
 }
 
@@ -398,7 +389,7 @@ fn load_knowledge_from_files(
             KnowledgeFileKind::Rules => layer.add_rules_toml(file.path.as_str(), &text)?,
         }
     }
-    let ordered = ["built-in", "global", "library", "project"]
+    let ordered = ["built-in", "global", "workspace"]
         .into_iter()
         .filter_map(|name| layers.remove(name))
         .collect::<Vec<_>>();

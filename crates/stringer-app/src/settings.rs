@@ -10,15 +10,15 @@ use crate::dto::{
     AdaptFormatInput, KnowledgeKindInput, KnowledgeLookupFieldInput, KnowledgeLookupSourceInput,
     SettingsInput,
 };
-use crate::paths::project_config_path;
+use crate::paths::workspace_config_path;
 
-pub(crate) fn load_settings_for_project(
-    project_root: &Utf8PathBuf,
+pub(crate) fn load_settings_for_workspace(
+    workspace: &Utf8PathBuf,
     settings: SettingsInput,
 ) -> Result<stringer_workspace::WorkspaceSettings, WorkspaceError> {
     load_workspace_settings(LoadWorkspaceSettingsOptions {
         user_config_path: None,
-        project_config_path: project_config_path(project_root),
+        workspace_config_path: workspace_config_path(workspace),
         overrides: settings.overrides()?,
     })
 }

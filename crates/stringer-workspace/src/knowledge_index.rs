@@ -39,7 +39,7 @@ pub(crate) struct KnowledgeIndexState {
 }
 
 pub(crate) fn knowledge_index_path(root: &Utf8Path) -> Utf8PathBuf {
-    root.join(".stringer/indexes/knowledge.sqlite")
+    root.join("knowledge/index.sqlite")
 }
 
 pub(crate) fn source_file_from_path(

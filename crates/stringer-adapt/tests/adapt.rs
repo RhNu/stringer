@@ -280,7 +280,7 @@ fn write_memory_jsonl_suffixes_duplicate_ids_so_memory_can_load() {
         })
         .collect::<Vec<_>>();
     assert_ne!(ids[0], ids[1]);
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_memory_jsonl("knowledge/memory/adapt.jsonl", &text)
         .unwrap();
@@ -322,7 +322,7 @@ fn merge_memory_jsonl_is_idempotent_for_same_catalog() {
 
     let text = fs::read_to_string(output).unwrap();
     assert_eq!(text.lines().count(), 1);
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_memory_jsonl("knowledge/memory/adapt/merge-idempotent.eet.jsonl", &text)
         .unwrap();

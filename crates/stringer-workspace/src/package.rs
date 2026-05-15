@@ -19,7 +19,7 @@ use crate::settings::{
     parse_language_name,
 };
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 const WORKSPACE_FILE: &str = "workspace.json";
 const LEGACY_MANIFEST_FILE: &str = "manifest.json";
@@ -29,6 +29,7 @@ const BATCHES_DIR: &str = "batches";
 pub struct TranslationManifest {
     pub schema_version: u32,
     pub kind: String,
+    pub source_root: String,
     pub game_release: String,
     pub asset_language: String,
     pub source_locale: String,
@@ -132,6 +133,7 @@ pub fn packaged_record_from_entry(
 
 pub fn write_translation_package(
     path: &Utf8Path,
+    source_root: &Utf8Path,
     settings: &WorkspaceSettings,
     records: &[PackagedTranslationRecord],
 ) -> Result<(), WorkspaceError> {
@@ -171,6 +173,7 @@ pub fn write_translation_package(
     let manifest = TranslationManifest {
         schema_version: SCHEMA_VERSION,
         kind: "stringer.workspace".to_string(),
+        source_root: source_root.as_str().replace('\\', "/"),
         game_release: game_release_name(settings.game_release).to_string(),
         asset_language: language_name(settings.asset_language).to_string(),
         source_locale: settings.source_locale.clone(),
@@ -189,15 +192,10 @@ pub fn write_translation_package(
 
 pub fn read_translation_package(
     path: &Utf8Path,
-) -> Result<(WorkspaceSettings, BTreeMap<String, String>), WorkspaceError> {
+) -> Result<(WorkspaceSettings, Utf8PathBuf, BTreeMap<String, String>), WorkspaceError> {
     let manifest = read_translation_manifest(path)?;
-    let settings = WorkspaceSettings {
-        game_release: parse_game_release_name(&manifest.game_release)?,
-        asset_language: parse_language_name(&manifest.asset_language)?,
-        source_locale: required_manifest_setting(manifest.source_locale, "source_locale")?,
-        target_locale: required_manifest_setting(manifest.target_locale, "target_locale")?,
-        global_knowledge_root: None,
-    };
+    let settings = settings_from_manifest(&manifest)?;
+    let source_root = source_root_from_manifest(&manifest)?;
 
     let mut seen_files = BTreeSet::new();
     let mut seen_ids = BTreeSet::new();
@@ -214,7 +212,15 @@ pub fn read_translation_package(
         read_patch_file(&entry_path, &mut seen_ids, &mut patches)?;
     }
 
-    Ok((settings, patches))
+    Ok((settings, source_root, patches))
+}
+
+pub fn read_workspace_settings(path: &Utf8Path) -> Result<WorkspaceSettings, WorkspaceError> {
+    settings_from_manifest(&read_translation_manifest(path)?)
+}
+
+pub fn read_workspace_source_root(path: &Utf8Path) -> Result<Utf8PathBuf, WorkspaceError> {
+    source_root_from_manifest(&read_translation_manifest(path)?)
 }
 
 pub(crate) fn read_translation_package_records(
@@ -437,6 +443,20 @@ fn settings_from_manifest(
         target_locale: required_manifest_setting(manifest.target_locale.clone(), "target_locale")?,
         global_knowledge_root: None,
     })
+}
+
+fn source_root_from_manifest(
+    manifest: &TranslationManifest,
+) -> Result<Utf8PathBuf, WorkspaceError> {
+    let value = required_manifest_setting(manifest.source_root.clone(), "source_root")?;
+    let path = Utf8PathBuf::from(value);
+    if !path.is_absolute() {
+        return Err(WorkspaceError::InvalidTranslationPackagePath {
+            path: path.to_string(),
+            message: "workspace source_root must be absolute".to_string(),
+        });
+    }
+    Ok(path)
 }
 
 fn write_records_jsonl(

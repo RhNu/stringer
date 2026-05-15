@@ -47,11 +47,11 @@ pub use knowledge_terms::{
 };
 pub use operations::{
     ExportSummary, ExportTranslationsOptions, ImportSummary, ImportTranslationsOptions,
-    WriteTarget, export_translations, import_translations,
+    export_translations, import_translations,
 };
 pub use package::{
     SCHEMA_VERSION, TranslationManifest, TranslationManifestFile, TranslationMeta,
-    TranslationRecord,
+    TranslationRecord, read_workspace_settings, read_workspace_source_root,
 };
 pub use settings::{
     LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SettingsParam {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_release: Option<String>,
@@ -17,9 +18,13 @@ pub struct SettingsParam {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceOpenParams {
-    pub root: String,
-    pub workspace: String,
+    pub source_root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    #[serde(default)]
+    pub force: bool,
     #[serde(default)]
     pub settings: SettingsParam,
 }
@@ -30,10 +35,14 @@ pub struct WorkspaceOpenResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceFinalizeParams {
-    pub root: String,
-    pub workspace: String,
-    pub override_root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_root: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -43,8 +52,10 @@ pub struct WorkspaceFinalizeResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchCountParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
 }
@@ -60,8 +71,10 @@ pub struct WorkspaceBatchCountResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchClaimParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     pub limit: usize,
@@ -87,13 +100,16 @@ pub struct WorkspaceBatchClaimEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchApplyParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     pub batch_id: String,
     pub entries: Vec<WorkspaceBatchApplyEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchApplyEntry {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,8 +123,10 @@ pub struct WorkspaceBatchApplyResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchReleaseParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     pub batch_id: String,
 }
 
@@ -118,8 +136,10 @@ pub struct WorkspaceBatchReleaseResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceInspectFilesParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -149,8 +169,10 @@ pub enum InspectEntryStatusParam {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceInspectEntriesParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     #[serde(default)]
@@ -184,14 +206,18 @@ pub struct WorkspaceInspectEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceInspectEntryParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     pub id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceInspectBatchParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     pub batch_id: String,
 }
 
@@ -212,8 +238,10 @@ pub enum InspectDiagnosticSeverityParam {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct WorkspaceInspectDiagnosticsParams {
-    pub workspace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     #[serde(default)]
@@ -251,6 +279,7 @@ pub enum AdaptFormatParam {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AdaptImportParams {
     pub format: AdaptFormatParam,
     pub input: String,
@@ -278,25 +307,26 @@ pub struct AdaptImportSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct KnowledgeAnnotateParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_root: Option<String>,
-    pub workspace: String,
+    pub workspace: Option<String>,
     #[serde(default)]
     pub skip_fill_memory: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct KnowledgeValidateParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_root: Option<String>,
-    pub workspace: String,
+    pub workspace: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct KnowledgeLookupParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_root: Option<String>,
+    pub workspace: Option<String>,
     pub text: String,
     #[serde(default)]
     pub kind: KnowledgeKindParam,
@@ -304,8 +334,6 @@ pub struct KnowledgeLookupParams {
     pub record_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subrecord: Option<String>,
-    #[serde(default)]
-    pub settings: SettingsParam,
     #[serde(default)]
     pub regex: bool,
     #[serde(default = "default_lookup_limit")]
@@ -347,40 +375,38 @@ pub enum KnowledgeLookupFieldParam {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct KnowledgeIndexRebuildParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_root: Option<String>,
-    #[serde(default)]
-    pub settings: SettingsParam,
+    pub workspace: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct KnowledgeTermUpsertParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_root: Option<String>,
+    pub workspace: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     pub terms: Vec<KnowledgeTermParam>,
     #[serde(default)]
     pub rebuild_index: bool,
-    #[serde(default)]
-    pub settings: SettingsParam,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct KnowledgeTermDeleteParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub project_root: Option<String>,
+    pub workspace: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     pub id: String,
     #[serde(default)]
     pub rebuild_index: bool,
-    #[serde(default)]
-    pub settings: SettingsParam,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct KnowledgeTermParam {
     pub id: String,
     pub source: String,

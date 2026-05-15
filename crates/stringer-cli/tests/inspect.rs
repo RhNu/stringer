@@ -74,11 +74,11 @@ fn workspace_inspect_entries_and_diagnostics_emit_json() {
     fs::create_dir_all(asset.parent().unwrap()).unwrap();
     fs::write(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n").unwrap();
 
-    let open = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let open = stringer_command()
         .args([
             "workspace",
             "open",
-            "--root",
+            "--source-root",
             root.as_str(),
             "--workspace",
             translations.as_str(),
@@ -108,7 +108,7 @@ fn workspace_inspect_entries_and_diagnostics_emit_json() {
     )
     .unwrap();
 
-    let entries = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let entries = stringer_command()
         .args([
             "workspace",
             "inspect",
@@ -125,7 +125,7 @@ fn workspace_inspect_entries_and_diagnostics_emit_json() {
     assert_eq!(entries_json["total"], 1);
     assert_eq!(entries_json["entries"][0]["source"], "Steel Sword");
 
-    let diagnostics = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let diagnostics = stringer_command()
         .args([
             "workspace",
             "inspect",
@@ -154,4 +154,19 @@ fn test_path(name: &str) -> camino::Utf8PathBuf {
         std::env::temp_dir().join(format!("stringer-cli-{}-{name}", std::process::id())),
     )
     .unwrap()
+}
+
+fn stringer_command() -> ProcessCommand {
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"));
+    command.env("STRINGER_CONFIG", isolated_config_path());
+    command
+}
+
+fn isolated_config_path() -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join(format!(
+            "stringer_cli_isolated_config_{}",
+            std::process::id()
+        ))
+        .join("config.toml")
 }

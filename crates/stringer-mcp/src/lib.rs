@@ -30,7 +30,7 @@ pub struct StringerMcp;
 impl StringerMcp {
     #[tool(
         name = "workspace_open",
-        description = "Open a translation workspace from a Bethesda mod root.",
+        description = "Open a translation workspace from a read-only source root.",
         input_schema = compatible_schema_for_type::<Parameters<WorkspaceOpenParams>>(),
         output_schema = compatible_output_schema_for_type::<WorkspaceOpenResult>()
     )]
@@ -43,7 +43,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_finalize",
-        description = "Finalize a translation workspace into an override directory.",
+        description = "Finalize a translation workspace into an output directory.",
         input_schema = compatible_schema_for_type::<Parameters<WorkspaceFinalizeParams>>(),
         output_schema = compatible_output_schema_for_type::<WorkspaceFinalizeResult>()
     )]
@@ -225,7 +225,7 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_index_rebuild",
-        description = "Rebuild the derived knowledge index for a project root.",
+        description = "Rebuild the derived knowledge index for a workspace.",
         input_schema = compatible_schema_for_type::<Parameters<KnowledgeIndexRebuildParams>>(),
         output_schema = compatible_output_schema_for_type::<KnowledgeIndexRebuildResult>()
     )]
@@ -238,7 +238,7 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_term_upsert",
-        description = "Create or replace project terminology entries.",
+        description = "Create or replace workspace terminology entries.",
         input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermUpsertParams>>(),
         output_schema = compatible_output_schema_for_type::<KnowledgeTermsEditResult>()
     )]
@@ -251,7 +251,7 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_term_delete",
-        description = "Delete a project terminology entry by id.",
+        description = "Delete a workspace terminology entry by id.",
         input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermDeleteParams>>(),
         output_schema = compatible_output_schema_for_type::<KnowledgeTermEditResult>()
     )]

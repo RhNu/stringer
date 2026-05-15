@@ -12,17 +12,17 @@ use support::*;
 #[tokio::test]
 async fn batch_count_claim_apply_and_release_manage_claimed_entries() {
     let root = TempRoot::new("batch-flow");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n$Desc\tSteel Sword\n$Done\tDone\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: true,
     })
     .await
     .unwrap();
@@ -122,19 +122,19 @@ async fn batch_count_claim_apply_and_release_manage_claimed_entries() {
 }
 
 #[tokio::test]
-async fn workspace_open_clears_existing_batch_claims() {
+async fn force_workspace_open_clears_existing_batch_claims() {
     let root = TempRoot::new("batch-open-clears-claims");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: true,
     })
     .await
     .unwrap();
@@ -155,9 +155,10 @@ async fn workspace_open_clears_existing_batch_claims() {
     );
 
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: true,
     })
     .await
     .unwrap();
@@ -182,17 +183,17 @@ async fn workspace_open_clears_existing_batch_claims() {
 #[tokio::test]
 async fn batch_file_filters_accept_windows_path_separators() {
     let root = TempRoot::new("batch-windows-file-filter");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -217,17 +218,17 @@ async fn batch_file_filters_accept_windows_path_separators() {
 #[tokio::test]
 async fn batch_apply_rejects_entries_not_claimed_by_batch() {
     let root = TempRoot::new("batch-apply-rejects-unclaimed");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n$Desc\tSteel Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -261,17 +262,17 @@ async fn batch_apply_rejects_entries_not_claimed_by_batch() {
 #[tokio::test]
 async fn batch_apply_rejects_duplicate_ids_and_missing_translation() {
     let root = TempRoot::new("batch-apply-input-errors");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -316,17 +317,17 @@ async fn batch_apply_rejects_duplicate_ids_and_missing_translation() {
 #[tokio::test]
 async fn release_rejects_batch_id_paths() {
     let root = TempRoot::new("batch-id-path");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -343,17 +344,17 @@ async fn release_rejects_batch_id_paths() {
 #[tokio::test]
 async fn workspace_lock_blocks_second_mutating_command() {
     let root = TempRoot::new("workspace-lock");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();

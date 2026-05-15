@@ -18,13 +18,13 @@ use crate::help::*;
 #[derive(Debug, Subcommand)]
 pub enum WorkspaceCommand {
     #[command(
-        about = "Open a translation workspace from a mod root",
+        about = "Open a translation workspace from a source root",
         long_about = WORKSPACE_OPEN_LONG_ABOUT,
         after_long_help = WORKSPACE_OPEN_AFTER_LONG_HELP
     )]
     Open(WorkspaceOpenCommand),
     #[command(
-        about = "Finalize a translation workspace into an override directory",
+        about = "Finalize a translation workspace into an output directory",
         long_about = WORKSPACE_FINALIZE_LONG_ABOUT,
         after_long_help = WORKSPACE_FINALIZE_AFTER_LONG_HELP
     )]
@@ -58,18 +58,21 @@ pub enum WorkspaceCommand {
 pub struct WorkspaceOpenCommand {
     #[arg(
         long,
-        value_name = "MOD_ROOT",
+        value_name = "SOURCE_ROOT",
         help = "Source mod root directory",
         long_help = "Source mod root directory to scan."
     )]
-    pub root: Utf8PathBuf,
+    pub source_root: Utf8PathBuf,
     #[arg(
         long,
+        default_value = ".",
         value_name = "WORKSPACE",
-        help = "Translation workspace output directory",
-        long_help = "Translation workspace output directory."
+        help = "Translation workspace directory",
+        long_help = "Translation workspace directory; defaults to the current directory."
     )]
     pub workspace: Utf8PathBuf,
+    #[arg(long, help = "Replace generated workspace artifacts if present")]
+    pub force: bool,
     #[arg(
         long,
         value_name = "GAME",
@@ -104,13 +107,7 @@ pub struct WorkspaceOpenCommand {
 pub struct WorkspaceFinalizeCommand {
     #[arg(
         long,
-        value_name = "MOD_ROOT",
-        help = "Source mod root directory",
-        long_help = "Source mod root directory used for finalization."
-    )]
-    pub root: Utf8PathBuf,
-    #[arg(
-        long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Translation workspace directory",
         long_help = "Translation workspace directory with workspace.json and entries/**/*.jsonl."
@@ -118,11 +115,18 @@ pub struct WorkspaceFinalizeCommand {
     pub workspace: Utf8PathBuf,
     #[arg(
         long,
-        value_name = "OVERRIDE_ROOT",
-        help = "Override output directory",
-        long_help = "Override output directory outside the source mod root."
+        value_name = "SOURCE_ROOT",
+        help = "Optional source mod root override",
+        long_help = "Optional source mod root override; defaults to source_root stored in workspace.json."
     )]
-    pub override_root: Utf8PathBuf,
+    pub source_root: Option<Utf8PathBuf>,
+    #[arg(
+        long,
+        value_name = "OUTPUT",
+        help = "Output directory",
+        long_help = "Output directory outside the source root; defaults to <workspace>/output."
+    )]
+    pub output: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -165,13 +169,13 @@ pub enum WorkspaceInspectCommand {
 
 #[derive(Debug, Parser)]
 pub struct WorkspaceInspectFilesCommand {
-    #[arg(long, value_name = "WORKSPACE")]
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
     pub workspace: Utf8PathBuf,
 }
 
 #[derive(Debug, Parser)]
 pub struct WorkspaceInspectEntriesCommand {
-    #[arg(long, value_name = "WORKSPACE")]
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
     pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "ENTRY_FILE")]
     pub file: Option<String>,
@@ -185,7 +189,7 @@ pub struct WorkspaceInspectEntriesCommand {
 
 #[derive(Debug, Parser)]
 pub struct WorkspaceInspectEntryCommand {
-    #[arg(long, value_name = "WORKSPACE")]
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
     pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "ENTRY_ID")]
     pub id: String,
@@ -193,7 +197,7 @@ pub struct WorkspaceInspectEntryCommand {
 
 #[derive(Debug, Parser)]
 pub struct WorkspaceInspectBatchCommand {
-    #[arg(long, value_name = "WORKSPACE")]
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
     pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "BATCH_ID")]
     pub batch_id: String,
@@ -201,7 +205,7 @@ pub struct WorkspaceInspectBatchCommand {
 
 #[derive(Debug, Parser)]
 pub struct WorkspaceInspectDiagnosticsCommand {
-    #[arg(long, value_name = "WORKSPACE")]
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
     pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "ENTRY_FILE")]
     pub file: Option<String>,
@@ -237,6 +241,7 @@ pub enum InspectDiagnosticSeverityArg {
 pub struct WorkspaceBatchCountCommand {
     #[arg(
         long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Translation workspace directory"
     )]
@@ -255,6 +260,7 @@ pub struct WorkspaceBatchCountCommand {
 pub struct WorkspaceBatchClaimCommand {
     #[arg(
         long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Translation workspace directory"
     )]
@@ -278,6 +284,7 @@ pub struct WorkspaceBatchClaimCommand {
 pub struct WorkspaceBatchApplyCommand {
     #[arg(
         long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Translation workspace directory"
     )]
@@ -294,6 +301,7 @@ pub struct WorkspaceBatchApplyCommand {
 pub struct WorkspaceBatchReleaseCommand {
     #[arg(
         long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Translation workspace directory"
     )]
@@ -306,6 +314,7 @@ pub struct WorkspaceBatchReleaseCommand {
 pub struct WorkspaceUpgradeCommand {
     #[arg(
         long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Legacy translation workspace directory"
     )]
@@ -316,8 +325,9 @@ pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), CliError> {
     match command {
         WorkspaceCommand::Open(command) => {
             let summary = workspace_open(WorkspaceOpenRequest {
-                root: command.root.to_string(),
-                workspace: command.workspace.to_string(),
+                source_root: command.source_root.to_string(),
+                workspace: Some(command.workspace.to_string()),
+                force: command.force,
                 settings: settings_input(
                     command.game_release,
                     command.asset_language,
@@ -331,9 +341,9 @@ pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), CliError> {
         }
         WorkspaceCommand::Finalize(command) => {
             let summary = workspace_finalize(WorkspaceFinalizeRequest {
-                root: command.root.to_string(),
-                workspace: command.workspace.to_string(),
-                override_root: command.override_root.to_string(),
+                workspace: Some(command.workspace.to_string()),
+                source_root: command.source_root.map(|path| path.to_string()),
+                output: command.output.map(|path| path.to_string()),
             })
             .await?;
             println!(
@@ -354,13 +364,13 @@ fn run_workspace_inspect(command: WorkspaceInspectCommand) -> Result<(), CliErro
     match command {
         WorkspaceInspectCommand::Files(command) => {
             let inspected = workspace_inspect_files(WorkspaceInspectFilesRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
             })?;
             print_json(&inspected)
         }
         WorkspaceInspectCommand::Entries(command) => {
             let inspected = workspace_inspect_entries(WorkspaceInspectEntriesRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 file: command.file,
                 status: command.status.into(),
                 limit: command.limit,
@@ -370,21 +380,21 @@ fn run_workspace_inspect(command: WorkspaceInspectCommand) -> Result<(), CliErro
         }
         WorkspaceInspectCommand::Entry(command) => {
             let inspected = workspace_inspect_entry(WorkspaceInspectEntryRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 id: command.id,
             })?;
             print_json(&inspected)
         }
         WorkspaceInspectCommand::Batch(command) => {
             let inspected = workspace_inspect_batch(WorkspaceInspectBatchRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 batch_id: command.batch_id,
             })?;
             print_json(&inspected)
         }
         WorkspaceInspectCommand::Diagnostics(command) => {
             let inspected = workspace_inspect_diagnostics(WorkspaceInspectDiagnosticsRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 file: command.file,
                 severity: command.severity.into(),
                 limit: command.limit,
@@ -399,7 +409,7 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
     match command {
         WorkspaceBatchCommand::Count(command) => {
             let count = workspace_batch_count(WorkspaceBatchCountRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 file: command.file,
             })?;
             if command.json {
@@ -419,7 +429,7 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
         }
         WorkspaceBatchCommand::Claim(command) => {
             let claim = workspace_batch_claim(WorkspaceBatchClaimRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 file: command.file,
                 limit: command.limit,
             })?;
@@ -433,7 +443,7 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
                     source,
                 })?;
             let summary = workspace_batch_apply(WorkspaceBatchApplyRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 batch_id: patch.batch_id,
                 entries: patch
                     .entries
@@ -448,7 +458,7 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
         }
         WorkspaceBatchCommand::Release(command) => {
             let summary = workspace_batch_release(WorkspaceBatchReleaseRequest {
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 batch_id: command.batch_id,
             })?;
             print_json(&summary)

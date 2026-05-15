@@ -3,11 +3,12 @@ use std::fs;
 use serde_json::Value;
 use stringer_app::{
     AdaptFormatInput, AdaptImportRequest, InspectDiagnosticSeverityInput, InspectEntryStatusInput,
-    SettingsInput, WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest,
-    WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceInspectDiagnosticsRequest,
-    WorkspaceInspectEntriesRequest, WorkspaceOpenRequest, adapt_import, workspace_batch_apply,
-    workspace_batch_claim, workspace_batch_count, workspace_inspect_diagnostics,
-    workspace_inspect_entries, workspace_open,
+    KnowledgeTermInput, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, SettingsInput,
+    WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest,
+    WorkspaceBatchCountRequest, WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectEntriesRequest, WorkspaceOpenRequest, adapt_import, knowledge_term_upsert,
+    workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_finalize,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_open,
 };
 
 #[tokio::test]
@@ -23,8 +24,9 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     write_text(&asset, "$Title\tIron Sword\n");
 
     let opened = workspace_open(WorkspaceOpenRequest {
-        root: path_string(root.path()),
-        workspace: path_string(workspace.path()),
+        source_root: path_string(root.path()),
+        workspace: Some(path_string(workspace.path())),
+        force: false,
         settings: settings(),
     })
     .await
@@ -32,7 +34,7 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     assert_eq!(opened.entries, 1);
 
     let count = workspace_batch_count(WorkspaceBatchCountRequest {
-        workspace: path_string(workspace.path()),
+        workspace: Some(path_string(workspace.path())),
         file: None,
     })
     .unwrap();
@@ -40,7 +42,7 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     assert_eq!(count.empty, 1);
 
     let claim = workspace_batch_claim(WorkspaceBatchClaimRequest {
-        workspace: path_string(workspace.path()),
+        workspace: Some(path_string(workspace.path())),
         file: None,
         limit: 1,
     })
@@ -50,7 +52,7 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     assert_eq!(claim.entries[0].source, "Iron Sword");
 
     let summary = workspace_batch_apply(WorkspaceBatchApplyRequest {
-        workspace: path_string(workspace.path()),
+        workspace: Some(path_string(workspace.path())),
         batch_id,
         entries: vec![WorkspaceBatchApplyEntry {
             id: entry_id,
@@ -60,6 +62,94 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     .unwrap();
     assert_eq!(summary.applied_entries, 1);
     assert_eq!(summary.remaining_entries, 0);
+}
+
+#[tokio::test]
+async fn app_workspace_open_reads_workspace_config_not_source_config() {
+    let root = TempRoot::new("workspace-settings-root");
+    let workspace = TempRoot::new("workspace-settings-output");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n",
+    );
+    write_text(
+        &root.path().join("stringer.toml"),
+        r#"
+game_release = "SkyrimLe"
+asset_language = "Chinese"
+source_locale = "fr"
+target_locale = "de"
+"#,
+    );
+    write_text(
+        &workspace.path().join("stringer.toml"),
+        r#"
+game_release = "SkyrimSe"
+asset_language = "English"
+source_locale = "en"
+target_locale = "zh-Hans"
+"#,
+    );
+
+    workspace_open(WorkspaceOpenRequest {
+        source_root: path_string(root.path()),
+        workspace: Some(path_string(workspace.path())),
+        force: false,
+        settings: SettingsInput::default(),
+    })
+    .await
+    .unwrap();
+
+    let manifest: Value =
+        serde_json::from_str(&fs::read_to_string(workspace.path().join("workspace.json")).unwrap())
+            .unwrap();
+    assert_eq!(manifest["game_release"], "SkyrimSe");
+    assert_eq!(manifest["asset_language"], "English");
+    assert_eq!(manifest["source_locale"], "en");
+    assert_eq!(manifest["target_locale"], "zh-Hans");
+}
+
+#[tokio::test]
+async fn app_workspace_finalize_defaults_output_under_workspace() {
+    let root = TempRoot::new("workspace-finalize-root");
+    let workspace = TempRoot::new("workspace-finalize-output");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n",
+    );
+
+    workspace_open(WorkspaceOpenRequest {
+        source_root: path_string(root.path()),
+        workspace: Some(path_string(workspace.path())),
+        force: false,
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+    write_text(
+        &entry_file_path(workspace.path()),
+        r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translation":"熟铁剑"}"#,
+    );
+
+    let finalized = workspace_finalize(WorkspaceFinalizeRequest {
+        workspace: Some(path_string(workspace.path())),
+        source_root: None,
+        output: None,
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(finalized.applied_entries, 1);
+    assert!(
+        workspace
+            .path()
+            .join("output/Data/Interface/Translations/MyMod_English.txt")
+            .exists()
+    );
 }
 
 #[tokio::test]
@@ -91,6 +181,42 @@ async fn app_adapt_import_returns_action_output_and_summary() {
 }
 
 #[tokio::test]
+async fn app_knowledge_term_upsert_can_prepare_workspace_knowledge_before_open() {
+    let workspace = TempRoot::new("term-before-open");
+
+    let summary = knowledge_term_upsert(KnowledgeTermUpsertRequest {
+        workspace: Some(path_string(workspace.path())),
+        file: None,
+        terms: vec![KnowledgeTermInput {
+            id: "term:iron_sword".to_string(),
+            source: "Iron Sword".to_string(),
+            target: "熟铁剑".to_string(),
+            aliases: Vec::new(),
+            case_sensitive: false,
+            status: KnowledgeTermStatusInput::Preferred,
+            scope: Default::default(),
+            tags: Vec::new(),
+            note: None,
+        }],
+        rebuild_index: false,
+    })
+    .unwrap();
+
+    assert_eq!(summary.action, "upserted");
+    assert_eq!(
+        summary.path,
+        path_string(&workspace.path().join("knowledge/terms/workspace.toml"))
+    );
+    assert!(!workspace.path().join("workspace.json").exists());
+    assert!(
+        workspace
+            .path()
+            .join("knowledge/terms/workspace.toml")
+            .exists()
+    );
+}
+
+#[tokio::test]
 async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_values() {
     let root = TempRoot::new("inspect-root");
     let workspace = TempRoot::new("inspect-output");
@@ -103,8 +229,9 @@ async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_va
     write_text(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n");
 
     workspace_open(WorkspaceOpenRequest {
-        root: path_string(root.path()),
-        workspace: path_string(workspace.path()),
+        source_root: path_string(root.path()),
+        workspace: Some(path_string(workspace.path())),
+        force: false,
         settings: settings(),
     })
     .await
@@ -119,7 +246,7 @@ async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_va
     );
 
     let entries = workspace_inspect_entries(WorkspaceInspectEntriesRequest {
-        workspace: path_string(workspace.path()),
+        workspace: Some(path_string(workspace.path())),
         file: None,
         status: InspectEntryStatusInput::Memory,
         limit: 10,
@@ -135,7 +262,7 @@ async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_va
     );
 
     let diagnostics = workspace_inspect_diagnostics(WorkspaceInspectDiagnosticsRequest {
-        workspace: path_string(workspace.path()),
+        workspace: Some(path_string(workspace.path())),
         file: None,
         severity: InspectDiagnosticSeverityInput::Warning,
         limit: 10,

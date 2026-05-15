@@ -5,7 +5,7 @@
 Run validation:
 
 ```powershell
-stringer knowledge validate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
+stringer knowledge validate --workspace <WORKSPACE>
 ```
 
 Validation rewrites diagnostics. Do not edit diagnostics by hand.
@@ -28,7 +28,7 @@ Review the entry, its context, hints, and lookup evidence before changing a tran
 Finalize only after validation and review:
 
 ```powershell
-stringer workspace finalize --root <MOD_ROOT> --workspace <WORKSPACE> --override-root <OVERRIDE_ROOT>
+stringer workspace finalize --workspace <WORKSPACE> --output <OUTPUT_DIR>
 ```
 
-Use a fresh override directory outside the source mod root.
+Use a fresh output directory outside the source root. When the agent is already running in the workspace directory, omit `--workspace`; finalize defaults to `./output`.

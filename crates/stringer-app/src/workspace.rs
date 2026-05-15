@@ -5,7 +5,7 @@ use stringer_workspace::{
     InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
     InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, ReleaseBatchOptions,
     ReleaseBatchSummary, WorkspaceError, WorkspaceInspectBatch, WorkspaceInspectDiagnostic,
-    WorkspaceInspectEntry, WorkspaceInspectFiles, WriteTarget, apply_batch_patch, count_batch,
+    WorkspaceInspectEntry, WorkspaceInspectFiles, apply_batch_patch, count_batch,
     export_translations, import_translations, inspect_workspace_batch,
     inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
     inspect_workspace_files, release_batch,
@@ -24,18 +24,19 @@ use crate::dto::{
     WorkspaceOpenRequest, WorkspaceOpenResponse,
 };
 use crate::error::{AppError, serialize_value};
-use crate::paths::path;
-use crate::settings::load_settings_for_project;
+use crate::paths::{default_output_path, path, workspace_or_current};
+use crate::settings::load_settings_for_workspace;
 
 pub async fn workspace_open(
     request: WorkspaceOpenRequest,
 ) -> Result<WorkspaceOpenResponse, AppError> {
-    let root = path(request.root);
-    let settings = load_settings_for_project(&root, request.settings)?;
+    let workspace = workspace_or_current(request.workspace)?;
+    let settings = load_settings_for_workspace(&workspace, request.settings)?;
     let summary = export_translations(ExportTranslationsOptions {
-        root,
-        out: path(request.workspace),
+        source_root: path(request.source_root),
+        workspace,
         settings,
+        force: request.force,
     })
     .await?;
     Ok(WorkspaceOpenResponse {
@@ -46,12 +47,15 @@ pub async fn workspace_open(
 pub async fn workspace_finalize(
     request: WorkspaceFinalizeRequest,
 ) -> Result<WorkspaceFinalizeResponse, AppError> {
+    let workspace = workspace_or_current(request.workspace)?;
+    let output = request
+        .output
+        .map(path)
+        .unwrap_or_else(|| default_output_path(&workspace));
     let summary = import_translations(ImportTranslationsOptions {
-        root: path(request.root),
-        translations: path(request.workspace),
-        target: WriteTarget::OverrideDirectory {
-            root: path(request.override_root),
-        },
+        workspace,
+        source_root: request.source_root.map(path),
+        output,
     })
     .await?;
     Ok(WorkspaceFinalizeResponse {
@@ -64,7 +68,7 @@ pub fn workspace_batch_count(
     request: WorkspaceBatchCountRequest,
 ) -> Result<WorkspaceBatchCountResponse, AppError> {
     Ok(batch_count_response(count_batch(CountBatchOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         file: request.file,
     })?))
 }
@@ -73,7 +77,7 @@ pub fn workspace_batch_claim(
     request: WorkspaceBatchClaimRequest,
 ) -> Result<WorkspaceBatchClaimResponse, AppError> {
     claimed_batch_response(stringer_workspace::claim_batch(ClaimBatchOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         file: request.file,
         limit: request.limit,
     })?)
@@ -83,7 +87,7 @@ pub fn workspace_batch_apply(
     request: WorkspaceBatchApplyRequest,
 ) -> Result<WorkspaceBatchApplyResponse, AppError> {
     let summary = apply_batch_patch(ApplyBatchPatchOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         batch_id: request.batch_id,
         entries: request
             .entries
@@ -105,7 +109,7 @@ pub fn workspace_batch_release(
 ) -> Result<WorkspaceBatchReleaseResponse, AppError> {
     Ok(release_batch_response(release_batch(
         ReleaseBatchOptions {
-            workspace: path(request.workspace),
+            workspace: workspace_or_current(request.workspace)?,
             batch_id: request.batch_id,
         },
     )?))
@@ -115,7 +119,7 @@ pub fn workspace_inspect_files(
     request: WorkspaceInspectFilesRequest,
 ) -> Result<WorkspaceInspectFilesResponse, AppError> {
     inspect_files_response(inspect_workspace_files(InspectWorkspaceFilesOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
     })?)
 }
 
@@ -123,7 +127,7 @@ pub fn workspace_inspect_entries(
     request: WorkspaceInspectEntriesRequest,
 ) -> Result<WorkspaceInspectEntriesResponse, AppError> {
     let inspected = inspect_workspace_entries(InspectWorkspaceEntriesOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         file: request.file,
         status: request.status.into(),
         limit: request.limit,
@@ -143,7 +147,7 @@ pub fn workspace_inspect_entry(
     request: WorkspaceInspectEntryRequest,
 ) -> Result<WorkspaceInspectEntryResponse, AppError> {
     inspect_entry_response(inspect_workspace_entry(InspectWorkspaceEntryOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         id: request.id,
     })?)
 }
@@ -152,7 +156,7 @@ pub fn workspace_inspect_batch(
     request: WorkspaceInspectBatchRequest,
 ) -> Result<WorkspaceInspectBatchResponse, AppError> {
     inspect_batch_response(inspect_workspace_batch(InspectWorkspaceBatchOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         batch_id: request.batch_id,
     })?)
 }
@@ -161,7 +165,7 @@ pub fn workspace_inspect_diagnostics(
     request: WorkspaceInspectDiagnosticsRequest,
 ) -> Result<WorkspaceInspectDiagnosticsResponse, AppError> {
     let inspected = inspect_workspace_diagnostics(InspectWorkspaceDiagnosticsOptions {
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         file: request.file,
         severity: request.severity.into(),
         limit: request.limit,

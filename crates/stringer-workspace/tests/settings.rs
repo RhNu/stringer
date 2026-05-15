@@ -26,7 +26,7 @@ target_locale = "zh-Hans"
 
     let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
         user_config_path: Some(utf8(&config)),
-        project_config_path: None,
+        workspace_config_path: None,
         overrides: WorkspaceSettingsOverrides {
             target_locale: Some("ja".to_string()),
             ..WorkspaceSettingsOverrides::default()
@@ -45,10 +45,10 @@ target_locale = "zh-Hans"
 }
 
 #[test]
-fn load_settings_applies_user_project_and_cli_precedence() {
+fn load_settings_applies_user_workspace_and_cli_precedence() {
     let root = TempRoot::new("settings-precedence");
     let user_config = root.path().join("user/config.toml");
-    let project_config = root.path().join("project/stringer.toml");
+    let workspace_config = root.path().join("workspace/stringer.toml");
     write_text(
         &user_config,
         r#"
@@ -59,7 +59,7 @@ target_locale = "de"
 "#,
     );
     write_text(
-        &project_config,
+        &workspace_config,
         r#"
 game_release = "SkyrimSe"
 asset_language = "Chinese"
@@ -69,7 +69,7 @@ target_locale = "zh-Hans"
 
     let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
         user_config_path: Some(utf8(&user_config)),
-        project_config_path: Some(utf8(&project_config)),
+        workspace_config_path: Some(utf8(&workspace_config)),
         overrides: WorkspaceSettingsOverrides {
             asset_language: Some(Language::English),
             ..WorkspaceSettingsOverrides::default()
@@ -84,10 +84,10 @@ target_locale = "zh-Hans"
 }
 
 #[test]
-fn load_settings_ignores_legacy_project_knowledge_config() {
-    let root = TempRoot::new("settings-project-knowledge-ignored");
+fn load_settings_ignores_legacy_workspace_knowledge_config() {
+    let root = TempRoot::new("settings-workspace-knowledge-ignored");
     let user_config = root.path().join("user/config.toml");
-    let project_config = root.path().join("project/stringer.toml");
+    let workspace_config = root.path().join("workspace/stringer.toml");
     write_text(
         &user_config,
         r#"
@@ -101,18 +101,18 @@ global_root = "user-knowledge"
 "#,
     );
     write_text(
-        &project_config,
+        &workspace_config,
         r#"
 target_locale = "ja"
 
 [knowledge]
-global_root = "project-knowledge"
+global_root = "workspace-knowledge"
 "#,
     );
 
     let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
         user_config_path: Some(utf8(&user_config)),
-        project_config_path: Some(utf8(&project_config)),
+        workspace_config_path: Some(utf8(&workspace_config)),
         overrides: WorkspaceSettingsOverrides::default(),
     })
     .unwrap();

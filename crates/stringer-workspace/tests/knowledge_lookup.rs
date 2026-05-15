@@ -12,7 +12,7 @@ use support::*;
 fn lookup_searches_terms_and_memory_source_and_target_by_default() {
     let root = TempRoot::new("lookup-search-defaults");
     write_text(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         r#"
 [[terms]]
 id = "term:altmer"
@@ -23,7 +23,7 @@ status = "preferred"
 "#,
     );
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         concat!(
             "{\"id\":\"tm:altmer-1\",\"source\":\"The Altmer Embassy\",\"target\":\"梭默大使馆\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"context\":{\"record_type\":\"CELL\"}}\n",
             "{\"id\":\"tm:target-1\",\"source\":\"High Elf\",\"target\":\"Altmer 传统\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"imported\"}\n",
@@ -56,7 +56,7 @@ status = "preferred"
 fn lookup_limit_caps_results_but_reports_total_matches() {
     let root = TempRoot::new("lookup-limit");
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         concat!(
             "{\"id\":\"tm:1\",\"source\":\"Altmer\",\"target\":\"高精灵\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
             "{\"id\":\"tm:2\",\"source\":\"Altmer Armor\",\"target\":\"高精灵护甲\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
@@ -76,7 +76,7 @@ fn lookup_limit_caps_results_but_reports_total_matches() {
 fn lookup_supports_regex_mode_and_reports_invalid_regex() {
     let root = TempRoot::new("lookup-regex");
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         concat!(
             "{\"id\":\"tm:altmer\",\"source\":\"Altmer\",\"target\":\"高精灵\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
             "{\"id\":\"tm:bosmer\",\"source\":\"Bosmer\",\"target\":\"木精灵\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
@@ -115,7 +115,7 @@ fn lookup_loads_nested_adapt_memory_files() {
 fn lookup_omits_rejected_memory_by_default() {
     let root = TempRoot::new("lookup-rejected-memory");
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         concat!(
             "{\"id\":\"tm:accepted\",\"source\":\"Altmer\",\"target\":\"高精灵\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
             "{\"id\":\"tm:rejected\",\"source\":\"Altmer\",\"target\":\"错误译名\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"rejected\"}\n",
@@ -132,7 +132,7 @@ fn lookup_omits_rejected_memory_by_default() {
 fn lookup_excludes_context_conflicts() {
     let root = TempRoot::new("lookup-context-conflict");
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         concat!(
             "{\"id\":\"tm:conflict\",\"source\":\"Altmer\",\"target\":\"高精灵\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"context\":{\"record_type\":\"ARMO\"}}\n",
             "{\"id\":\"tm:match\",\"source\":\"Altmer Armor\",\"target\":\"高精灵护甲\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"context\":{\"record_type\":\"WEAP\"}}\n",
@@ -149,7 +149,7 @@ fn lookup_excludes_context_conflicts() {
 fn lookup_excludes_term_scope_conflicts() {
     let root = TempRoot::new("lookup-term-scope-conflict");
     write_text(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         r#"
 [[terms]]
 id = "term:conflict"
@@ -186,7 +186,7 @@ fn lookup_uses_index_for_large_memory_fixture() {
     rows.push_str(
         "{\"id\":\"tm:needle\",\"source\":\"Needle Unique Phrase\",\"target\":\"唯一记忆\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
     );
-    write_text(&root.path().join("knowledge/memory/project.jsonl"), &rows);
+    write_text(&root.path().join("knowledge/memory/workspace.jsonl"), &rows);
 
     let lookup = lookup_knowledge(lookup_options(root.path(), "Needle Unique")).unwrap();
 
@@ -197,7 +197,7 @@ fn lookup_uses_index_for_large_memory_fixture() {
 
 fn lookup_options(root: &std::path::Path, text: &str) -> LookupKnowledgeOptions {
     LookupKnowledgeOptions {
-        project_root: utf8(root),
+        workspace: utf8(root),
         settings: settings_with_global(None),
         text: text.to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -212,6 +212,9 @@ fn lookup_options(root: &std::path::Path, text: &str) -> LookupKnowledgeOptions 
 
 fn settings_with_global(global_knowledge_root: Option<std::path::PathBuf>) -> WorkspaceSettings {
     let mut settings = settings();
-    settings.global_knowledge_root = global_knowledge_root.as_deref().map(utf8);
+    settings.global_knowledge_root = Some(match global_knowledge_root {
+        Some(path) => utf8(&path),
+        None => camino::Utf8PathBuf::from("__stringer_test_no_global_knowledge__"),
+    });
     settings
 }

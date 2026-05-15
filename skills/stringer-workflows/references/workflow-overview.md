@@ -5,15 +5,17 @@
 Run commands with full settings when possible:
 
 ```powershell
-stringer workspace open --root <MOD_ROOT> --workspace <WORKSPACE> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
-stringer knowledge annotate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
+stringer workspace open --source-root <SOURCE_ROOT> --workspace <WORKSPACE> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
+stringer knowledge annotate --workspace <WORKSPACE>
 stringer workspace batch count --workspace <WORKSPACE> --json
 stringer workspace inspect diagnostics --workspace <WORKSPACE> --severity warning
 stringer workspace batch claim --workspace <WORKSPACE> --limit 50
 stringer workspace batch apply --workspace <WORKSPACE> --input <PATCH_JSON>
-stringer knowledge validate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
-stringer workspace finalize --root <MOD_ROOT> --workspace <WORKSPACE> --override-root <OVERRIDE_ROOT>
+stringer knowledge validate --workspace <WORKSPACE>
+stringer workspace finalize --workspace <WORKSPACE> --output <OUTPUT_DIR>
 ```
+
+When the agent is already running in the workspace directory, omit `--workspace`; it defaults to `.`.
 
 ## MCP Tool Map
 
@@ -44,6 +46,6 @@ MCP results are structured JSON. Prefer them over parsing CLI text when both are
 
 ## Workspace Files
 
-`workspace open` writes `workspace.json`, `batches/`, and `entries/**/*.jsonl`.
+`workspace open` writes `workspace.json`, `batches/`, and `entries/**/*.jsonl`. Workspace knowledge lives under `knowledge/`, and derived indexes live at `knowledge/index.sqlite`.
 
 Agents should normally use inspect tools for read-only review and batch tools for edits. If direct JSONL inspection is needed as a fallback, read `source`, `context`, `hints`, and `diagnostics`; write only `translation`.

@@ -1,11 +1,14 @@
 use std::fs;
+use std::sync::Once;
 
 use rmcp::{
     ClientHandler, ServiceExt,
     model::{CallToolRequestParams, ClientInfo},
 };
 use serde_json::{Value, json};
-use stringer_mcp::StringerMcp;
+use stringer_mcp::{
+    KnowledgeLookupParams, StringerMcp, WorkspaceFinalizeParams, WorkspaceOpenParams,
+};
 
 #[tokio::test]
 async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
@@ -69,6 +72,48 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
     server_handle.await.unwrap();
 }
 
+#[test]
+fn mcp_params_reject_removed_workspace_path_fields() {
+    let open_root = serde_json::from_value::<WorkspaceOpenParams>(json!({
+        "source_root": "input",
+        "root": "old-workspace"
+    }))
+    .unwrap_err();
+    assert!(open_root.to_string().contains("unknown field `root`"));
+
+    let open_project = serde_json::from_value::<WorkspaceOpenParams>(json!({
+        "source_root": "input",
+        "project_root": "old-workspace"
+    }))
+    .unwrap_err();
+    assert!(
+        open_project
+            .to_string()
+            .contains("unknown field `project_root`")
+    );
+
+    let finalize_override = serde_json::from_value::<WorkspaceFinalizeParams>(json!({
+        "override_root": "old-output"
+    }))
+    .unwrap_err();
+    assert!(
+        finalize_override
+            .to_string()
+            .contains("unknown field `override_root`")
+    );
+
+    let lookup_project = serde_json::from_value::<KnowledgeLookupParams>(json!({
+        "text": "Iron Sword",
+        "project_root": "old-workspace"
+    }))
+    .unwrap_err();
+    assert!(
+        lookup_project
+            .to_string()
+            .contains("unknown field `project_root`")
+    );
+}
+
 #[tokio::test]
 async fn mcp_workspace_inspect_entries_and_diagnostics_return_structured_content() {
     let root = TempRoot::new("mcp-inspect-root");
@@ -85,7 +130,7 @@ async fn mcp_workspace_inspect_entries_and_diagnostics_return_structured_content
     client
         .call_tool(
             CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
-                "root": path_string(root.path()),
+                "source_root": path_string(root.path()),
                 "workspace": path_string(workspace.path()),
                 "settings": {
                     "game_release": "SkyrimSe",
@@ -150,13 +195,17 @@ async fn mcp_workspace_inspect_entries_and_diagnostics_return_structured_content
 
 #[tokio::test]
 async fn mcp_knowledge_term_upsert_integrates_with_lookup() {
-    let project = TempRoot::new("mcp-knowledge-term");
+    let workspace = TempRoot::new("mcp-knowledge-term");
+    write_text(
+        &workspace.path().join("workspace.json"),
+        r#"{"schema_version":4,"kind":"stringer.workspace","source_root":"C:/source","game_release":"SkyrimSe","asset_language":"English","source_locale":"en","target_locale":"zh-Hans","files":[]}"#,
+    );
     let (client, server_handle) = connect().await;
 
     let upsert = client
         .call_tool(
             CallToolRequestParams::new("knowledge_term_upsert").with_arguments(args(json!({
-                "project_root": path_string(project.path()),
+                "workspace": path_string(workspace.path()),
                 "terms": [
                     {
                         "id": "term:iron_sword",
@@ -185,15 +234,9 @@ async fn mcp_knowledge_term_upsert_integrates_with_lookup() {
     let lookup = client
         .call_tool(
             CallToolRequestParams::new("knowledge_lookup").with_arguments(args(json!({
-                "project_root": path_string(project.path()),
+                "workspace": path_string(workspace.path()),
                 "text": "Steel Sword",
-                "source": "terms",
-                "settings": {
-                    "game_release": "SkyrimSe",
-                    "asset_language": "English",
-                    "source_locale": "en",
-                    "target_locale": "zh-Hans"
-                }
+                "source": "terms"
             }))),
         )
         .await
@@ -223,7 +266,7 @@ async fn mcp_workspace_open_returns_structured_content_through_tool_call() {
     let result = client
         .call_tool(
             CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
-                "root": path_string(root.path()),
+                "source_root": path_string(root.path()),
                 "workspace": path_string(workspace.path()),
                 "settings": {
                     "game_release": "SkyrimSe",
@@ -300,6 +343,7 @@ async fn connect() -> (
     rmcp::service::RunningService<rmcp::RoleClient, TestClient>,
     tokio::task::JoinHandle<()>,
 ) {
+    isolate_global_knowledge();
     let (server_transport, client_transport) = tokio::io::duplex(8192);
     let server_handle = tokio::spawn(async move {
         StringerMcp
@@ -312,6 +356,23 @@ async fn connect() -> (
     });
     let client = TestClient.serve(client_transport).await.unwrap();
     (client, server_handle)
+}
+
+fn isolate_global_knowledge() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let config = std::env::temp_dir()
+            .join(format!(
+                "stringer_mcp_isolated_config_{}",
+                std::process::id()
+            ))
+            .join("config.toml");
+        // SAFETY: MCP tests set the same process-wide config path once before
+        // starting any in-process MCP service that reads Stringer settings.
+        unsafe {
+            std::env::set_var("STRINGER_CONFIG", config);
+        }
+    });
 }
 
 #[derive(Debug, Clone, Default)]

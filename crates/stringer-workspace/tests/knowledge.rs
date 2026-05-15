@@ -5,9 +5,8 @@ use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ClaimBatchOptions,
     ExportTranslationsOptions, ImportTranslationsOptions, LookupKnowledgeField,
     LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource, PipelineEntryKind,
-    ValidateTranslationsOptions, WorkspaceSettings, WriteTarget, annotate_translations,
-    build_knowledge_index, claim_batch, export_translations, import_translations, lookup_knowledge,
-    validate_translations,
+    ValidateTranslationsOptions, WorkspaceSettings, annotate_translations, build_knowledge_index,
+    claim_batch, export_translations, import_translations, lookup_knowledge, validate_translations,
 };
 
 #[allow(dead_code)]
@@ -18,14 +17,14 @@ use support::*;
 #[tokio::test]
 async fn annotate_translations_writes_annotations_without_bumping_schema() {
     let root = TempRoot::new("annotate-package");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
+    let translations = root.path().join("translations");
     write_text(
-        &root.path().join("knowledge/terms/skyrim.toml"),
+        &translations.join("knowledge/terms/skyrim.toml"),
         r#"
 [[terms]]
 id = "skyrim.weapon.iron_sword"
@@ -35,17 +34,16 @@ status = "preferred"
 scope = { game = "SkyrimSe" }
 "#,
     );
-    let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
         skip_memory_fill: true,
     })
@@ -54,7 +52,7 @@ scope = { game = "SkyrimSe" }
     assert_eq!(summary.entries, 1);
     assert_eq!(summary.auto_filled, 0);
     let workspace = json_file(&translations.join("workspace.json"));
-    assert_eq!(workspace["schema_version"], 3);
+    assert_eq!(workspace["schema_version"], 4);
     let rows = entry_rows(&translations, "scaleform", None);
     assert!(rows[0].get("translation").is_none());
     assert_eq!(rows[0]["hints"][0]["kind"], "term");
@@ -65,17 +63,17 @@ scope = { game = "SkyrimSe" }
 #[tokio::test]
 async fn annotate_translations_preserves_existing_diagnostics() {
     let root = TempRoot::new("annotate-preserves-diagnostics");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -90,7 +88,6 @@ async fn annotate_translations_preserves_existing_diagnostics() {
     );
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
         skip_memory_fill: true,
     })
@@ -105,24 +102,24 @@ async fn annotate_translations_preserves_existing_diagnostics() {
 async fn annotate_translations_fills_missing_memory_by_default_but_preserves_existing_translation()
 {
     let root = TempRoot::new("annotate-memory");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tStringer Test Iron Source\n$Desc\tStringer Test Steel Source\n",
     );
+    let translations = root.path().join("translations");
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &translations.join("knowledge/memory/workspace.jsonl"),
         concat!(
             "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
             "{\"id\":\"tm:2\",\"source\":\"Stringer Test Steel Source\",\"target\":\"测试钢源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
         ),
     );
-    let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -136,7 +133,6 @@ async fn annotate_translations_fills_missing_memory_by_default_but_preserves_exi
     );
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
         skip_memory_fill: false,
     })
@@ -162,21 +158,21 @@ async fn annotate_translations_fills_missing_memory_by_default_but_preserves_exi
 #[tokio::test]
 async fn annotate_translations_does_not_fill_agent_origin_entries() {
     let root = TempRoot::new("annotate-agent-origin");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tStringer Test Iron Source\n",
     );
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -187,7 +183,6 @@ async fn annotate_translations_does_not_fill_agent_origin_entries() {
     );
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
         skip_memory_fill: false,
     })
@@ -202,21 +197,21 @@ async fn annotate_translations_does_not_fill_agent_origin_entries() {
 #[tokio::test]
 async fn annotate_translations_does_not_fill_claimed_entries() {
     let root = TempRoot::new("annotate-claimed-entry");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tStringer Test Iron Source\n",
     );
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -229,7 +224,6 @@ async fn annotate_translations_does_not_fill_claimed_entries() {
     assert!(claim.batch_id.is_some());
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
         skip_memory_fill: false,
     })
@@ -243,27 +237,26 @@ async fn annotate_translations_does_not_fill_claimed_entries() {
 #[tokio::test]
 async fn annotate_translations_can_skip_memory_fill() {
     let root = TempRoot::new("annotate-skip-memory-fill");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tStringer Test Iron Source\n",
     );
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
         skip_memory_fill: true,
     })
@@ -277,14 +270,14 @@ async fn annotate_translations_can_skip_memory_fill() {
 #[tokio::test]
 async fn validate_translations_recomputes_diagnostics_from_current_knowledge() {
     let root = TempRoot::new("validate-package");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tDragonborn\n",
     );
+    let translations = root.path().join("translations");
     write_text(
-        &root.path().join("knowledge/terms/skyrim.toml"),
+        &translations.join("knowledge/terms/skyrim.toml"),
         r#"
 [[terms]]
 id = "skyrim.dragonborn.preferred"
@@ -299,11 +292,11 @@ target = "抓根宝"
 status = "forbidden"
 "#,
     );
-    let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -319,7 +312,6 @@ status = "forbidden"
     );
 
     let summary = validate_translations(ValidateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
     })
     .unwrap();
@@ -340,23 +332,22 @@ status = "forbidden"
 #[tokio::test]
 async fn validate_translations_reports_missing_translation() {
     let root = TempRoot::new("validate-missing-translation");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
 
     let summary = validate_translations(ValidateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
     })
     .unwrap();
@@ -370,15 +361,15 @@ async fn validate_translations_reports_missing_translation() {
 #[tokio::test]
 async fn import_ignores_annotations_and_diagnostics() {
     let root = TempRoot::new("import-ignore-pipeline-metadata");
-    let source = root
-        .path()
-        .join("Data/Interface/Translations/MyMod_English.txt");
+    let source_root = root.path().join("source");
+    let source = source_root.join("Data/Interface/Translations/MyMod_English.txt");
     write_text(&source, "$Title\tIron Sword\n");
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -388,18 +379,16 @@ async fn import_ignores_annotations_and_diagnostics() {
         concat!(
             "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",",
             "\"translation\":\"铁剑\",",
-            "\"hints\":[{\"kind\":\"term\",\"id\":\"x\",\"layer\":\"project\",\"confidence\":1.0,\"match\":\"source\"}],",
+            "\"hints\":[{\"kind\":\"term\",\"id\":\"x\",\"layer\":\"workspace\",\"confidence\":1.0,\"match\":\"source\"}],",
             "\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"term.preferred_missing\",\"message\":\"x\"}]}\n",
         ),
     );
     let override_root = TempRoot::new("import-ignore-pipeline-metadata-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -415,7 +404,7 @@ async fn import_ignores_annotations_and_diagnostics() {
 }
 
 #[test]
-fn lookup_uses_global_library_and_project_layers_in_order() {
+fn lookup_uses_global_then_workspace_layers_and_ignores_library_fixtures() {
     let root = TempRoot::new("knowledge-layer-order");
     let global = root.path().join("global-knowledge");
     write_term(
@@ -429,13 +418,13 @@ fn lookup_uses_global_library_and_project_layers_in_order() {
         "库铁剑",
     );
     write_term(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         "skyrim.weapon.iron_sword",
-        "项目铁剑",
+        "工作区铁剑",
     );
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -449,8 +438,14 @@ fn lookup_uses_global_library_and_project_layers_in_order() {
     .unwrap();
 
     assert!(lookup.results.iter().any(|result| {
-        result.kind == "term" && result.layer == "project" && result.target == "项目铁剑"
+        result.kind == "term" && result.layer == "workspace" && result.target == "工作区铁剑"
     }));
+    assert!(
+        lookup
+            .results
+            .iter()
+            .all(|result| result.target != "库铁剑")
+    );
     assert!(lookup.diagnostics.iter().any(|diagnostic| {
         diagnostic.code() == "knowledge.override"
             && diagnostic.rule_id() == Some("skyrim.weapon.iron_sword")
@@ -461,26 +456,22 @@ fn lookup_uses_global_library_and_project_layers_in_order() {
 fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
     let root = TempRoot::new("knowledge-index-fresh");
     write_term(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         "skyrim.weapon.iron_sword",
         "铁剑",
     );
 
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
     })
     .unwrap();
     assert_eq!(summary.files, 1);
     assert_eq!(summary.terms, 1);
-    assert!(
-        root.path()
-            .join(".stringer/indexes/knowledge.sqlite")
-            .exists()
-    );
+    assert!(root.path().join("knowledge/index.sqlite").exists());
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -502,13 +493,13 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
 fn lookup_auto_creates_missing_index_without_stale_diagnostic() {
     let root = TempRoot::new("knowledge-index-auto-create");
     write_term(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         "skyrim.weapon.iron_sword",
         "铁剑",
     );
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -524,27 +515,23 @@ fn lookup_auto_creates_missing_index_without_stale_diagnostic() {
     assert!(lookup.index_used);
     assert!(lookup.diagnostics.is_empty());
     assert_eq!(lookup.results[0].target, "铁剑");
-    assert!(
-        root.path()
-            .join(".stringer/indexes/knowledge.sqlite")
-            .exists()
-    );
+    assert!(root.path().join("knowledge/index.sqlite").exists());
 }
 
 #[test]
 fn lookup_refreshes_changed_knowledge_index_without_stale_diagnostic() {
     let root = TempRoot::new("knowledge-index-refresh");
-    let terms = root.path().join("knowledge/terms/project.toml");
+    let terms = root.path().join("knowledge/terms/workspace.toml");
     write_term(&terms, "skyrim.weapon.iron_sword", "铁剑");
     build_knowledge_index(BuildKnowledgeIndexOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
     })
     .unwrap();
     write_term(&terms, "skyrim.weapon.iron_sword", "熟铁剑");
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -565,28 +552,27 @@ fn lookup_refreshes_changed_knowledge_index_without_stale_diagnostic() {
 #[tokio::test]
 async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diagnostic() {
     let root = TempRoot::new("annotate-missing-index");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     write_term(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         "skyrim.weapon.iron_sword",
         "铁剑",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings_with_global(None),
+        force: false,
     })
     .await
     .unwrap();
 
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: utf8(root.path()),
         workspace: utf8(&translations),
         skip_memory_fill: true,
     })
@@ -605,17 +591,14 @@ async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diag
 fn lookup_rebuilds_corrupt_index_without_stale_diagnostic() {
     let root = TempRoot::new("knowledge-index-corrupt");
     write_term(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         "skyrim.weapon.iron_sword",
         "铁剑",
     );
-    write_bytes(
-        &root.path().join(".stringer/indexes/knowledge.sqlite"),
-        b"not sqlite",
-    );
+    write_bytes(&root.path().join("knowledge/index.sqlite"), b"not sqlite");
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -642,12 +625,12 @@ fn build_index_preserves_duplicate_memory_ids_across_layers() {
         "{\"id\":\"tm:1\",\"source\":\"Iron Sword\",\"target\":\"全局铁剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
     );
     write_text(
-        &root.path().join("knowledge/memory/project.jsonl"),
+        &root.path().join("knowledge/memory/workspace.jsonl"),
         "{\"id\":\"tm:1\",\"source\":\"Steel Sword\",\"target\":\"钢剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
     );
 
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
     })
     .unwrap();
@@ -667,13 +650,13 @@ fn fresh_index_preserves_duplicate_memory_ids_across_files_in_same_layer() {
         "{\"id\":\"tm:1\",\"source\":\"Steel Sword\",\"target\":\"钢剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
     );
     build_knowledge_index(BuildKnowledgeIndexOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
     })
     .unwrap();
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(None),
         text: "Steel Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -705,13 +688,13 @@ fn lookup_reports_merge_diagnostics_once() {
         "全局铁剑",
     );
     write_term(
-        &root.path().join("knowledge/terms/project.toml"),
+        &root.path().join("knowledge/terms/workspace.toml"),
         "skyrim.weapon.iron_sword",
         "项目铁剑",
     );
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
@@ -742,7 +725,10 @@ fn row_by_id<'a>(rows: &'a [Value], id: &str) -> &'a Value {
 
 fn settings_with_global(global_knowledge_root: Option<std::path::PathBuf>) -> WorkspaceSettings {
     let mut settings = settings();
-    settings.global_knowledge_root = global_knowledge_root.as_deref().map(utf8);
+    settings.global_knowledge_root = Some(match global_knowledge_root {
+        Some(path) => utf8(&path),
+        None => camino::Utf8PathBuf::from("__stringer_test_no_global_knowledge__"),
+    });
     settings
 }
 

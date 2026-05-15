@@ -128,11 +128,11 @@ pub enum WorkspaceError {
     #[error("duplicate output logical path `{path}`")]
     DuplicateOutputPath { path: String },
 
-    #[error("invalid override logical path `{path}`: {message}")]
+    #[error("invalid output logical path `{path}`: {message}")]
     InvalidLogicalPath { path: String, message: String },
 
-    #[error("invalid override root `{root}`: {message}")]
-    InvalidOverrideRoot { root: Utf8PathBuf, message: String },
+    #[error("invalid output root `{root}`: {message}")]
+    InvalidOutputRoot { root: Utf8PathBuf, message: String },
 
     #[error(transparent)]
     Reader(#[from] stringer_reader::ReaderError),

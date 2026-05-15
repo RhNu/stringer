@@ -1,17 +1,17 @@
-pub(crate) const ROOT_LONG_ABOUT: &str = r#"Stringer opens Bethesda mod text into an agent-editable translation workspace, enriches it with knowledge, and finalizes translated assets into an override directory."#;
+pub(crate) const ROOT_LONG_ABOUT: &str = r#"Stringer opens Bethesda mod text into an agent-editable translation workspace, enriches it with knowledge, and finalizes translated assets into an output directory."#;
 
 pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
-  stringer workspace open --root <MOD_ROOT> --workspace <WORKSPACE> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
+  stringer workspace open --source-root <SOURCE_ROOT> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
   stringer adapt import --format xt-sst --input <OLD_TRANSLATION.sst> --source-locale en --target-locale zh-Hans --game SkyrimSe
-  stringer knowledge annotate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
-  stringer workspace batch count --workspace <WORKSPACE> --json
-  stringer workspace batch claim --workspace <WORKSPACE> --limit 50
-  stringer workspace batch apply --workspace <WORKSPACE> --input <PATCH_JSON>
-  stringer knowledge validate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
-  stringer workspace finalize --root <MOD_ROOT> --workspace <WORKSPACE> --override-root <OVERRIDE_ROOT>
+  stringer knowledge annotate
+  stringer workspace batch count --json
+  stringer workspace batch claim --limit 50
+  stringer workspace batch apply --input <PATCH_JSON>
+  stringer knowledge validate
+  stringer workspace finalize
 
 Workspace layout: workspace.json, batches/, entries/**/*.jsonl.
-Knowledge: <PROJECT_ROOT>/knowledge/{terms,memory,rules}.
+Knowledge: knowledge/{terms,memory,rules}; derived index: knowledge/index.sqlite.
 See README.md and skills/stringer-workflows for agent workflows."#;
 
 pub(crate) const SETTINGS_LONG_HELP: &str =
@@ -20,20 +20,22 @@ pub(crate) const SETTINGS_LONG_HELP: &str =
 pub(crate) const WORKSPACE_LONG_ABOUT: &str =
     r#"Manage translation workspace open, batch, finalize, and upgrade commands."#;
 
-pub(crate) const WORKSPACE_OPEN_LONG_ABOUT: &str = r#"Scan a mod root and write an editable workspace with workspace.json, batches/, and entries/**/*.jsonl."#;
+pub(crate) const WORKSPACE_OPEN_LONG_ABOUT: &str = r#"Scan a read-only source root and write an editable workspace with workspace.json, batches/, and entries/**/*.jsonl."#;
 
 pub(crate) const WORKSPACE_OPEN_AFTER_LONG_HELP: &str = r#"Example:
-  stringer workspace open --root ./MyMod --workspace ./translations --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
+  stringer workspace open --source-root ../MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
 
 Common next step:
-  stringer knowledge annotate --project-root ./MyMod --workspace ./translations"#;
+  stringer knowledge annotate
 
-pub(crate) const WORKSPACE_FINALIZE_LONG_ABOUT: &str = r#"Apply translated workspace rows to the source assets and write changed files to an override directory."#;
+The workspace defaults to the current directory. Source root settings are not read; use stringer.toml in the workspace or pass settings on the command line."#;
+
+pub(crate) const WORKSPACE_FINALIZE_LONG_ABOUT: &str = r#"Apply translated workspace rows to the stored source root and write changed files to an output directory."#;
 
 pub(crate) const WORKSPACE_FINALIZE_AFTER_LONG_HELP: &str = r#"Example:
-  stringer workspace finalize --root ./MyMod --workspace ./translations --override-root ./StringerOverride
+  stringer workspace finalize --output ./output
 
-Run knowledge validate first. Use an override directory outside the source mod root."#;
+Run knowledge validate first. The output defaults to <workspace>/output and must stay outside the source root. Use --source-root only to override the source_root stored in workspace.json."#;
 
 pub(crate) const WORKSPACE_BATCH_LONG_ABOUT: &str =
     r#"Count, claim, apply, and release translation batches for agent work."#;
@@ -65,7 +67,7 @@ pub(crate) const ADAPT_IMPORT_AFTER_LONG_HELP: &str = r#"Example:
   stringer adapt import --format xt-sst --input ./old.sst --source-locale en --target-locale zh-Hans --game SkyrimSe
 
 Common next step:
-  stringer knowledge index rebuild --project-root ./MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans"#;
+  stringer knowledge index rebuild"#;
 
 pub(crate) const KNOWLEDGE_LONG_ABOUT: &str =
     r#"Annotate, validate, lookup, and index terminology, memory, rules, and diagnostics."#;
@@ -73,14 +75,14 @@ pub(crate) const KNOWLEDGE_LONG_ABOUT: &str =
 pub(crate) const ANNOTATE_LONG_ABOUT: &str = r#"Write terminology and memory hints into a workspace, optionally filling high-confidence memory translations."#;
 
 pub(crate) const ANNOTATE_AFTER_LONG_HELP: &str = r#"Examples:
-  stringer knowledge annotate --project-root ./MyMod --workspace ./translations
+  stringer knowledge annotate
   stringer knowledge annotate --workspace ./translations --skip-fill-memory"#;
 
 pub(crate) const VALIDATE_LONG_ABOUT: &str =
     r#"Recompute workspace diagnostics before review or finalize."#;
 
 pub(crate) const VALIDATE_AFTER_LONG_HELP: &str = r#"Example:
-  stringer knowledge validate --project-root ./MyMod --workspace ./translations
+  stringer knowledge validate
 
 Common diagnostics: term.preferred_missing, term.forbidden_used, placeholder.mismatch, scaleform.newline, translation.empty, memory.conflict."#;
 
@@ -88,7 +90,7 @@ pub(crate) const LOOKUP_LONG_ABOUT: &str =
     r#"Search terminology and translation memory for agent-readable evidence."#;
 
 pub(crate) const LOOKUP_AFTER_LONG_HELP: &str = r#"Examples:
-  stringer knowledge lookup --project-root ./MyMod --text "Altmer" --kind plugin --record-type NPC_ --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans --json
+  stringer knowledge lookup --text "Altmer" --kind plugin --record-type NPC_ --json
   stringer knowledge lookup --text "^(Alt|Bos)mer$" --regex --source memory --field source --json
 
 Defaults: --source all --field both --limit 20."#;
@@ -96,7 +98,7 @@ Defaults: --source all --field both --limit 20."#;
 pub(crate) const INDEX_LONG_ABOUT: &str = r#"Maintain the derived knowledge SQLite index."#;
 
 pub(crate) const INDEX_REBUILD_LONG_ABOUT: &str =
-    r#"Rebuild <PROJECT_ROOT>/.stringer/indexes/knowledge.sqlite from knowledge files."#;
+    r#"Rebuild <workspace>/knowledge/index.sqlite from knowledge files."#;
 
 pub(crate) const INDEX_REBUILD_AFTER_LONG_HELP: &str = r#"Example:
-  stringer knowledge index rebuild --project-root ./MyMod --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans"#;
+  stringer knowledge index rebuild"#;

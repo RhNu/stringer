@@ -254,17 +254,17 @@ struct InspectFixture {
 
 async fn fixture_workspace(label: &str) -> InspectFixture {
     let root = TempRoot::new(label);
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n$Desc\tSteel Sword\n$Done\tDone\n$Warn\tNeeds Review\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();

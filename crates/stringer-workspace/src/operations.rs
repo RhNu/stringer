@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
+use std::fs;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use stringer_core::{FileAsset, FileBundle, StringEntryBundle, StringEntryView};
 use stringer_pex::{PexStringBundle, ReadPexOptions, read_pex_strings, write_pex_strings};
 use stringer_plugin::{
@@ -18,26 +19,25 @@ use crate::package::{
     PackagedTranslationRecord, external_entry_id, packaged_record_from_entry,
     read_translation_package, write_translation_package,
 };
-use crate::paths::{changed_assets, ensure_override_root_outside_source, write_override_assets};
+use crate::paths::{
+    changed_assets, ensure_output_outside_source, ensure_workspace_outside_source,
+    write_output_assets,
+};
 use crate::settings::WorkspaceSettings;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportTranslationsOptions {
-    pub root: Utf8PathBuf,
-    pub out: Utf8PathBuf,
+    pub source_root: Utf8PathBuf,
+    pub workspace: Utf8PathBuf,
     pub settings: WorkspaceSettings,
+    pub force: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportTranslationsOptions {
-    pub root: Utf8PathBuf,
-    pub translations: Utf8PathBuf,
-    pub target: WriteTarget,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WriteTarget {
-    OverrideDirectory { root: Utf8PathBuf },
+    pub workspace: Utf8PathBuf,
+    pub source_root: Option<Utf8PathBuf>,
+    pub output: Utf8PathBuf,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -118,8 +118,11 @@ impl EditableBundle {
 pub async fn export_translations(
     options: ExportTranslationsOptions,
 ) -> Result<ExportSummary, WorkspaceError> {
-    let _lock = WorkspaceLock::acquire(&options.out)?;
-    let read = read_mod_root(&options.root, ReadModOptions::default())?;
+    let source_root = absolute_existing_path(&options.source_root)?;
+    ensure_workspace_outside_source(&source_root, &options.workspace)?;
+    let _lock = WorkspaceLock::acquire(&options.workspace)?;
+    prepare_workspace_for_export(&options.workspace, options.force)?;
+    let read = read_mod_root(&source_root, ReadModOptions::default())?;
     let bundles = read_editable_bundles(&read.files, &options.settings).await?;
     let mut records = Vec::new();
     for bundle in &bundles {
@@ -127,7 +130,12 @@ pub async fn export_translations(
     }
     records
         .sort_by(|left, right| (&left.file, &left.record.id).cmp(&(&right.file, &right.record.id)));
-    write_translation_package(&options.out, &options.settings, &records)?;
+    write_translation_package(
+        &options.workspace,
+        &source_root,
+        &options.settings,
+        &records,
+    )?;
     debug!(entries = records.len(), "exported translation package");
     Ok(ExportSummary {
         entries: records.len(),
@@ -137,8 +145,10 @@ pub async fn export_translations(
 pub async fn import_translations(
     options: ImportTranslationsOptions,
 ) -> Result<ImportSummary, WorkspaceError> {
-    let (settings, mut translations) = read_translation_package(&options.translations)?;
-    let read = read_mod_root(&options.root, ReadModOptions::default())?;
+    let (settings, stored_source_root, mut translations) =
+        read_translation_package(&options.workspace)?;
+    let source_root = options.source_root.unwrap_or(stored_source_root);
+    let read = read_mod_root(&source_root, ReadModOptions::default())?;
     let mut bundles = read_editable_bundles(&read.files, &settings).await?;
     let mut applied_entries = 0;
     for bundle in &mut bundles {
@@ -153,12 +163,8 @@ pub async fn import_translations(
         written_candidates.extend(bundle.write(&settings).await?);
     }
     let changed = changed_assets(&read.files, written_candidates)?;
-    let written_files = match options.target {
-        WriteTarget::OverrideDirectory { root } => {
-            ensure_override_root_outside_source(&options.root, &root)?;
-            write_override_assets(&root, &changed)?
-        }
-    };
+    ensure_output_outside_source(&source_root, &options.output)?;
+    let written_files = write_output_assets(&options.output, &changed)?;
     debug!(
         applied_entries,
         written_files, "imported translation package"
@@ -167,6 +173,156 @@ pub async fn import_translations(
         applied_entries,
         written_files,
     })
+}
+
+fn prepare_workspace_for_export(workspace: &Utf8Path, force: bool) -> Result<(), WorkspaceError> {
+    if force {
+        remove_generated_workspace_artifacts(workspace)?;
+        return Ok(());
+    }
+    if !workspace.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(workspace).map_err(|source| WorkspaceError::ReadFile {
+        path: workspace.to_owned(),
+        source,
+    })? {
+        let entry = entry.map_err(|source| WorkspaceError::ReadFile {
+            path: workspace.to_owned(),
+            source,
+        })?;
+        let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
+            WorkspaceError::InvalidLogicalPath {
+                path: path.display().to_string(),
+                message: "workspace path is not valid UTF-8".to_string(),
+            }
+        })?;
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        match name {
+            "lock" => {}
+            "stringer.toml" => {}
+            "knowledge" => validate_workspace_knowledge_inputs(&path)?,
+            "workspace.json" | "entries" | "batches" => {
+                return Err(WorkspaceError::InvalidTranslationPackagePath {
+                    path: workspace.to_string(),
+                    message: format!(
+                        "workspace already contains generated artifact `{name}`; use --force to replace generated artifacts"
+                    ),
+                });
+            }
+            _ => {
+                return Err(WorkspaceError::InvalidTranslationPackagePath {
+                    path: workspace.to_string(),
+                    message: format!(
+                        "workspace directory contains unknown existing path `{name}`; use --force to initialize anyway"
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_workspace_knowledge_inputs(path: &Utf8Path) -> Result<(), WorkspaceError> {
+    if !path.is_dir() {
+        return Err(WorkspaceError::InvalidTranslationPackagePath {
+            path: path.to_string(),
+            message: "workspace knowledge path must be a directory".to_string(),
+        });
+    }
+    for entry in fs::read_dir(path).map_err(|source| WorkspaceError::ReadFile {
+        path: path.to_owned(),
+        source,
+    })? {
+        let entry = entry.map_err(|source| WorkspaceError::ReadFile {
+            path: path.to_owned(),
+            source,
+        })?;
+        let entry_path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
+            WorkspaceError::InvalidLogicalPath {
+                path: path.display().to_string(),
+                message: "workspace knowledge path is not valid UTF-8".to_string(),
+            }
+        })?;
+        let Some(name) = entry_path.file_name() else {
+            continue;
+        };
+        if !matches!(name, "terms" | "memory" | "rules") {
+            return Err(WorkspaceError::InvalidTranslationPackagePath {
+                path: entry_path.to_string(),
+                message: "workspace knowledge may only contain terms, memory, and rules inputs"
+                    .to_string(),
+            });
+        }
+        if !entry_path.is_dir() {
+            return Err(WorkspaceError::InvalidTranslationPackagePath {
+                path: entry_path.to_string(),
+                message: "workspace knowledge input path must be a directory".to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn remove_generated_workspace_artifacts(workspace: &Utf8Path) -> Result<(), WorkspaceError> {
+    remove_file_if_exists(&workspace.join("workspace.json"))?;
+    remove_dir_if_exists(&workspace.join("entries"))?;
+    remove_dir_if_exists(&workspace.join("batches"))?;
+    remove_file_if_exists(&workspace.join("knowledge/index.sqlite"))?;
+    Ok(())
+}
+
+fn remove_file_if_exists(path: &Utf8Path) -> Result<(), WorkspaceError> {
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(path).map_err(|source| WorkspaceError::WriteFile {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+fn remove_dir_if_exists(path: &Utf8Path) -> Result<(), WorkspaceError> {
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_dir_all(path).map_err(|source| WorkspaceError::WriteFile {
+        path: path.to_owned(),
+        source,
+    })
+}
+
+fn absolute_existing_path(path: &Utf8Path) -> Result<Utf8PathBuf, WorkspaceError> {
+    let canonical = fs::canonicalize(path).map_err(|source| WorkspaceError::ReadFile {
+        path: path.to_owned(),
+        source,
+    })?;
+    let path = Utf8PathBuf::from_path_buf(canonical).map_err(|path| {
+        WorkspaceError::InvalidLogicalPath {
+            path: path.display().to_string(),
+            message: "source root path is not valid UTF-8".to_string(),
+        }
+    })?;
+    Ok(strip_windows_verbatim_prefix(path))
+}
+
+#[cfg(windows)]
+fn strip_windows_verbatim_prefix(path: Utf8PathBuf) -> Utf8PathBuf {
+    let text = path.as_str();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return Utf8PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = text.strip_prefix(r"\\?\") {
+        return Utf8PathBuf::from(rest.to_string());
+    }
+    path
+}
+
+#[cfg(not(windows))]
+fn strip_windows_verbatim_prefix(path: Utf8PathBuf) -> Utf8PathBuf {
+    path
 }
 
 async fn read_editable_bundles(

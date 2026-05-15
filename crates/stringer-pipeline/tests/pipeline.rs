@@ -66,10 +66,10 @@ scope = { target_locale = "zh-Hans", kind = "plugin", record_type = "WEAP" }
 "#,
     )
     .unwrap();
-    let mut project = KnowledgeLayer::new("project");
-    project
+    let mut workspace = KnowledgeLayer::new("workspace");
+    workspace
         .add_terms_toml(
-            "knowledge/terms/project.toml",
+            "knowledge/terms/workspace.toml",
             r#"
 [[terms]]
 id = "skyrim.weapon.iron_sword"
@@ -81,7 +81,7 @@ scope = { target_locale = "zh-Hans", kind = "plugin", record_type = "WEAP" }
 "#,
         )
         .unwrap();
-    let knowledge = KnowledgeBase::from_layers(vec![base, project]).unwrap();
+    let knowledge = KnowledgeBase::from_layers(vec![base, workspace]).unwrap();
     let mut entry = plugin_entry("Ancient IRON BLADE");
 
     run_stage(PipelineStage::Annotate, &mut entry, &knowledge);
@@ -89,7 +89,7 @@ scope = { target_locale = "zh-Hans", kind = "plugin", record_type = "WEAP" }
     assert!(entry.annotations().iter().any(|annotation| {
         annotation.kind() == "term"
             && annotation.id() == "skyrim.weapon.iron_sword"
-            && annotation.layer() == "project"
+            && annotation.layer() == "workspace"
             && annotation.payload()["target"] == "熟铁剑"
             && annotation.match_kind() == "alias"
     }));
@@ -103,7 +103,7 @@ scope = { target_locale = "zh-Hans", kind = "plugin", record_type = "WEAP" }
 
 #[test]
 fn forbidden_terms_validate_without_replacing_text() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_terms_toml(
             "knowledge/terms/skyrim.toml",
@@ -145,7 +145,7 @@ status = "forbidden"
 
 #[test]
 fn game_scoped_terms_match_when_entry_has_game_context() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_terms_toml(
             "knowledge/terms/skyrim.toml",
@@ -198,10 +198,10 @@ fn validate_skips_pex_entries() {
 
 #[test]
 fn memory_exact_and_normalized_matches_auto_fill_high_confidence() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_memory_jsonl(
-            "knowledge/memory/project.jsonl",
+            "knowledge/memory/workspace.jsonl",
             r#"{"id":"tm:1","source":"Iron Sword","target":"铁剑","source_locale":"en","target_locale":"zh-Hans","context":{"kind":"plugin","record_type":"WEAP","subrecord":"FULL"},"quality":"confirmed","created_at":"2026-05-14T00:00:00Z"}
 {"id":"tm:2","source":"Steel Sword","target":"钢剑","source_locale":"en","target_locale":"zh-Hans","quality":"imported","created_at":"2026-05-14T00:00:00Z"}"#,
         )
@@ -229,10 +229,10 @@ fn memory_exact_and_normalized_matches_auto_fill_high_confidence() {
 
 #[test]
 fn memory_auto_fill_prefers_context_specific_target_over_generic_target() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_memory_jsonl(
-            "knowledge/memory/project.jsonl",
+            "knowledge/memory/workspace.jsonl",
             r#"{"id":"tm:generic","source":"Iron Sword","target":"通用铁剑","source_locale":"en","target_locale":"zh-Hans","quality":"confirmed","created_at":"2026-05-14T00:00:00Z"}
 {"id":"tm:specific","source":"Iron Sword","target":"武器铁剑","source_locale":"en","target_locale":"zh-Hans","context":{"record_type":"WEAP","subrecord":"FULL"},"quality":"confirmed","created_at":"2026-05-14T00:00:00Z"}"#,
         )
@@ -253,10 +253,10 @@ fn memory_auto_fill_prefers_context_specific_target_over_generic_target() {
 
 #[test]
 fn fuzzy_memory_matches_only_annotate_and_never_auto_fill() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_memory_jsonl(
-            "knowledge/memory/project.jsonl",
+            "knowledge/memory/workspace.jsonl",
             r#"{"id":"tm:1","source":"Iron Sword","target":"铁剑","source_locale":"en","target_locale":"zh-Hans","quality":"machine","created_at":"2026-05-14T00:00:00Z"}"#,
         )
         .unwrap();
@@ -276,7 +276,7 @@ fn fuzzy_memory_matches_only_annotate_and_never_auto_fill() {
 
 #[test]
 fn replacement_rules_parse_without_executing_by_default() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_rules_toml(
             "knowledge/rules/replacements.toml",
@@ -307,7 +307,7 @@ scope = { kind = ["plugin"] }
 
 #[test]
 fn regex_replacement_rules_annotate_without_changing_text() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_rules_toml(
             "knowledge/rules/replacements.toml",
@@ -339,7 +339,7 @@ scope = { kind = ["plugin"] }
 
 #[test]
 fn clears_reloaded_replacement_rule_hints_without_serialized_processor() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_rules_toml(
             "knowledge/rules/replacements.toml",
@@ -373,7 +373,7 @@ scope = { kind = ["plugin"] }
 
 #[test]
 fn invalid_regex_replacement_rules_report_knowledge_diagnostic() {
-    let mut layer = KnowledgeLayer::new("project");
+    let mut layer = KnowledgeLayer::new("workspace");
     layer
         .add_rules_toml(
             "knowledge/rules/replacements.toml",
@@ -414,10 +414,10 @@ target = "铁剑"
 "#,
     )
     .unwrap();
-    let mut project = KnowledgeLayer::new("project");
-    project
+    let mut workspace = KnowledgeLayer::new("workspace");
+    workspace
         .add_terms_toml(
-            "knowledge/terms/project.toml",
+            "knowledge/terms/workspace.toml",
             r#"
 [[terms]]
 id = "skyrim.weapon.iron_sword"
@@ -426,7 +426,7 @@ target = "熟铁剑"
 "#,
         )
         .unwrap();
-    let knowledge = KnowledgeBase::from_layers(vec![base, project]).unwrap();
+    let knowledge = KnowledgeBase::from_layers(vec![base, workspace]).unwrap();
     let mut entry = plugin_entry("Iron Sword");
     let pipeline = default_pipeline();
 

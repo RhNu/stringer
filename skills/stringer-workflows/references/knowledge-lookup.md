@@ -2,45 +2,45 @@
 
 ## Rebuild Index
 
-Rebuild after changing project knowledge or importing memory:
+Rebuild after changing workspace knowledge or importing memory:
 
 ```powershell
-stringer knowledge index rebuild --project-root <PROJECT_ROOT> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
+stringer knowledge index rebuild --workspace <WORKSPACE>
 ```
 
 `annotate`, `validate`, and `lookup` prefer a fresh index and fall back to files when needed.
 
-## Edit Project Terms
+## Edit Workspace Terms
 
-Prefer term edit commands/tools over direct TOML edits. They create `knowledge/terms/project.toml` by default and restrict custom files to `.toml` paths under `<PROJECT_ROOT>/knowledge/terms/`.
+Prefer term edit commands/tools over direct TOML edits. They create `knowledge/terms/workspace.toml` by default and restrict custom files to `.toml` paths under `<WORKSPACE>/knowledge/terms/`.
 
 Upsert a term:
 
 ```powershell
-stringer knowledge term upsert --project-root <PROJECT_ROOT> --id "term:iron_sword" --source "Iron Sword" --target "熟铁剑" --status preferred --alias "Iron Blade" --scope-json '{"game":["SkyrimSe"],"kind":["plugin"],"record_type":["WEAP"]}' --tag weapon --note "Project wording" --json
+stringer knowledge term upsert --workspace <WORKSPACE> --id "term:iron_sword" --source "Iron Sword" --target "熟铁剑" --status preferred --alias "Iron Blade" --scope-json '{"game":["SkyrimSe"],"kind":["plugin"],"record_type":["WEAP"]}' --tag weapon --note "Workspace wording" --json
 ```
 
 Delete a term:
 
 ```powershell
-stringer knowledge term delete --project-root <PROJECT_ROOT> --id "term:iron_sword" --json
+stringer knowledge term delete --workspace <WORKSPACE> --id "term:iron_sword" --json
 ```
 
-Use `--file knowledge/terms/<NAME>.toml` to target a specific project term file. Use `--rebuild-index` after an edit when subsequent lookup or annotation must use the SQLite index immediately; provide full settings or rely on project settings.
+Use `--file knowledge/terms/<NAME>.toml` to target a specific workspace term file. Use `--rebuild-index` after an edit when subsequent lookup or annotation must use the SQLite index immediately.
 
 Supported status values are `preferred`, `allowed`, and `forbidden`. Supported scope keys are `game`, `source_locale`, `target_locale`, `kind`, `record_type`, and `asset_path`; CLI `--scope-json` values must be string arrays.
 
 MCP equivalents:
 
-- `knowledge_term_upsert` with `{ "project_root": "...", "terms": [{ "id": "...", "source": "...", "target": "...", "status": "preferred", "scope": { "game": ["SkyrimSe"] } }], "rebuild_index": false }`
-- `knowledge_term_delete` with `{ "project_root": "...", "id": "...", "rebuild_index": false }`
+- `knowledge_term_upsert` with `{ "workspace": "...", "terms": [{ "id": "...", "source": "...", "target": "...", "status": "preferred", "scope": { "game": ["SkyrimSe"] } }], "rebuild_index": false }`
+- `knowledge_term_delete` with `{ "workspace": "...", "id": "...", "rebuild_index": false }`
 
 ## Lookup
 
 Use JSON output for agent evidence:
 
 ```powershell
-stringer knowledge lookup --project-root <PROJECT_ROOT> --text "Altmer" --kind plugin --record-type NPC_ --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans --json
+stringer knowledge lookup --workspace <WORKSPACE> --text "Altmer" --kind plugin --record-type NPC_ --json
 ```
 
 Useful filters:
@@ -50,7 +50,7 @@ Useful filters:
 - `--regex` for patterns
 - `--limit <N>` for compact results
 
-Exact source matches rank ahead of prefix and contains matches. Prefer project and context-relevant evidence over generic matches.
+Exact source matches rank ahead of prefix and contains matches. Prefer workspace and context-relevant evidence over generic matches.
 
 ## Adapt Old Resources
 

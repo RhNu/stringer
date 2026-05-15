@@ -4,8 +4,8 @@ use serde_json::Value;
 use stringer_core::Language;
 use stringer_plugin::{GameRelease, StringsFile, StringsKind, write_strings_file};
 use stringer_workspace::{
-    ExportTranslationsOptions, ImportTranslationsOptions, WorkspaceSettings, WriteTarget,
-    export_translations, import_translations,
+    ExportTranslationsOptions, ImportTranslationsOptions, WorkspaceSettings, export_translations,
+    import_translations,
 };
 
 mod support;
@@ -15,18 +15,18 @@ use support::*;
 #[tokio::test]
 async fn exports_scaleform_workspace_with_workspace_json_and_clean_entry_rows() {
     let root = TempRoot::new("export-scaleform");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let out = root.path().join("translations");
 
     let summary = export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&out),
+        source_root: utf8(&source_root),
+        workspace: utf8(&out),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -35,8 +35,15 @@ async fn exports_scaleform_workspace_with_workspace_json_and_clean_entry_rows() 
     assert!(!out.join("manifest.json").exists());
     assert!(out.join("batches").is_dir());
     let workspace = json_file(&out.join("workspace.json"));
-    assert_eq!(workspace["schema_version"], 3);
+    assert_eq!(workspace["schema_version"], 4);
     assert_eq!(workspace["kind"], "stringer.workspace");
+    assert!(
+        workspace["source_root"]
+            .as_str()
+            .unwrap()
+            .replace('\\', "/")
+            .ends_with(source_root.to_string_lossy().replace('\\', "/").as_str())
+    );
     assert_eq!(workspace["game_release"], "SkyrimSe");
     assert_eq!(workspace["asset_language"], "English");
     assert_eq!(workspace["source_locale"], "en");
@@ -78,17 +85,17 @@ async fn exports_scaleform_workspace_with_workspace_json_and_clean_entry_rows() 
 #[tokio::test]
 async fn import_rejects_legacy_manifest_only_workspace() {
     let root = TempRoot::new("legacy-manifest-only");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -99,11 +106,9 @@ async fn import_rejects_legacy_manifest_only_workspace() {
     .unwrap();
 
     let error = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(&root.path().join("override")),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(&root.path().join("override")),
     })
     .await
     .unwrap_err();
@@ -115,15 +120,15 @@ async fn import_rejects_legacy_manifest_only_workspace() {
 #[tokio::test]
 async fn import_writes_only_changed_override_files_and_leaves_source_unchanged() {
     let root = TempRoot::new("import-scaleform");
-    let source = root
-        .path()
-        .join("Data/Interface/Translations/MyMod_English.txt");
+    let source_root = root.path().join("source");
+    let source = source_root.join("Data/Interface/Translations/MyMod_English.txt");
     write_text(&source, "$Title\tIron Sword\n");
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -135,11 +140,9 @@ async fn import_writes_only_changed_override_files_and_leaves_source_unchanged()
     let override_root = TempRoot::new("import-scaleform-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -159,14 +162,13 @@ async fn import_writes_only_changed_override_files_and_leaves_source_unchanged()
 #[tokio::test]
 async fn import_uses_asset_language_from_manifest() {
     let root = TempRoot::new("manifest-language");
-    let source = root
-        .path()
-        .join("Data/Interface/Translations/MyMod_French.txt");
+    let source_root = root.path().join("source");
+    let source = source_root.join("Data/Interface/Translations/MyMod_French.txt");
     write_text(&source, "$Title\tEpee en fer\n");
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: WorkspaceSettings {
             game_release: GameRelease::SkyrimSe,
             asset_language: Language::French,
@@ -174,6 +176,7 @@ async fn import_uses_asset_language_from_manifest() {
             target_locale: "zh-Hans".to_string(),
             global_knowledge_root: None,
         },
+        force: false,
     })
     .await
     .unwrap();
@@ -185,11 +188,9 @@ async fn import_uses_asset_language_from_manifest() {
     let override_root = TempRoot::new("manifest-language-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -208,17 +209,17 @@ async fn import_uses_asset_language_from_manifest() {
 #[tokio::test]
 async fn import_rejects_duplicate_translated_ids() {
     let root = TempRoot::new("duplicate-id");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -232,11 +233,9 @@ async fn import_rejects_duplicate_translated_ids() {
     );
 
     let error = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(&root.path().join("override")),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(&root.path().join("override")),
     })
     .await
     .unwrap_err();
@@ -247,17 +246,17 @@ async fn import_rejects_duplicate_translated_ids() {
 #[tokio::test]
 async fn import_rejects_duplicate_ids_even_when_only_one_row_has_translation() {
     let root = TempRoot::new("duplicate-id-missing-text");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -271,11 +270,9 @@ async fn import_rejects_duplicate_ids_even_when_only_one_row_has_translation() {
     );
 
     let error = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(&root.path().join("override")),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(&root.path().join("override")),
     })
     .await
     .unwrap_err();
@@ -284,19 +281,19 @@ async fn import_rejects_duplicate_ids_even_when_only_one_row_has_translation() {
 }
 
 #[tokio::test]
-async fn import_rejects_override_root_that_is_the_source_root() {
-    let root = TempRoot::new("unsafe-override-root");
+async fn import_rejects_output_that_is_the_source_root() {
+    let root = TempRoot::new("unsafe-output-root");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -307,22 +304,17 @@ async fn import_rejects_override_root_that_is_the_source_root() {
     );
 
     let error = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(&source_root),
     })
     .await
     .unwrap_err();
 
-    assert!(error.to_string().contains("override root"));
+    assert!(error.to_string().contains("output"));
     assert_eq!(
-        fs::read_to_string(
-            root.path()
-                .join("Data/Interface/Translations/MyMod_English.txt")
-        )
-        .unwrap(),
+        fs::read_to_string(source_root.join("Data/Interface/Translations/MyMod_English.txt"))
+            .unwrap(),
         "$Title\tIron Sword\n"
     );
 }
@@ -330,17 +322,17 @@ async fn import_rejects_override_root_that_is_the_source_root() {
 #[tokio::test]
 async fn import_rejects_unknown_translation_ids() {
     let root = TempRoot::new("unknown-id");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -351,11 +343,9 @@ async fn import_rejects_unknown_translation_ids() {
     );
 
     let error = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(&root.path().join("override")),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(&root.path().join("override")),
     })
     .await
     .unwrap_err();
@@ -370,17 +360,17 @@ async fn import_rejects_unknown_translation_ids() {
 #[tokio::test]
 async fn import_rejects_unsupported_translation_package_schema_version() {
     let root = TempRoot::new("bad-schema");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -392,11 +382,9 @@ async fn import_rejects_unsupported_translation_package_schema_version() {
     );
 
     let error = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(&root.path().join("override")),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(&root.path().join("override")),
     })
     .await
     .unwrap_err();
@@ -411,17 +399,17 @@ async fn import_rejects_unsupported_translation_package_schema_version() {
 #[tokio::test]
 async fn import_rejects_manifest_entry_paths_that_escape_package_root() {
     let root = TempRoot::new("unsafe-package-path");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -433,11 +421,9 @@ async fn import_rejects_manifest_entry_paths_that_escape_package_root() {
     );
 
     let error = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(&root.path().join("override")),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(&root.path().join("override")),
     })
     .await
     .unwrap_err();
@@ -452,17 +438,17 @@ async fn import_rejects_manifest_entry_paths_that_escape_package_root() {
 #[tokio::test]
 async fn import_ignores_unlisted_translation_package_entry_files() {
     let root = TempRoot::new("ignore-unlisted");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -473,11 +459,9 @@ async fn import_ignores_unlisted_translation_package_entry_files() {
     let override_root = TempRoot::new("ignore-unlisted-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -489,17 +473,17 @@ async fn import_ignores_unlisted_translation_package_entry_files() {
 #[tokio::test]
 async fn import_skips_missing_and_null_translation_without_writing_files() {
     let root = TempRoot::new("skip-null");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n$Desc\tSharp blade\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -514,11 +498,9 @@ async fn import_skips_missing_and_null_translation_without_writing_files() {
     let override_root = TempRoot::new("skip-null-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -531,17 +513,17 @@ async fn import_skips_missing_and_null_translation_without_writing_files() {
 #[tokio::test]
 async fn import_applies_empty_string_translations() {
     let root = TempRoot::new("empty-string");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -553,11 +535,9 @@ async fn import_applies_empty_string_translations() {
     let override_root = TempRoot::new("empty-string-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -576,17 +556,17 @@ async fn import_applies_empty_string_translations() {
 #[tokio::test]
 async fn import_same_text_translation_does_not_write_override_files() {
     let root = TempRoot::new("same-text");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
     let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&translations),
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -598,11 +578,9 @@ async fn import_same_text_translation_does_not_write_override_files() {
     let override_root = TempRoot::new("same-text-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&translations),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&translations),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -615,18 +593,18 @@ async fn import_same_text_translation_does_not_write_override_files() {
 #[tokio::test]
 async fn exported_ids_normalize_only_path_separators_not_key_text() {
     let root = TempRoot::new("id-normalization");
+    let source_root = root.path().join("source");
     write_text(
-        &root
-            .path()
-            .join("Data/Interface/Translations/MyMod_English.txt"),
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Path\\Key\tIron Sword\n",
     );
     let out = root.path().join("translations");
 
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&out),
+        source_root: utf8(&source_root),
+        workspace: utf8(&out),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -641,8 +619,9 @@ async fn exported_ids_normalize_only_path_separators_not_key_text() {
 #[tokio::test]
 async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugin() {
     let root = TempRoot::new("plugin-import");
+    let source_root = root.path().join("source");
     write_bytes(
-        &root.path().join("Data/MyMod.esp"),
+        &source_root.join("Data/MyMod.esp"),
         &build_localized_plugin(),
     );
     let mut strings = StringsFile::new(StringsKind::Normal, Language::English);
@@ -654,15 +633,16 @@ async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugi
     )
     .unwrap();
     write_bytes(
-        &root.path().join("Data/Strings/MyMod_English.STRINGS"),
+        &source_root.join("Data/Strings/MyMod_English.STRINGS"),
         strings_asset.bytes(),
     );
 
     let export_path = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&export_path),
+        source_root: utf8(&source_root),
+        workspace: utf8(&export_path),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -701,11 +681,9 @@ async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugi
     let override_root = TempRoot::new("plugin-import-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&export_path),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&export_path),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();
@@ -724,16 +702,18 @@ async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugi
 #[tokio::test]
 async fn export_omits_pex_files_with_only_filtered_sources() {
     let root = TempRoot::new("pex-export-filtered");
+    let source_root = root.path().join("source");
     write_pex_fixture_with_literals(
-        &root.path().join("Data/Scripts/Example.pex"),
+        &source_root.join("Data/Scripts/Example.pex"),
         &["", "SomeIdentifier", "tag,tag,tag"],
     );
     let export_path = root.path().join("translations");
 
     let summary = export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&export_path),
+        source_root: utf8(&source_root),
+        workspace: utf8(&export_path),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -752,16 +732,18 @@ async fn export_omits_pex_files_with_only_filtered_sources() {
 #[tokio::test]
 async fn export_keeps_only_unfiltered_pex_sources() {
     let root = TempRoot::new("pex-export-mixed");
+    let source_root = root.path().join("source");
     write_pex_fixture_with_literals(
-        &root.path().join("Data/Scripts/Example.pex"),
+        &source_root.join("Data/Scripts/Example.pex"),
         &["SomeIdentifier", "Open Door", "tag,tag,tag", "Hello world"],
     );
     let export_path = root.path().join("translations");
 
     let summary = export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&export_path),
+        source_root: utf8(&source_root),
+        workspace: utf8(&export_path),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -778,13 +760,15 @@ async fn export_keeps_only_unfiltered_pex_sources() {
 #[tokio::test]
 async fn import_updates_pex_literals_into_override_script() {
     let root = TempRoot::new("pex-import");
-    let source = root.path().join("Data/Scripts/Example.pex");
+    let source_root = root.path().join("source");
+    let source = source_root.join("Data/Scripts/Example.pex");
     write_pex_fixture(&source);
     let export_path = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
-        root: utf8(root.path()),
-        out: utf8(&export_path),
+        source_root: utf8(&source_root),
+        workspace: utf8(&export_path),
         settings: settings(),
+        force: false,
     })
     .await
     .unwrap();
@@ -818,11 +802,9 @@ async fn import_updates_pex_literals_into_override_script() {
     let override_root = TempRoot::new("pex-import-override");
 
     let summary = import_translations(ImportTranslationsOptions {
-        root: utf8(root.path()),
-        translations: utf8(&export_path),
-        target: WriteTarget::OverrideDirectory {
-            root: utf8(override_root.path()),
-        },
+        workspace: utf8(&export_path),
+        source_root: None,
+        output: utf8(override_root.path()),
     })
     .await
     .unwrap();

@@ -1,6 +1,6 @@
 ---
 name: stringer-workflows
-description: Use when agent needs to operate Stringer CLI or MCP server for Bethesda mod localization, including opening translation workspaces, translating claimed batches, splitting work across agents, using terminology or translation memory, editing project terminology, reviewing diagnostics, validating workspaces, finalizing overrides, or mapping Stringer CLI commands to MCP tools.
+description: Use when agent needs to operate Stringer CLI or MCP server for Bethesda mod localization, including opening translation workspaces, translating claimed batches, splitting work across agents, using terminology or translation memory, editing workspace terminology, reviewing diagnostics, validating workspaces, finalizing outputs, or mapping Stringer CLI commands to MCP tools.
 ---
 
 # Stringer Workflows
@@ -10,18 +10,18 @@ description: Use when agent needs to operate Stringer CLI or MCP server for Beth
 - Prefer Stringer inspect, batch, and MCP tools. Use inspect tools for read-only review, batch tools for edits, and direct JSONL editing only as a fallback.
 - Preserve `id`, `source`, `context`, `hints`, and `diagnostics`. Write translations through `translation` only.
 - Use `knowledge lookup` for uncertain names, terminology, repeated phrases, or diagnostic review.
-- Use `knowledge term upsert/delete` or MCP `knowledge_term_upsert/delete` for project terminology edits; do not hand-edit term TOML unless the command/tool is unavailable.
+- Use `knowledge term upsert/delete` or MCP `knowledge_term_upsert/delete` for workspace terminology edits; do not hand-edit term TOML unless the command/tool is unavailable.
 - Run `knowledge validate` before `workspace finalize`.
 - Treat diagnostics as review inputs. Resolve real risks; do not delete diagnostics manually.
 
 ## Default Workflow
 
 1. Open or receive a workspace.
-2. Annotate it with project knowledge.
+2. Annotate it with global and workspace knowledge.
 3. Inspect files, remaining work, and diagnostics without reading raw JSONL.
 4. Claim a batch, translate with evidence from hints and lookup, then apply the batch.
 5. Validate the workspace and review diagnostics.
-6. Finalize to an override directory only after validation.
+6. Finalize to an output directory only after validation.
 
 Use explicit game, asset language, and locale settings whenever a command accepts them:
 

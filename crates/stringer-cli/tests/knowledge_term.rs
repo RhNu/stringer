@@ -13,8 +13,8 @@ fn knowledge_term_upsert_command_parses_core_flags() {
         "knowledge",
         "term",
         "upsert",
-        "--project-root",
-        "project",
+        "--workspace",
+        "workspace",
         "--file",
         "knowledge/terms/weapons.toml",
         "--id",
@@ -33,7 +33,7 @@ fn knowledge_term_upsert_command_parses_core_flags() {
         "--tag",
         "weapon",
         "--note",
-        "Project wording",
+        "Workspace wording",
         "--rebuild-index",
         "--json",
     ]);
@@ -48,7 +48,7 @@ fn knowledge_term_upsert_command_parses_core_flags() {
         panic!("expected knowledge term upsert command");
     };
 
-    assert_eq!(command.project_root.as_deref(), Some("project".into()));
+    assert_eq!(command.workspace.as_str(), "workspace");
     assert_eq!(
         command.file.as_deref(),
         Some("knowledge/terms/weapons.toml".into())
@@ -64,7 +64,7 @@ fn knowledge_term_upsert_command_parses_core_flags() {
         Some(r#"{"game":["SkyrimSe"],"kind":["plugin"]}"#)
     );
     assert_eq!(command.tags, ["weapon"]);
-    assert_eq!(command.note.as_deref(), Some("Project wording"));
+    assert_eq!(command.note.as_deref(), Some("Workspace wording"));
     assert!(command.rebuild_index);
     assert!(command.json);
 }
@@ -76,8 +76,8 @@ fn knowledge_term_delete_command_parses_core_flags() {
         "knowledge",
         "term",
         "delete",
-        "--project-root",
-        "project",
+        "--workspace",
+        "workspace",
         "--id",
         "term:iron_sword",
         "--rebuild-index",
@@ -94,7 +94,7 @@ fn knowledge_term_delete_command_parses_core_flags() {
         panic!("expected knowledge term delete command");
     };
 
-    assert_eq!(command.project_root.as_deref(), Some("project".into()));
+    assert_eq!(command.workspace.as_str(), "workspace");
     assert_eq!(command.file, None);
     assert_eq!(command.id, "term:iron_sword");
     assert!(command.rebuild_index);
@@ -103,15 +103,20 @@ fn knowledge_term_delete_command_parses_core_flags() {
 
 #[test]
 fn knowledge_term_upsert_and_delete_integrate_with_lookup() {
-    let project = TempRoot::new("cli-knowledge-term");
+    let workspace = TempRoot::new("cli-knowledge-term");
+    fs::write(
+        workspace.path.join("workspace.json"),
+        r#"{"schema_version":4,"kind":"stringer.workspace","source_root":"C:/source","game_release":"SkyrimSe","asset_language":"English","source_locale":"en","target_locale":"zh-Hans","files":[]}"#,
+    )
+    .unwrap();
 
-    let upsert = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let upsert = stringer_command()
         .args([
             "knowledge",
             "term",
             "upsert",
-            "--project-root",
-            project.path.to_str().unwrap(),
+            "--workspace",
+            workspace.path.to_str().unwrap(),
             "--id",
             "term:iron_sword",
             "--source",
@@ -130,19 +135,19 @@ fn knowledge_term_upsert_and_delete_integrate_with_lookup() {
     assert_eq!(upsert_json["ids"][0], "term:iron_sword");
     assert_eq!(upsert_json["count"], 1);
 
-    let lookup = lookup_iron_sword(&project);
+    let lookup = lookup_iron_sword(&workspace);
     assert!(lookup.status.success(), "{}", stderr(&lookup));
     let lookup_json: Value = serde_json::from_slice(&lookup.stdout).unwrap();
     assert_eq!(lookup_json["total_matches"], 1);
     assert_eq!(lookup_json["results"][0]["target"], "熟铁剑");
 
-    let delete = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let delete = stringer_command()
         .args([
             "knowledge",
             "term",
             "delete",
-            "--project-root",
-            project.path.to_str().unwrap(),
+            "--workspace",
+            workspace.path.to_str().unwrap(),
             "--id",
             "term:iron_sword",
             "--json",
@@ -153,35 +158,42 @@ fn knowledge_term_upsert_and_delete_integrate_with_lookup() {
     let delete_json: Value = serde_json::from_slice(&delete.stdout).unwrap();
     assert_eq!(delete_json["action"], "deleted");
 
-    let lookup = lookup_iron_sword(&project);
+    let lookup = lookup_iron_sword(&workspace);
     assert!(lookup.status.success(), "{}", stderr(&lookup));
     let lookup_json: Value = serde_json::from_slice(&lookup.stdout).unwrap();
     assert_eq!(lookup_json["total_matches"], 0);
 }
 
-fn lookup_iron_sword(project: &TempRoot) -> std::process::Output {
-    ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+fn lookup_iron_sword(workspace: &TempRoot) -> std::process::Output {
+    stringer_command()
         .args([
             "knowledge",
             "lookup",
-            "--project-root",
-            project.path.to_str().unwrap(),
+            "--workspace",
+            workspace.path.to_str().unwrap(),
             "--text",
             "Iron Sword",
             "--source",
             "terms",
-            "--game-release",
-            "SkyrimSe",
-            "--asset-language",
-            "English",
-            "--source-locale",
-            "en",
-            "--target-locale",
-            "zh-Hans",
             "--json",
         ])
         .output()
         .unwrap()
+}
+
+fn stringer_command() -> ProcessCommand {
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"));
+    command.env("STRINGER_CONFIG", isolated_config_path());
+    command
+}
+
+fn isolated_config_path() -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join(format!(
+            "stringer_cli_isolated_config_{}",
+            std::process::id()
+        ))
+        .join("config.toml")
 }
 
 fn stderr(output: &std::process::Output) -> String {

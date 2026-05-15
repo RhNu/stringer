@@ -8,9 +8,9 @@ use stringer_app::{
     AdaptFormatInput, AdaptImportRequest, AppError, KnowledgeAnnotateRequest,
     KnowledgeIndexRebuildRequest, KnowledgeLookupFieldInput, KnowledgeLookupRequest,
     KnowledgeLookupSourceInput, KnowledgeTermDeleteRequest, KnowledgeTermInput,
-    KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, KnowledgeValidateRequest, SettingsInput,
-    adapt_import, knowledge_annotate, knowledge_index_rebuild, knowledge_lookup,
-    knowledge_term_delete, knowledge_term_upsert, knowledge_validate, parse_knowledge_kind,
+    KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, KnowledgeValidateRequest, adapt_import,
+    knowledge_annotate, knowledge_index_rebuild, knowledge_lookup, knowledge_term_delete,
+    knowledge_term_upsert, knowledge_validate, parse_knowledge_kind,
 };
 use thiserror::Error;
 
@@ -174,7 +174,7 @@ pub enum KnowledgeCommand {
         command: KnowledgeIndexCommand,
     },
     #[command(
-        about = "Create, update, or delete project terminology",
+        about = "Create, update, or delete workspace terminology",
         arg_required_else_help = true
     )]
     Term {
@@ -213,16 +213,10 @@ pub enum KnowledgeTermStatusArg {
 pub struct KnowledgeAnnotateCommand {
     #[arg(
         long,
-        value_name = "PROJECT_ROOT",
-        help = "Project root directory",
-        long_help = "Project root for knowledge/ and .stringer/indexes; defaults to the current directory."
-    )]
-    pub project_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Translation workspace directory",
-        long_help = "Translation workspace directory to annotate."
+        long_help = "Translation workspace directory to annotate; defaults to the current directory."
     )]
     pub workspace: Utf8PathBuf,
     #[arg(
@@ -237,16 +231,10 @@ pub struct KnowledgeAnnotateCommand {
 pub struct KnowledgeValidateCommand {
     #[arg(
         long,
-        value_name = "PROJECT_ROOT",
-        help = "Project root directory",
-        long_help = "Project root for knowledge/ and .stringer/indexes; defaults to the current directory."
-    )]
-    pub project_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
+        default_value = ".",
         value_name = "WORKSPACE",
         help = "Translation workspace directory",
-        long_help = "Translation workspace directory to validate."
+        long_help = "Translation workspace directory to validate; defaults to the current directory."
     )]
     pub workspace: Utf8PathBuf,
 }
@@ -255,11 +243,12 @@ pub struct KnowledgeValidateCommand {
 pub struct KnowledgeLookupCommand {
     #[arg(
         long,
-        value_name = "PROJECT_ROOT",
-        help = "Project root directory",
-        long_help = "Project root for knowledge lookup; defaults to the current directory."
+        default_value = ".",
+        value_name = "WORKSPACE",
+        help = "Translation workspace directory",
+        long_help = "Translation workspace directory for knowledge lookup; defaults to the current directory."
     )]
-    pub project_root: Option<Utf8PathBuf>,
+    pub workspace: Utf8PathBuf,
     #[arg(
         long,
         value_name = "TEXT",
@@ -289,34 +278,6 @@ pub struct KnowledgeLookupCommand {
         long_help = "Plugin subrecord, for example FULL or DESC."
     )]
     pub subrecord: Option<String>,
-    #[arg(
-        long,
-        value_name = "GAME",
-        help = "Game release, for example SkyrimSe",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub game_release: Option<String>,
-    #[arg(
-        long,
-        value_name = "LANGUAGE",
-        help = "Bethesda asset language, for example English",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub asset_language: Option<String>,
-    #[arg(
-        long,
-        value_name = "LOCALE",
-        help = "Source locale, for example en",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub source_locale: Option<String>,
-    #[arg(
-        long,
-        value_name = "LOCALE",
-        help = "Target locale, for example zh-Hans",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub target_locale: Option<String>,
     #[arg(
         long,
         help = "Treat --text as a regex pattern instead of a contains query",
@@ -362,45 +323,18 @@ pub struct KnowledgeLookupCommand {
 pub struct KnowledgeIndexRebuildCommand {
     #[arg(
         long,
-        value_name = "PROJECT_ROOT",
-        help = "Project root directory",
-        long_help = "Project root for the derived knowledge index; defaults to the current directory."
+        default_value = ".",
+        value_name = "WORKSPACE",
+        help = "Translation workspace directory",
+        long_help = "Translation workspace directory for the derived knowledge index; defaults to the current directory."
     )]
-    pub project_root: Option<Utf8PathBuf>,
-    #[arg(
-        long,
-        value_name = "GAME",
-        help = "Game release, for example SkyrimSe",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub game_release: Option<String>,
-    #[arg(
-        long,
-        value_name = "LANGUAGE",
-        help = "Bethesda asset language, for example English",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub asset_language: Option<String>,
-    #[arg(
-        long,
-        value_name = "LOCALE",
-        help = "Source locale, for example en",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub source_locale: Option<String>,
-    #[arg(
-        long,
-        value_name = "LOCALE",
-        help = "Target locale, for example zh-Hans",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub target_locale: Option<String>,
+    pub workspace: Utf8PathBuf,
 }
 
 #[derive(Debug, Parser)]
 pub struct KnowledgeTermUpsertCommand {
-    #[arg(long, value_name = "PROJECT_ROOT")]
-    pub project_root: Option<Utf8PathBuf>,
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "TERMS_TOML")]
     pub file: Option<Utf8PathBuf>,
     #[arg(long, value_name = "ID")]
@@ -423,36 +357,20 @@ pub struct KnowledgeTermUpsertCommand {
     pub note: Option<String>,
     #[arg(long)]
     pub rebuild_index: bool,
-    #[arg(long, value_name = "GAME", long_help = SETTINGS_LONG_HELP)]
-    pub game_release: Option<String>,
-    #[arg(long, value_name = "LANGUAGE", long_help = SETTINGS_LONG_HELP)]
-    pub asset_language: Option<String>,
-    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
-    pub source_locale: Option<String>,
-    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
-    pub target_locale: Option<String>,
     #[arg(long)]
     pub json: bool,
 }
 
 #[derive(Debug, Parser)]
 pub struct KnowledgeTermDeleteCommand {
-    #[arg(long, value_name = "PROJECT_ROOT")]
-    pub project_root: Option<Utf8PathBuf>,
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "TERMS_TOML")]
     pub file: Option<Utf8PathBuf>,
     #[arg(long, value_name = "ID")]
     pub id: String,
     #[arg(long)]
     pub rebuild_index: bool,
-    #[arg(long, value_name = "GAME", long_help = SETTINGS_LONG_HELP)]
-    pub game_release: Option<String>,
-    #[arg(long, value_name = "LANGUAGE", long_help = SETTINGS_LONG_HELP)]
-    pub asset_language: Option<String>,
-    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
-    pub source_locale: Option<String>,
-    #[arg(long, value_name = "LOCALE", long_help = SETTINGS_LONG_HELP)]
-    pub target_locale: Option<String>,
     #[arg(long)]
     pub json: bool,
 }
@@ -518,8 +436,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
     match command {
         KnowledgeCommand::Annotate(command) => {
             let summary = knowledge_annotate(KnowledgeAnnotateRequest {
-                project_root: command.project_root.map(|path| path.to_string()),
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
                 skip_fill_memory: command.skip_fill_memory,
             })?;
             println!(
@@ -530,8 +447,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
         }
         KnowledgeCommand::Validate(command) => {
             let summary = knowledge_validate(KnowledgeValidateRequest {
-                project_root: command.project_root.map(|path| path.to_string()),
-                workspace: command.workspace.to_string(),
+                workspace: Some(command.workspace.to_string()),
             })?;
             println!(
                 "validated {} entries and wrote {} diagnostics",
@@ -541,17 +457,11 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
         }
         KnowledgeCommand::Lookup(command) => {
             let lookup = knowledge_lookup(KnowledgeLookupRequest {
-                project_root: command.project_root.map(|path| path.to_string()),
+                workspace: Some(command.workspace.to_string()),
                 text: command.text,
                 kind: parse_knowledge_kind(&command.kind)?,
                 record_type: command.record_type,
                 subrecord: command.subrecord,
-                settings: settings_input(
-                    command.game_release,
-                    command.asset_language,
-                    command.source_locale,
-                    command.target_locale,
-                ),
                 regex: command.regex,
                 limit: command.limit,
                 case_sensitive: command.case_sensitive,
@@ -608,13 +518,7 @@ async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliEr
     match command {
         KnowledgeIndexCommand::Rebuild(command) => {
             let summary = knowledge_index_rebuild(KnowledgeIndexRebuildRequest {
-                project_root: command.project_root.map(|path| path.to_string()),
-                settings: settings_input(
-                    command.game_release,
-                    command.asset_language,
-                    command.source_locale,
-                    command.target_locale,
-                ),
+                workspace: Some(command.workspace.to_string()),
             })?;
             println!(
                 "indexed {} files, {} terms, {} memory entries, {} rules, {} diagnostics",
@@ -629,7 +533,7 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
     match command {
         KnowledgeTermCommand::Upsert(command) => {
             let response = knowledge_term_upsert(KnowledgeTermUpsertRequest {
-                project_root: command.project_root.map(|path| path.to_string()),
+                workspace: Some(command.workspace.to_string()),
                 file: command.file.map(|path| path.to_string()),
                 terms: vec![KnowledgeTermInput {
                     id: command.id,
@@ -643,12 +547,6 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
                     note: command.note,
                 }],
                 rebuild_index: command.rebuild_index,
-                settings: settings_input(
-                    command.game_release,
-                    command.asset_language,
-                    command.source_locale,
-                    command.target_locale,
-                ),
             })?;
             if command.json {
                 print_json(&response)?;
@@ -659,16 +557,10 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
         }
         KnowledgeTermCommand::Delete(command) => {
             let response = knowledge_term_delete(KnowledgeTermDeleteRequest {
-                project_root: command.project_root.map(|path| path.to_string()),
+                workspace: Some(command.workspace.to_string()),
                 file: command.file.map(|path| path.to_string()),
                 id: command.id,
                 rebuild_index: command.rebuild_index,
-                settings: settings_input(
-                    command.game_release,
-                    command.asset_language,
-                    command.source_locale,
-                    command.target_locale,
-                ),
             })?;
             if command.json {
                 print_json(&response)?;
@@ -728,20 +620,6 @@ fn parse_scope_json(text: Option<String>) -> Result<BTreeMap<String, Vec<String>
             source,
         }),
         None => Ok(BTreeMap::new()),
-    }
-}
-
-fn settings_input(
-    game_release: Option<String>,
-    asset_language: Option<String>,
-    source_locale: Option<String>,
-    target_locale: Option<String>,
-) -> SettingsInput {
-    SettingsInput {
-        game_release,
-        asset_language,
-        source_locale,
-        target_locale,
     }
 }
 

@@ -7,6 +7,8 @@ use stringer_plugin::GameRelease;
 
 use crate::WorkspaceError;
 
+const CONFIG_ENV: &str = "STRINGER_CONFIG";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceSettings {
     pub game_release: GameRelease,
@@ -27,7 +29,7 @@ pub struct WorkspaceSettingsOverrides {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LoadWorkspaceSettingsOptions {
     pub user_config_path: Option<Utf8PathBuf>,
-    pub project_config_path: Option<Utf8PathBuf>,
+    pub workspace_config_path: Option<Utf8PathBuf>,
     pub overrides: WorkspaceSettingsOverrides,
 }
 
@@ -40,7 +42,7 @@ struct ConfigFile {
 }
 
 #[derive(Debug, Deserialize, Default)]
-struct ProjectConfigFile {
+struct WorkspaceConfigFile {
     game_release: Option<String>,
     asset_language: Option<String>,
     source_locale: Option<String>,
@@ -56,14 +58,14 @@ pub fn load_workspace_settings(
     options: LoadWorkspaceSettingsOptions,
 ) -> Result<WorkspaceSettings, WorkspaceError> {
     let user = load_user_config_file(options.user_config_path)?;
-    let project_config = load_project_config_file(options.project_config_path)?;
+    let workspace_config = load_workspace_config_file(options.workspace_config_path)?;
     let user_config = user.config;
     let user_game_release = user_config
         .game_release
         .as_deref()
         .map(parse_game_release_name)
         .transpose()?;
-    let project_game_release = project_config
+    let workspace_game_release = workspace_config
         .game_release
         .as_deref()
         .map(parse_game_release_name)
@@ -73,7 +75,7 @@ pub fn load_workspace_settings(
         .as_deref()
         .map(parse_language_name)
         .transpose()?;
-    let project_asset_language = project_config
+    let workspace_asset_language = workspace_config
         .asset_language
         .as_deref()
         .map(parse_language_name)
@@ -83,7 +85,7 @@ pub fn load_workspace_settings(
         game_release: options
             .overrides
             .game_release
-            .or(project_game_release)
+            .or(workspace_game_release)
             .or(user_game_release)
             .ok_or(WorkspaceError::MissingSetting {
                 name: "game_release",
@@ -91,20 +93,20 @@ pub fn load_workspace_settings(
         asset_language: options
             .overrides
             .asset_language
-            .or(project_asset_language)
+            .or(workspace_asset_language)
             .or(user_asset_language)
             .ok_or(WorkspaceError::MissingSetting {
                 name: "asset_language",
             })?,
         source_locale: take_setting(
             options.overrides.source_locale,
-            project_config.source_locale,
+            workspace_config.source_locale,
             user_config.source_locale,
             "source_locale",
         )?,
         target_locale: take_setting(
             options.overrides.target_locale,
-            project_config.target_locale,
+            workspace_config.target_locale,
             user_config.target_locale,
             "target_locale",
         )?,
@@ -140,11 +142,11 @@ fn load_user_config_file(path: Option<Utf8PathBuf>) -> Result<LoadedConfigFile, 
     })
 }
 
-fn load_project_config_file(
+fn load_workspace_config_file(
     path: Option<Utf8PathBuf>,
-) -> Result<ProjectConfigFile, WorkspaceError> {
+) -> Result<WorkspaceConfigFile, WorkspaceError> {
     let Some(path) = path else {
-        return Ok(ProjectConfigFile::default());
+        return Ok(WorkspaceConfigFile::default());
     };
     let text = fs::read_to_string(&path).map_err(|source| WorkspaceError::ReadFile {
         path: path.clone(),
@@ -158,7 +160,7 @@ fn load_project_config_file(
 }
 
 pub fn default_config_path() -> Option<Utf8PathBuf> {
-    platform_default_config_path()
+    env_config_path().or_else(platform_default_config_path)
 }
 
 pub fn load_global_knowledge_root(
@@ -173,6 +175,15 @@ pub fn load_global_knowledge_root(
     }
     let loaded = load_user_config_file(Some(path))?;
     Ok(user_knowledge_root(loaded.path.as_ref()))
+}
+
+fn env_config_path() -> Option<Utf8PathBuf> {
+    let raw = std::env::var_os(CONFIG_ENV)?;
+    let path = std::path::PathBuf::from(raw);
+    if path.as_os_str().is_empty() {
+        return None;
+    }
+    Utf8PathBuf::from_path_buf(path).ok()
 }
 
 #[cfg(windows)]
@@ -193,12 +204,12 @@ fn platform_default_config_path() -> Option<Utf8PathBuf> {
 
 fn take_setting(
     override_value: Option<String>,
-    project_value: Option<String>,
+    workspace_value: Option<String>,
     user_value: Option<String>,
     name: &'static str,
 ) -> Result<String, WorkspaceError> {
     let value = override_value
-        .or(project_value)
+        .or(workspace_value)
         .or(user_value)
         .ok_or(WorkspaceError::MissingSetting { name })?;
     if value.trim().is_empty() {

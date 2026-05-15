@@ -10,15 +10,14 @@ use stringer_cli::{
 };
 
 #[test]
-fn workspace_open_command_uses_root_workspace_and_settings() {
+fn workspace_open_command_uses_source_root_default_workspace_force_and_settings() {
     let cli = Cli::parse_from([
         "stringer",
         "workspace",
         "open",
-        "--root",
+        "--source-root",
         "input",
-        "--workspace",
-        "translations",
+        "--force",
         "--game-release",
         "SkyrimSe",
         "--asset-language",
@@ -35,8 +34,9 @@ fn workspace_open_command_uses_root_workspace_and_settings() {
     let WorkspaceCommand::Open(command) = command else {
         panic!("expected workspace open command");
     };
-    assert_eq!(command.root.as_str(), "input");
-    assert_eq!(command.workspace.as_str(), "translations");
+    assert_eq!(command.source_root.as_str(), "input");
+    assert_eq!(command.workspace.as_str(), ".");
+    assert!(command.force);
     assert_eq!(command.game_release.as_deref(), Some("SkyrimSe"));
     assert_eq!(command.asset_language.as_deref(), Some("English"));
     assert_eq!(command.source_locale.as_deref(), Some("en"));
@@ -44,16 +44,14 @@ fn workspace_open_command_uses_root_workspace_and_settings() {
 }
 
 #[test]
-fn workspace_finalize_command_uses_root_workspace_and_override_root_paths() {
+fn workspace_finalize_command_defaults_workspace_source_override_and_output() {
     let cli = Cli::parse_from([
         "stringer",
         "workspace",
         "finalize",
-        "--root",
+        "--source-root",
         "input",
-        "--workspace",
-        "translations",
-        "--override-root",
+        "--output",
         "override",
     ]);
 
@@ -63,9 +61,24 @@ fn workspace_finalize_command_uses_root_workspace_and_override_root_paths() {
     let WorkspaceCommand::Finalize(command) = command else {
         panic!("expected workspace finalize command");
     };
-    assert_eq!(command.root.as_str(), "input");
-    assert_eq!(command.workspace.as_str(), "translations");
-    assert_eq!(command.override_root.as_str(), "override");
+    assert_eq!(command.workspace.as_str(), ".");
+    assert_eq!(command.source_root.as_deref(), Some("input".into()));
+    assert_eq!(command.output.as_deref(), Some("override".into()));
+}
+
+#[test]
+fn workspace_commands_reject_removed_path_flags() {
+    assert!(Cli::try_parse_from(["stringer", "workspace", "open", "--root", "input"]).is_err());
+    assert!(
+        Cli::try_parse_from([
+            "stringer",
+            "workspace",
+            "finalize",
+            "--override-root",
+            "out"
+        ])
+        .is_err()
+    );
 }
 
 #[test]
@@ -99,16 +112,7 @@ fn workspace_batch_commands_parse_workspace_file_limit_input_and_batch_id() {
     );
     assert_eq!(command.limit, 25);
 
-    let cli = Cli::parse_from([
-        "stringer",
-        "workspace",
-        "batch",
-        "apply",
-        "--workspace",
-        "translations",
-        "--input",
-        "-",
-    ]);
+    let cli = Cli::parse_from(["stringer", "workspace", "batch", "apply", "--input", "-"]);
     let Command::Workspace { command } = cli.command else {
         panic!("expected workspace command");
     };
@@ -118,6 +122,7 @@ fn workspace_batch_commands_parse_workspace_file_limit_input_and_batch_id() {
     let WorkspaceBatchCommand::Apply(command) = command else {
         panic!("expected workspace batch apply command");
     };
+    assert_eq!(command.workspace.as_str(), ".");
     assert_eq!(command.input.as_str(), "-");
 
     let cli = Cli::parse_from([
@@ -301,14 +306,15 @@ fn workspace_batch_claim_emits_json_and_apply_reads_stdin() {
     fs::create_dir_all(asset.parent().unwrap()).unwrap();
     fs::write(&asset, "$Title\tIron Sword\n").unwrap();
 
-    let open = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let open = stringer_command()
         .args([
             "workspace",
             "open",
-            "--root",
+            "--source-root",
             root.as_str(),
             "--workspace",
             translations.as_str(),
+            "--force",
             "--game-release",
             "SkyrimSe",
             "--asset-language",
@@ -322,7 +328,7 @@ fn workspace_batch_claim_emits_json_and_apply_reads_stdin() {
         .unwrap();
     assert!(open.status.success());
 
-    let claim = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let claim = stringer_command()
         .args([
             "workspace",
             "batch",
@@ -346,7 +352,7 @@ fn workspace_batch_claim_emits_json_and_apply_reads_stdin() {
         ]
     })
     .to_string();
-    let mut apply = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let mut apply = stringer_command()
         .args([
             "workspace",
             "batch",
@@ -384,17 +390,8 @@ fn workspace_batch_claim_emits_json_and_apply_reads_stdin() {
 }
 
 #[test]
-fn knowledge_annotate_command_uses_project_root_workspace_and_skip_fill_flag() {
-    let cli = Cli::parse_from([
-        "stringer",
-        "knowledge",
-        "annotate",
-        "--project-root",
-        "input",
-        "--workspace",
-        "translations",
-        "--skip-fill-memory",
-    ]);
+fn knowledge_annotate_command_defaults_workspace_and_uses_skip_fill_flag() {
+    let cli = Cli::parse_from(["stringer", "knowledge", "annotate", "--skip-fill-memory"]);
 
     let Command::Knowledge { command } = cli.command else {
         panic!("expected knowledge command");
@@ -402,50 +399,33 @@ fn knowledge_annotate_command_uses_project_root_workspace_and_skip_fill_flag() {
     let KnowledgeCommand::Annotate(command) = command else {
         panic!("expected knowledge annotate command");
     };
-    assert_eq!(command.project_root.as_deref(), Some("input".into()));
-    assert_eq!(command.workspace.as_str(), "translations");
+    assert_eq!(command.workspace.as_str(), ".");
     assert!(command.skip_fill_memory);
 }
 
 #[test]
-fn knowledge_annotate_accepts_project_root_and_workspace() {
+fn knowledge_commands_reject_project_root() {
     let result = Cli::try_parse_from([
         "stringer",
         "knowledge",
         "annotate",
         "--project-root",
         "input",
-        "--workspace",
-        "translations",
-        "--skip-fill-memory",
-    ]);
-
-    assert!(result.is_ok());
-}
-
-#[test]
-fn knowledge_annotate_rejects_removed_auto_fill_memory_flag() {
-    let result = Cli::try_parse_from([
-        "stringer",
-        "knowledge",
-        "annotate",
-        "--workspace",
-        "translations",
-        "--auto-fill-memory",
     ]);
 
     assert!(result.is_err());
 }
 
 #[test]
-fn knowledge_annotate_accepts_current_directory_project_root_default() {
-    let result = Cli::try_parse_from([
-        "stringer",
-        "knowledge",
-        "annotate",
-        "--workspace",
-        "translations",
-    ]);
+fn knowledge_annotate_rejects_removed_auto_fill_memory_flag() {
+    let result = Cli::try_parse_from(["stringer", "knowledge", "annotate", "--auto-fill-memory"]);
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn knowledge_annotate_accepts_current_directory_workspace_default() {
+    let result = Cli::try_parse_from(["stringer", "knowledge", "annotate"]);
 
     assert!(result.is_ok());
 }
@@ -480,16 +460,8 @@ fn knowledge_annotate_rejects_old_root_and_translations_flags() {
 }
 
 #[test]
-fn knowledge_validate_command_uses_project_root_and_workspace() {
-    let cli = Cli::parse_from([
-        "stringer",
-        "knowledge",
-        "validate",
-        "--project-root",
-        "input",
-        "--workspace",
-        "translations",
-    ]);
+fn knowledge_validate_command_defaults_workspace() {
+    let cli = Cli::parse_from(["stringer", "knowledge", "validate"]);
 
     let Command::Knowledge { command } = cli.command else {
         panic!("expected knowledge command");
@@ -497,8 +469,7 @@ fn knowledge_validate_command_uses_project_root_and_workspace() {
     let KnowledgeCommand::Validate(command) = command else {
         panic!("expected knowledge validate command");
     };
-    assert_eq!(command.project_root.as_deref(), Some("input".into()));
-    assert_eq!(command.workspace.as_str(), "translations");
+    assert_eq!(command.workspace.as_str(), ".");
 }
 
 #[test]
@@ -507,8 +478,6 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
         "stringer",
         "knowledge",
         "lookup",
-        "--project-root",
-        "input",
         "--text",
         "Iron Sword",
         "--kind",
@@ -517,14 +486,6 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
         "WEAP",
         "--subrecord",
         "FULL",
-        "--game-release",
-        "SkyrimSe",
-        "--asset-language",
-        "English",
-        "--source-locale",
-        "en",
-        "--target-locale",
-        "zh-Hans",
         "--regex",
         "--limit",
         "5",
@@ -542,7 +503,7 @@ fn knowledge_lookup_command_uses_text_context_settings_and_json_flag() {
     let KnowledgeCommand::Lookup(command) = command else {
         panic!("expected knowledge lookup command");
     };
-    assert_eq!(command.project_root.as_deref(), Some("input".into()));
+    assert_eq!(command.workspace.as_str(), ".");
     assert_eq!(command.text, "Iron Sword");
     assert_eq!(command.kind, "plugin");
     assert_eq!(command.record_type.as_deref(), Some("WEAP"));
@@ -573,10 +534,15 @@ fn knowledge_lookup_command_defaults_to_agent_search_options() {
 }
 
 #[test]
-fn knowledge_lookup_uses_current_directory_as_default_project_root() {
-    let project = test_path("cli-lookup-current-project");
-    let terms = project.join("knowledge/terms/base.toml");
+fn knowledge_lookup_uses_current_directory_as_default_workspace() {
+    let workspace = test_path("cli-lookup-current-workspace");
+    let terms = workspace.join("knowledge/terms/workspace.toml");
     fs::create_dir_all(terms.parent().unwrap()).unwrap();
+    fs::write(
+        workspace.join("workspace.json"),
+        r#"{"schema_version":4,"kind":"stringer.workspace","source_root":"C:/source","game_release":"SkyrimSe","asset_language":"English","source_locale":"en","target_locale":"zh-Hans","files":[]}"#,
+    )
+    .unwrap();
     fs::write(
         &terms,
         r#"
@@ -589,23 +555,15 @@ status = "preferred"
     )
     .unwrap();
 
-    let output = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+    let output = stringer_command()
         .args([
             "knowledge",
             "lookup",
             "--text",
             "Stringer Current Root",
-            "--game-release",
-            "SkyrimSe",
-            "--asset-language",
-            "English",
-            "--source-locale",
-            "en",
-            "--target-locale",
-            "zh-Hans",
             "--json",
         ])
-        .current_dir(project)
+        .current_dir(workspace)
         .output()
         .unwrap();
 
@@ -616,23 +574,8 @@ status = "preferred"
 }
 
 #[test]
-fn knowledge_index_rebuild_command_uses_project_root_and_settings() {
-    let cli = Cli::parse_from([
-        "stringer",
-        "knowledge",
-        "index",
-        "rebuild",
-        "--project-root",
-        "input",
-        "--game-release",
-        "SkyrimSe",
-        "--asset-language",
-        "English",
-        "--source-locale",
-        "en",
-        "--target-locale",
-        "zh-Hans",
-    ]);
+fn knowledge_index_rebuild_command_defaults_workspace() {
+    let cli = Cli::parse_from(["stringer", "knowledge", "index", "rebuild"]);
 
     let Command::Knowledge { command } = cli.command else {
         panic!("expected knowledge command");
@@ -641,7 +584,7 @@ fn knowledge_index_rebuild_command_uses_project_root_and_settings() {
         panic!("expected knowledge index command");
     };
     let KnowledgeIndexCommand::Rebuild(command) = command;
-    assert_eq!(command.project_root.as_deref(), Some("input".into()));
+    assert_eq!(command.workspace.as_str(), ".");
 }
 
 #[test]
@@ -650,6 +593,7 @@ fn root_help_points_to_compact_agent_workflow() {
 
     assert!(help.contains("Typical workflow"));
     assert!(help.contains("workspace open"));
+    assert!(help.contains("--source-root"));
     assert!(help.contains("workspace finalize"));
     assert!(help.contains("workspace batch"));
     assert!(help.contains("adapt import"));
@@ -676,6 +620,7 @@ fn workspace_open_help_explains_workspace_output() {
     assert!(help.contains("workspace.json"));
     assert!(help.contains("batches"));
     assert!(help.contains("--workspace"));
+    assert!(help.contains("--source-root"));
     assert!(help.contains("--game-release"));
     assert!(help.contains("source-locale"));
 }
@@ -692,8 +637,9 @@ fn workspace_finalize_help_explains_override_output() {
         .to_string();
 
     assert!(help.contains("--workspace"));
-    assert!(help.contains("--override-root"));
-    assert!(help.contains("override directory"));
+    assert!(help.contains("--output"));
+    assert!(help.contains("output directory"));
+    assert!(!help.contains("--override-root"));
 }
 
 #[test]
@@ -739,6 +685,21 @@ fn test_path(name: &str) -> camino::Utf8PathBuf {
         std::env::temp_dir().join(format!("stringer-cli-{}-{name}", std::process::id())),
     )
     .unwrap()
+}
+
+fn stringer_command() -> ProcessCommand {
+    let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"));
+    command.env("STRINGER_CONFIG", isolated_config_path());
+    command
+}
+
+fn isolated_config_path() -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join(format!(
+            "stringer_cli_isolated_config_{}",
+            std::process::id()
+        ))
+        .join("config.toml")
 }
 
 fn eet_v1_fixture() -> Vec<u8> {

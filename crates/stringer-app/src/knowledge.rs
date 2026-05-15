@@ -4,7 +4,7 @@ use stringer_workspace::{
     KnowledgeTermStatus, KnowledgeTermsEditSummary, KnowledgeTermsUpsertOptions,
     LookupKnowledgeMode, LookupKnowledgeOptions, ValidateTranslationsOptions, WorkspaceError,
     annotate_translations, build_knowledge_index, delete_knowledge_term, lookup_knowledge,
-    upsert_knowledge_terms, validate_translations,
+    read_workspace_settings, upsert_knowledge_terms, validate_translations,
 };
 
 use crate::dto::{
@@ -15,15 +15,13 @@ use crate::dto::{
     KnowledgeTermsEditResponse, KnowledgeValidateRequest,
 };
 use crate::error::{AppError, serialize_value};
-use crate::paths::{path, project_root_or_current};
-use crate::settings::load_settings_for_project;
+use crate::paths::{initialized_workspace_or_current, path, workspace_or_current};
 
 pub fn knowledge_annotate(
     request: KnowledgeAnnotateRequest,
 ) -> Result<KnowledgeOperationResponse, AppError> {
     let summary = annotate_translations(AnnotateTranslationsOptions {
-        project_root: project_root_or_current(request.project_root)?,
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
         skip_memory_fill: request.skip_fill_memory,
     })?;
     Ok(knowledge_operation_response(summary))
@@ -33,8 +31,7 @@ pub fn knowledge_validate(
     request: KnowledgeValidateRequest,
 ) -> Result<KnowledgeOperationResponse, AppError> {
     let summary = validate_translations(ValidateTranslationsOptions {
-        project_root: project_root_or_current(request.project_root)?,
-        workspace: path(request.workspace),
+        workspace: workspace_or_current(request.workspace)?,
     })?;
     Ok(knowledge_operation_response(summary))
 }
@@ -42,10 +39,10 @@ pub fn knowledge_validate(
 pub fn knowledge_lookup(
     request: KnowledgeLookupRequest,
 ) -> Result<KnowledgeLookupResponse, AppError> {
-    let project_root = project_root_or_current(request.project_root)?;
-    let settings = load_settings_for_project(&project_root, request.settings)?;
+    let workspace = initialized_workspace_or_current(request.workspace)?;
+    let settings = read_workspace_settings(&workspace)?;
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
-        project_root,
+        workspace,
         settings,
         text: request.text,
         kind: request.kind.into(),
@@ -62,10 +59,10 @@ pub fn knowledge_lookup(
 pub fn knowledge_index_rebuild(
     request: KnowledgeIndexRebuildRequest,
 ) -> Result<KnowledgeIndexRebuildResponse, AppError> {
-    let project_root = project_root_or_current(request.project_root)?;
-    let settings = load_settings_for_project(&project_root, request.settings)?;
+    let workspace = initialized_workspace_or_current(request.workspace)?;
+    let settings = read_workspace_settings(&workspace)?;
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-        project_root,
+        workspace,
         settings,
     })?;
     Ok(KnowledgeIndexRebuildResponse {
@@ -83,13 +80,10 @@ pub fn knowledge_index_rebuild(
 pub fn knowledge_term_upsert(
     request: KnowledgeTermUpsertRequest,
 ) -> Result<KnowledgeTermsEditResponse, AppError> {
-    let project_root = project_root_or_current(request.project_root)?;
-    let settings = request
-        .rebuild_index
-        .then(|| load_settings_for_project(&project_root, request.settings))
-        .transpose()?;
+    let workspace = knowledge_term_workspace(request.workspace, request.rebuild_index)?;
+    let settings = knowledge_term_settings(&workspace, request.rebuild_index)?;
     let summary = upsert_knowledge_terms(KnowledgeTermsUpsertOptions {
-        project_root,
+        workspace,
         file: request.file.map(path),
         terms: request
             .terms
@@ -105,13 +99,10 @@ pub fn knowledge_term_upsert(
 pub fn knowledge_term_delete(
     request: KnowledgeTermDeleteRequest,
 ) -> Result<KnowledgeTermEditResponse, AppError> {
-    let project_root = project_root_or_current(request.project_root)?;
-    let settings = request
-        .rebuild_index
-        .then(|| load_settings_for_project(&project_root, request.settings))
-        .transpose()?;
+    let workspace = knowledge_term_workspace(request.workspace, request.rebuild_index)?;
+    let settings = knowledge_term_settings(&workspace, request.rebuild_index)?;
     let summary = delete_knowledge_term(KnowledgeTermDeleteOptions {
-        project_root,
+        workspace,
         file: request.file.map(path),
         id: request.id,
         rebuild_index: request.rebuild_index,
@@ -242,6 +233,26 @@ fn knowledge_lookup_response(lookup: KnowledgeLookup) -> Result<KnowledgeLookupR
             .collect::<Result<_, _>>()?,
         index_used: lookup.index_used,
     })
+}
+
+fn knowledge_term_workspace(
+    workspace: Option<String>,
+    rebuild_index: bool,
+) -> Result<camino::Utf8PathBuf, WorkspaceError> {
+    if rebuild_index {
+        initialized_workspace_or_current(workspace)
+    } else {
+        workspace_or_current(workspace)
+    }
+}
+
+fn knowledge_term_settings(
+    workspace: &camino::Utf8Path,
+    rebuild_index: bool,
+) -> Result<Option<stringer_workspace::WorkspaceSettings>, WorkspaceError> {
+    rebuild_index
+        .then(|| read_workspace_settings(workspace))
+        .transpose()
 }
 
 fn lookup_mode(regex: bool) -> LookupKnowledgeMode {

@@ -11,11 +11,11 @@ use stringer_workspace::{
 };
 
 #[test]
-fn term_upsert_creates_default_project_file_and_loads_from_knowledge_layers() {
+fn term_upsert_creates_default_workspace_file_and_loads_from_knowledge_layers() {
     let root = TempRoot::new("term-upsert-create");
 
     let summary = upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         term: iron_sword_term("熟铁剑"),
         rebuild_index: false,
@@ -25,11 +25,11 @@ fn term_upsert_creates_default_project_file_and_loads_from_knowledge_layers() {
 
     assert_eq!(summary.action, "upserted");
     assert_eq!(summary.id, "term:iron_sword");
-    assert!(summary.path.ends_with("knowledge/terms/project.toml"));
+    assert!(summary.path.ends_with("knowledge/terms/workspace.toml"));
     assert!(summary.index_summary.is_none());
 
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings(),
         prefer_index: false,
     })
@@ -49,10 +49,10 @@ fn term_upsert_creates_default_project_file_and_loads_from_knowledge_layers() {
 #[test]
 fn term_upsert_replaces_existing_term_without_removing_unrelated_terms_or_file_comments() {
     let root = TempRoot::new("term-upsert-replace");
-    let terms = root.path().join("knowledge/terms/project.toml");
+    let terms = root.path().join("knowledge/terms/workspace.toml");
     write_text(
         &terms,
-        r#"# project terminology
+        r#"# workspace terminology
 
 [[terms]]
 id = "term:keep"
@@ -79,10 +79,10 @@ kind = ["plugin"]
     term.scope
         .insert("kind".to_string(), vec!["plugin".to_string()]);
     term.tags = vec!["weapon".to_string()];
-    term.note = Some("Use the project-specific wording.".to_string());
+    term.note = Some("Use the workspace-specific wording.".to_string());
 
     upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         term,
         rebuild_index: false,
@@ -91,13 +91,13 @@ kind = ["plugin"]
     .unwrap();
 
     let text = fs::read_to_string(&terms).unwrap();
-    assert!(text.contains("# project terminology"));
+    assert!(text.contains("# workspace terminology"));
     assert!(text.contains("term:keep"));
     assert_eq!(text.matches("term:iron_sword").count(), 1);
     assert!(!text.contains("旧铁剑"));
 
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings(),
         prefer_index: false,
     })
@@ -117,13 +117,13 @@ kind = ["plugin"]
         &vec!["SkyrimSe".to_string()]
     );
     assert_eq!(term.tags(), ["weapon"]);
-    assert_eq!(term.note(), Some("Use the project-specific wording."));
+    assert_eq!(term.note(), Some("Use the workspace-specific wording."));
 }
 
 #[test]
 fn term_delete_removes_matching_term_and_reports_missing_ids() {
     let root = TempRoot::new("term-delete");
-    let terms = root.path().join("knowledge/terms/project.toml");
+    let terms = root.path().join("knowledge/terms/workspace.toml");
     write_text(
         &terms,
         r#"
@@ -140,7 +140,7 @@ target = "熟铁剑"
     );
 
     let summary = delete_knowledge_term(KnowledgeTermDeleteOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         id: "term:iron_sword".to_string(),
         rebuild_index: false,
@@ -157,7 +157,7 @@ target = "熟铁剑"
     );
 
     let error = delete_knowledge_term(KnowledgeTermDeleteOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         id: "term:missing".to_string(),
         rebuild_index: false,
@@ -174,7 +174,7 @@ target = "熟铁剑"
 #[test]
 fn term_upsert_replaces_all_duplicate_ids_with_one_managed_term() {
     let root = TempRoot::new("term-upsert-duplicate-ids");
-    let terms = root.path().join("knowledge/terms/project.toml");
+    let terms = root.path().join("knowledge/terms/workspace.toml");
     write_text(
         &terms,
         r#"
@@ -191,7 +191,7 @@ target = "重复铁剑"
     );
 
     upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         term: iron_sword_term("熟铁剑"),
         rebuild_index: false,
@@ -209,10 +209,10 @@ target = "重复铁剑"
 #[test]
 fn terms_upsert_replaces_existing_terms_and_appends_new_terms() {
     let root = TempRoot::new("terms-upsert-batch");
-    let terms = root.path().join("knowledge/terms/project.toml");
+    let terms = root.path().join("knowledge/terms/workspace.toml");
     write_text(
         &terms,
-        r#"# project terminology
+        r#"# workspace terminology
 
 [[terms]]
 id = "term:keep"
@@ -236,7 +236,7 @@ target = "旧钢剑"
     steel.source = "Steel Sword".to_string();
 
     let summary = upsert_knowledge_terms(KnowledgeTermsUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         terms: vec![iron_sword_term("熟铁剑"), steel],
         rebuild_index: false,
@@ -250,7 +250,7 @@ target = "旧钢剑"
     assert!(summary.index_summary.is_none());
 
     let text = fs::read_to_string(&terms).unwrap();
-    assert!(text.contains("# project terminology"));
+    assert!(text.contains("# workspace terminology"));
     assert!(text.contains("term:keep"));
     assert_eq!(text.matches("term:iron_sword").count(), 1);
     assert_eq!(text.matches("term:steel_sword").count(), 1);
@@ -258,7 +258,7 @@ target = "旧钢剑"
     assert!(!text.contains("旧钢剑"));
 
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings(),
         prefer_index: false,
     })
@@ -269,7 +269,7 @@ target = "旧钢剑"
 #[test]
 fn term_delete_removes_all_duplicate_ids() {
     let root = TempRoot::new("term-delete-duplicate-ids");
-    let terms = root.path().join("knowledge/terms/project.toml");
+    let terms = root.path().join("knowledge/terms/workspace.toml");
     write_text(
         &terms,
         r#"
@@ -286,7 +286,7 @@ target = "重复铁剑"
     );
 
     delete_knowledge_term(KnowledgeTermDeleteOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         id: "term:iron_sword".to_string(),
         rebuild_index: false,
@@ -309,7 +309,7 @@ fn term_upsert_rejects_unsupported_scope_keys() {
         .insert("subrecord".to_string(), vec!["FULL".to_string()]);
 
     let error = upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         term,
         rebuild_index: false,
@@ -324,11 +324,11 @@ fn term_upsert_rejects_unsupported_scope_keys() {
 }
 
 #[test]
-fn term_upsert_rejects_file_overrides_outside_project_terms_root() {
+fn term_upsert_rejects_file_overrides_outside_workspace_terms_root() {
     let root = TempRoot::new("term-upsert-outside-terms-root");
 
     let error = upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: Some(Utf8PathBuf::from("weapons.toml")),
         term: iron_sword_term("熟铁剑"),
         rebuild_index: false,
@@ -343,12 +343,14 @@ fn term_upsert_rejects_file_overrides_outside_project_terms_root() {
 }
 
 #[test]
-fn term_upsert_rejects_file_overrides_that_traverse_outside_project_terms_root() {
+fn term_upsert_rejects_file_overrides_that_traverse_outside_workspace_terms_root() {
     let root = TempRoot::new("term-upsert-traversal");
 
     let error = upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
-        file: Some(Utf8PathBuf::from("knowledge/terms/../memory/project.toml")),
+        workspace: utf8(root.path()),
+        file: Some(Utf8PathBuf::from(
+            "knowledge/terms/../memory/workspace.toml",
+        )),
         term: iron_sword_term("熟铁剑"),
         rebuild_index: false,
         settings: Some(settings()),
@@ -366,7 +368,7 @@ fn term_upsert_rejects_file_overrides_without_toml_extension() {
     let root = TempRoot::new("term-upsert-non-toml");
 
     let error = upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: Some(Utf8PathBuf::from("knowledge/terms/weapons.txt")),
         term: iron_sword_term("熟铁剑"),
         rebuild_index: false,
@@ -385,7 +387,7 @@ fn term_upsert_rejects_terms_root_as_file_override() {
     let root = TempRoot::new("term-upsert-terms-root");
 
     let error = upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: Some(Utf8PathBuf::from("knowledge/terms")),
         term: iron_sword_term("熟铁剑"),
         rebuild_index: false,
@@ -404,7 +406,7 @@ fn term_upsert_can_rebuild_knowledge_index() {
     let root = TempRoot::new("term-upsert-rebuild-index");
 
     let summary = upsert_knowledge_term(KnowledgeTermUpsertOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         file: None,
         term: iron_sword_term("熟铁剑"),
         rebuild_index: true,
@@ -413,14 +415,10 @@ fn term_upsert_can_rebuild_knowledge_index() {
     .unwrap();
 
     assert_eq!(summary.index_summary.unwrap().terms, 1);
-    assert!(
-        root.path()
-            .join(".stringer/indexes/knowledge.sqlite")
-            .exists()
-    );
+    assert!(root.path().join("knowledge/index.sqlite").exists());
 
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
-        project_root: utf8(root.path()),
+        workspace: utf8(root.path()),
         settings: settings(),
         prefer_index: true,
     })
@@ -450,7 +448,7 @@ fn settings() -> WorkspaceSettings {
         asset_language: parse_language_name("English").unwrap(),
         source_locale: "en".to_string(),
         target_locale: "zh-Hans".to_string(),
-        global_knowledge_root: None,
+        global_knowledge_root: Some(Utf8PathBuf::from("__stringer_test_no_global_knowledge__")),
     }
 }
 

@@ -5,12 +5,9 @@ use stringer_core::{FileAsset, FileBundle};
 
 use crate::WorkspaceError;
 
-pub fn write_override_assets(
-    root: &Utf8Path,
-    assets: &[FileAsset],
-) -> Result<usize, WorkspaceError> {
+pub fn write_output_assets(root: &Utf8Path, assets: &[FileAsset]) -> Result<usize, WorkspaceError> {
     for asset in assets {
-        let target = override_output_path(root, asset.path())?;
+        let target = output_path(root, asset.path())?;
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|source| WorkspaceError::WriteFile {
                 path: parent.to_owned(),
@@ -25,16 +22,31 @@ pub fn write_override_assets(
     Ok(assets.len())
 }
 
-pub fn ensure_override_root_outside_source(
+pub fn ensure_output_outside_source(
     source_root: &Utf8Path,
-    override_root: &Utf8Path,
+    output_root: &Utf8Path,
 ) -> Result<(), WorkspaceError> {
     let source = normalized_absolute_components(source_root)?;
-    let output = normalized_absolute_components(override_root)?;
+    let output = normalized_absolute_components(output_root)?;
     if path_starts_with(&output, &source) {
-        return Err(WorkspaceError::InvalidOverrideRoot {
-            root: override_root.to_owned(),
-            message: "override root must be outside the source root".to_string(),
+        return Err(WorkspaceError::InvalidOutputRoot {
+            root: output_root.to_owned(),
+            message: "output must be outside the source root".to_string(),
+        });
+    }
+    Ok(())
+}
+
+pub fn ensure_workspace_outside_source(
+    source_root: &Utf8Path,
+    workspace: &Utf8Path,
+) -> Result<(), WorkspaceError> {
+    let source = normalized_absolute_components(source_root)?;
+    let workspace_components = normalized_absolute_components(workspace)?;
+    if path_starts_with(&workspace_components, &source) {
+        return Err(WorkspaceError::InvalidTranslationPackagePath {
+            path: workspace.to_string(),
+            message: "workspace must be outside the source root".to_string(),
         });
     }
     Ok(())
@@ -63,10 +75,7 @@ pub fn changed_assets(
     Ok(output)
 }
 
-fn override_output_path(
-    root: &Utf8Path,
-    logical_path: &Utf8Path,
-) -> Result<Utf8PathBuf, WorkspaceError> {
+fn output_path(root: &Utf8Path, logical_path: &Utf8Path) -> Result<Utf8PathBuf, WorkspaceError> {
     let path_text = logical_path.to_string();
     let mut components = logical_path.components();
     let Some(Utf8Component::Normal(first)) = components.next() else {
@@ -107,7 +116,7 @@ fn normalized_absolute_components(path: &Utf8Path) -> Result<Vec<String>, Worksp
         let current = std::env::current_dir()
             .map_err(|source| WorkspaceError::CurrentDirectory { source })?;
         Utf8PathBuf::from_path_buf(current)
-            .map_err(|path| WorkspaceError::InvalidOverrideRoot {
+            .map_err(|path| WorkspaceError::InvalidOutputRoot {
                 root: Utf8PathBuf::from(path.to_string_lossy().as_ref()),
                 message: "current directory is not valid UTF-8".to_string(),
             })?

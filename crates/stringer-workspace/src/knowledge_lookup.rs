@@ -686,9 +686,8 @@ fn layer_priority(layer: &str) -> usize {
     match layer {
         "built-in" => 0,
         "global" => 1,
-        "library" => 2,
-        "project" => 3,
-        "override" => 4,
+        "workspace" => 2,
+        "override" => 3,
         _ => 0,
     }
 }
