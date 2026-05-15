@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use regex::{Regex, RegexBuilder};
 use serde::Serialize;
-use stringer_pipeline::{KnowledgeBase, MemoryQuality, PipelineDiagnostic, TermStatus};
+use stringer_pipeline::{KnowledgeBase, MemoryQuality, PipelineDiagnostic, Term, TermStatus};
 
 use crate::WorkspaceError;
 
@@ -126,6 +126,9 @@ fn collect_memory_results(
             continue;
         };
         let context = context_match(options.context, item.context());
+        if context.conflicts > 0 {
+            continue;
+        }
         ranked.push(RankedResult {
             layer_priority: layer_priority(item.layer()),
             quality_priority: memory_quality_priority(item.quality()),
@@ -155,11 +158,13 @@ fn collect_term_results(
     ranked: &mut Vec<RankedResult>,
 ) {
     for term in knowledge.terms() {
-        let Some(field_match) = best_field_match(term.source(), term.target(), options, regex)
-        else {
+        let Some(field_match) = best_term_match(term, options, regex) else {
             continue;
         };
         let context = scope_match(options.context, term.scope_values());
+        if context.conflicts > 0 {
+            continue;
+        }
         ranked.push(RankedResult {
             layer_priority: layer_priority(term.layer()),
             quality_priority: term_status_priority(term.status()),
@@ -217,6 +222,37 @@ fn lookup_regex(options: &KnowledgeSearchOptions<'_>) -> Result<Option<Regex>, W
             pattern: options.query.to_string(),
             source,
         })
+}
+
+fn best_term_match(
+    term: &Term,
+    options: &KnowledgeSearchOptions<'_>,
+    regex: Option<&Regex>,
+) -> Option<FieldMatch> {
+    let mut candidates = Vec::new();
+    if matches!(
+        options.field,
+        LookupKnowledgeField::Both | LookupKnowledgeField::Source
+    ) {
+        if let Some(candidate) = text_match(term.source(), "source", options, regex) {
+            candidates.push(candidate);
+        }
+        for alias in term.aliases() {
+            if let Some(candidate) = text_match(alias, "alias", options, regex) {
+                candidates.push(candidate);
+            }
+        }
+    }
+    if matches!(
+        options.field,
+        LookupKnowledgeField::Both | LookupKnowledgeField::Target
+    ) && let Some(candidate) = text_match(term.target(), "target", options, regex)
+    {
+        candidates.push(candidate);
+    }
+    candidates
+        .into_iter()
+        .max_by_key(|candidate| candidate.score)
 }
 
 fn best_field_match(
@@ -362,19 +398,35 @@ fn comparable(value: &str, case_sensitive: bool) -> String {
 }
 
 fn exact_score(field: &str) -> i32 {
-    if field == "source" { 60_000 } else { 50_000 }
+    match field {
+        "source" => 60_000,
+        "alias" => 55_000,
+        _ => 50_000,
+    }
 }
 
 fn prefix_score(field: &str) -> i32 {
-    if field == "source" { 40_000 } else { 30_000 }
+    match field {
+        "source" => 40_000,
+        "alias" => 35_000,
+        _ => 30_000,
+    }
 }
 
 fn contains_score(field: &str) -> i32 {
-    if field == "source" { 20_000 } else { 10_000 }
+    match field {
+        "source" => 20_000,
+        "alias" => 15_000,
+        _ => 10_000,
+    }
 }
 
 fn regex_score(field: &str) -> i32 {
-    if field == "source" { 9_000 } else { 8_000 }
+    match field {
+        "source" => 9_000,
+        "alias" => 8_500,
+        _ => 8_000,
+    }
 }
 
 fn layer_priority(layer: &str) -> usize {

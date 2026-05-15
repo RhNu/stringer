@@ -18,6 +18,7 @@ fn lookup_searches_terms_and_memory_source_and_target_by_default() {
 id = "term:altmer"
 source = "Altmer"
 target = "高精灵"
+aliases = ["Highborn"]
 status = "preferred"
 "#,
     );
@@ -33,7 +34,7 @@ status = "preferred"
 
     assert_eq!(lookup.query, "altmer");
     assert_eq!(lookup.mode, LookupKnowledgeMode::Contains);
-    assert_eq!(lookup.total_matches, 3);
+    assert_eq!(lookup.total_matches, 2);
     assert_eq!(lookup.results[0].id, "term:altmer");
     assert_eq!(lookup.results[0].kind, "term");
     assert_eq!(lookup.results[0].match_field, "source");
@@ -44,6 +45,11 @@ status = "preferred"
             && result.match_field == "target"
             && result.target == "Altmer 传统"
     }));
+
+    let alias_lookup = lookup_knowledge(lookup_options(root.path(), "highborn")).unwrap();
+    assert_eq!(alias_lookup.total_matches, 1);
+    assert_eq!(alias_lookup.results[0].id, "term:altmer");
+    assert_eq!(alias_lookup.results[0].match_field, "alias");
 }
 
 #[test]
@@ -123,7 +129,7 @@ fn lookup_omits_rejected_memory_by_default() {
 }
 
 #[test]
-fn lookup_context_conflict_does_not_outrank_context_match() {
+fn lookup_excludes_context_conflicts() {
     let root = TempRoot::new("lookup-context-conflict");
     write_text(
         &root.path().join("knowledge/memory/project.jsonl"),
@@ -135,8 +141,36 @@ fn lookup_context_conflict_does_not_outrank_context_match() {
 
     let lookup = lookup_knowledge(lookup_options(root.path(), "altmer")).unwrap();
 
-    assert_eq!(lookup.total_matches, 2);
+    assert_eq!(lookup.total_matches, 1);
     assert_eq!(lookup.results[0].id, "tm:match");
+}
+
+#[test]
+fn lookup_excludes_term_scope_conflicts() {
+    let root = TempRoot::new("lookup-term-scope-conflict");
+    write_text(
+        &root.path().join("knowledge/terms/project.toml"),
+        r#"
+[[terms]]
+id = "term:conflict"
+source = "Altmer"
+target = "高精灵"
+status = "preferred"
+scope = { record_type = "ARMO" }
+
+[[terms]]
+id = "term:match"
+source = "Altmer Armor"
+target = "高精灵护甲"
+status = "preferred"
+scope = { record_type = "WEAP" }
+"#,
+    );
+
+    let lookup = lookup_knowledge(lookup_options(root.path(), "altmer")).unwrap();
+
+    assert_eq!(lookup.total_matches, 1);
+    assert_eq!(lookup.results[0].id, "term:match");
 }
 
 fn lookup_options(root: &std::path::Path, text: &str) -> LookupKnowledgeOptions {

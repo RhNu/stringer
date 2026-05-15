@@ -203,10 +203,10 @@ pub struct KnowledgeAnnotateCommand {
     pub workspace: Utf8PathBuf,
     #[arg(
         long,
-        help = "Allow high-confidence memory to fill empty translations",
-        long_help = "Allow high-confidence translation memory to fill translation. Disabled by default. When enabled, it only fills empty translations that meet the threshold and does not overwrite existing agent translations."
+        help = "Do not fill empty translations from high-confidence memory",
+        long_help = "Do not fill empty translations from high-confidence translation memory. By default annotate fills empty translations that meet the threshold and does not overwrite existing agent translations."
     )]
-    pub auto_fill_memory: bool,
+    pub skip_fill_memory: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -444,7 +444,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             let summary = annotate_translations(AnnotateTranslationsOptions {
                 project_root,
                 workspace: command.workspace,
-                allow_memory_auto_fill: command.auto_fill_memory,
+                skip_memory_fill: command.skip_fill_memory,
             })?;
             println!(
                 "annotated {} entries, added {} hints, wrote {} diagnostics, auto-filled {} entries",

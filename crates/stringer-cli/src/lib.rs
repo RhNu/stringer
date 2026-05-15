@@ -11,4 +11,8 @@ pub use app::{
     KnowledgeIndexRebuildCommand, KnowledgeLookupCommand, KnowledgeLookupFieldArg,
     KnowledgeLookupSourceArg, KnowledgeValidateCommand, run,
 };
-pub use workspace::{WorkspaceCommand, WorkspaceFinalizeCommand, WorkspaceOpenCommand};
+pub use workspace::{
+    WorkspaceBatchApplyCommand, WorkspaceBatchClaimCommand, WorkspaceBatchCommand,
+    WorkspaceBatchCountCommand, WorkspaceBatchReleaseCommand, WorkspaceCommand,
+    WorkspaceFinalizeCommand, WorkspaceOpenCommand, WorkspaceUpgradeCommand,
+};

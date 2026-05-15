@@ -9,6 +9,7 @@ use stringer_pipeline::{
 };
 
 use crate::WorkspaceError;
+use crate::batch::claimed_entry_ids;
 use crate::knowledge_index::{
     KnowledgeFileKind, KnowledgeSourceFile, fingerprint, index_is_fresh, knowledge_index_path,
     read_knowledge_index, write_knowledge_index,
@@ -17,8 +18,10 @@ use crate::knowledge_lookup::{
     KnowledgeLookup, KnowledgeSearchOptions, LookupKnowledgeField, LookupKnowledgeMode,
     LookupKnowledgeSource, search_knowledge,
 };
+use crate::lock::{WorkspaceLock, unix_ms};
 use crate::package::{
-    TranslationRecord, read_translation_package_records, write_translation_package_records,
+    TranslationMeta, TranslationRecord, read_translation_package_records,
+    write_translation_package_records,
 };
 use crate::settings::{WorkspaceSettings, game_release_name, load_global_knowledge_root};
 
@@ -33,7 +36,7 @@ const BUILTIN_PROCESSORS: &[&str] = &[
 pub struct AnnotateTranslationsOptions {
     pub project_root: Utf8PathBuf,
     pub workspace: Utf8PathBuf,
-    pub allow_memory_auto_fill: bool,
+    pub skip_memory_fill: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,7 +101,9 @@ pub struct KnowledgeSummary {
 pub fn annotate_translations(
     options: AnnotateTranslationsOptions,
 ) -> Result<KnowledgeSummary, WorkspaceError> {
+    let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
+    let claimed = claimed_entry_ids(&options.workspace)?;
     let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
         project_root: options.project_root.clone(),
@@ -121,7 +126,6 @@ pub fn annotate_translations(
                 &package.settings,
             )?;
             entry.clear_annotations_from_processors(BUILTIN_PROCESSORS);
-            entry.clear_diagnostics();
             let annotate_report = pipeline.run_stage(
                 PipelineStage::Annotate,
                 std::slice::from_mut(&mut entry),
@@ -129,7 +133,11 @@ pub fn annotate_translations(
                 &PipelineOptions::default(),
             );
             let memory_options = PipelineOptions {
-                allow_memory_auto_fill: options.allow_memory_auto_fill,
+                allow_memory_auto_fill: should_fill_memory(
+                    record,
+                    claimed.contains(&record.id),
+                    options.skip_memory_fill,
+                ),
                 ..PipelineOptions::default()
             };
             let memory_report = pipeline.run_stage(
@@ -140,6 +148,12 @@ pub fn annotate_translations(
             );
             let diagnostics = entry.diagnostics().len();
             write_entry_result(record, entry);
+            if memory_report.auto_filled > 0 {
+                record.translation_meta = Some(TranslationMeta {
+                    origin: Some("memory".to_string()),
+                    updated_at_unix_ms: Some(unix_ms()),
+                });
+            }
             summary.entries += 1;
             summary.annotations += annotate_report.annotations + memory_report.annotations;
             summary.diagnostics += diagnostics;
@@ -154,6 +168,7 @@ pub fn annotate_translations(
 pub fn validate_translations(
     options: ValidateTranslationsOptions,
 ) -> Result<KnowledgeSummary, WorkspaceError> {
+    let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
     let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
@@ -486,4 +501,20 @@ fn write_entry_result(record: &mut TranslationRecord, entry: PipelineEntry) {
     record.translation = translation;
     record.hints = hints;
     record.diagnostics = diagnostics;
+}
+
+fn should_fill_memory(record: &TranslationRecord, claimed: bool, skip_memory_fill: bool) -> bool {
+    if skip_memory_fill || claimed {
+        return false;
+    }
+    if matches!(
+        record
+            .translation_meta
+            .as_ref()
+            .and_then(|meta| meta.origin.as_deref()),
+        Some("agent" | "manual")
+    ) {
+        return false;
+    }
+    true
 }

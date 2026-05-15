@@ -11,7 +11,9 @@ pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
   stringer workspace open --root <MOD_ROOT> --workspace <WORKSPACE> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
   stringer adapt import --format xt-sst --input <OLD_TRANSLATION.sst> --source-locale en --target-locale zh-Hans --game SkyrimSe
   stringer knowledge annotate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
-  # Edit the translation fields in <WORKSPACE>/entries/**/*.jsonl.
+  stringer workspace batch count --workspace <WORKSPACE> --json
+  stringer workspace batch claim --workspace <WORKSPACE> --limit 50
+  stringer workspace batch apply --workspace <WORKSPACE> --input <PATCH_JSON>
   stringer knowledge validate --project-root <PROJECT_ROOT> --workspace <WORKSPACE>
   stringer workspace finalize --root <MOD_ROOT> --workspace <WORKSPACE> --override-root <OVERRIDE_ROOT>
 
@@ -19,6 +21,9 @@ Default knowledge locations:
   <PROJECT_ROOT>/knowledge/terms/*.toml
   <PROJECT_ROOT>/knowledge/memory/*.jsonl
   <PROJECT_ROOT>/knowledge/rules/*.toml
+
+Direct JSONL fallback:
+  <WORKSPACE>/entries/**/*.jsonl
 
 See README.md for project documentation."#;
 
@@ -35,7 +40,7 @@ Use workspace open to generate the editable JSONL workspace from a mod root. Use
 
 pub(crate) const WORKSPACE_OPEN_LONG_ABOUT: &str = r#"Scan a mod root and open an agent-editable translation workspace.
 
-The workspace is a directory containing manifest.json and entries/**/*.jsonl. Each JSONL row usually contains id, source, translation, context, hints, and diagnostics. Fresh workspaces usually leave translation empty for a human or agent to fill.
+The workspace is a directory containing workspace.json, batches/, and entries/**/*.jsonl. Each JSONL row usually contains id, source, translation, translation_meta, context, hints, and diagnostics. Fresh workspaces usually leave translation empty for a human or agent to fill.
 
 workspace open reads the default user config, <MOD_ROOT>/stringer.toml, and command-line overrides. Project settings override user settings, and command-line settings override both."#;
 
@@ -43,13 +48,15 @@ pub(crate) const WORKSPACE_OPEN_AFTER_LONG_HELP: &str = r#"Example:
   stringer workspace open --root ./MyMod --workspace ./translations --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
 
 Output layout:
-  <WORKSPACE>/manifest.json
+  <WORKSPACE>/workspace.json
+  <WORKSPACE>/batches/
   <WORKSPACE>/entries/plugin/<asset>/<record_type>.jsonl
   <WORKSPACE>/entries/pex/<asset>.jsonl
   <WORKSPACE>/entries/scaleform/<asset>.jsonl
 
 Common next step:
-  stringer knowledge annotate --project-root ./MyMod --workspace ./translations"#;
+  stringer knowledge annotate --project-root ./MyMod --workspace ./translations
+  stringer workspace batch claim --workspace ./translations --limit 50"#;
 
 pub(crate) const WORKSPACE_FINALIZE_LONG_ABOUT: &str = r#"Read id and translation fields from a translation workspace, apply them to source mod assets, and write changed files into an override directory.
 
@@ -61,6 +68,36 @@ pub(crate) const WORKSPACE_FINALIZE_AFTER_LONG_HELP: &str = r#"Example:
 Recommended:
   Run `stringer knowledge validate` before finalize.
   Point override-root at a fresh directory, then load that directory with a mod manager."#;
+
+pub(crate) const WORKSPACE_BATCH_LONG_ABOUT: &str = r#"Batch commands let agents translate without directly editing JSONL rows.
+
+Use count to estimate work, claim to reserve a batch and receive source/context/hints/diagnostics as JSON, apply to submit translations for that batch, and release to abandon a batch."#;
+
+pub(crate) const WORKSPACE_BATCH_COUNT_LONG_ABOUT: &str = r#"Count translation work in a workspace.
+
+The count includes total rows, empty translations, high-confidence memory prefill rows, translated rows, actively claimed rows, and rows with diagnostics. When --file is supplied, it must match an entry file listed in workspace.json."#;
+
+pub(crate) const WORKSPACE_BATCH_CLAIM_LONG_ABOUT: &str = r#"Claim unclaimed rows for agent translation.
+
+Eligible rows have no translation, an empty translation, or translation_meta.origin=memory. Rows with translation_meta.origin=agent or manual are not claimed. The command writes batches/<batch_id>.json and prints JSON with the source, current translation, context, hints, and diagnostics."#;
+
+pub(crate) const WORKSPACE_BATCH_APPLY_LONG_ABOUT: &str = r#"Apply translations for a claimed batch.
+
+The input JSON contains batch_id and entries with id and translation. The command only writes ids claimed by that batch, sets translation_meta.origin=agent, and removes applied ids from the batch."#;
+
+pub(crate) const WORKSPACE_BATCH_RELEASE_LONG_ABOUT: &str = r#"Release a claimed batch without changing translations.
+
+This deletes batches/<batch_id>.json so the remaining entries can be claimed again."#;
+
+pub(crate) const WORKSPACE_UPGRADE_LONG_ABOUT: &str = r#"Placeholder for future legacy workspace upgrades.
+
+Current Workspace v3 commands do not read old manifest.json workspaces. Recreate the workspace with workspace open to get workspace.json."#;
+
+pub(crate) const WORKSPACE_UPGRADE_AFTER_LONG_HELP: &str = r#"This command is intentionally not implemented yet.
+
+Current behavior:
+  stringer workspace upgrade --workspace ./translations
+  exits with an error explaining that v2 manifest.json workspaces are not read."#;
 
 pub(crate) const ADAPT_LONG_ABOUT: &str = r#"Adapt external translation resources into Stringer translation memory.
 
@@ -88,11 +125,11 @@ Knowledge sources include terminology TOML, translation-memory JSONL, replacemen
 
 pub(crate) const ANNOTATE_LONG_ABOUT: &str = r#"Write hints into a translation package and optionally auto-fill translations from high-confidence translation memory.
 
-annotate reads the translation package, loads knowledge, removes stale hints and diagnostics written by Stringer's built-in processors, then writes current terminology hints, memory candidates, and related diagnostics. It does not overwrite agent-written translations by default; --auto-fill-memory only permits high-confidence memory to fill empty translations."#;
+annotate reads the translation package, loads knowledge, removes stale hints written by Stringer's built-in processors, then writes current terminology hints and memory candidates. It preserves existing diagnostics. By default it fills empty translations from high-confidence memory; --skip-fill-memory disables that fill step."#;
 
 pub(crate) const ANNOTATE_AFTER_LONG_HELP: &str = r#"Examples:
   stringer knowledge annotate --project-root ./MyMod --workspace ./translations
-  stringer knowledge annotate --workspace ./translations --auto-fill-memory
+  stringer knowledge annotate --workspace ./translations --skip-fill-memory
 
 Agent editing guidance:
   When reading entries/**/*.jsonl, inspect source, context, hints, and diagnostics first.

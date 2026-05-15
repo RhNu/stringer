@@ -13,7 +13,7 @@ mod support;
 use support::*;
 
 #[tokio::test]
-async fn exports_scaleform_package_with_manifest_and_clean_entry_rows() {
+async fn exports_scaleform_workspace_with_workspace_json_and_clean_entry_rows() {
     let root = TempRoot::new("export-scaleform");
     write_text(
         &root
@@ -32,27 +32,30 @@ async fn exports_scaleform_package_with_manifest_and_clean_entry_rows() {
     .unwrap();
 
     assert_eq!(summary.entries, 1);
-    let manifest = json_file(&out.join("manifest.json"));
-    assert_eq!(manifest["schema_version"], 2);
-    assert_eq!(manifest["game_release"], "SkyrimSe");
-    assert_eq!(manifest["asset_language"], "English");
-    assert_eq!(manifest["source_locale"], "en");
-    assert_eq!(manifest["target_locale"], "zh-Hans");
-    assert_eq!(manifest["files"].as_array().unwrap().len(), 1);
+    assert!(!out.join("manifest.json").exists());
+    assert!(out.join("batches").is_dir());
+    let workspace = json_file(&out.join("workspace.json"));
+    assert_eq!(workspace["schema_version"], 3);
+    assert_eq!(workspace["kind"], "stringer.workspace");
+    assert_eq!(workspace["game_release"], "SkyrimSe");
+    assert_eq!(workspace["asset_language"], "English");
+    assert_eq!(workspace["source_locale"], "en");
+    assert_eq!(workspace["target_locale"], "zh-Hans");
+    assert_eq!(workspace["files"].as_array().unwrap().len(), 1);
     assert_eq!(
-        manifest["files"][0]["path"],
+        workspace["files"][0]["path"],
         "entries/scaleform/Interface/Translations/MyMod_English.txt.jsonl"
     );
-    assert_eq!(manifest["files"][0]["kind"], "scaleform");
+    assert_eq!(workspace["files"][0]["kind"], "scaleform");
     assert_eq!(
-        manifest["files"][0]["asset_path"],
+        workspace["files"][0]["asset_path"],
         "Interface/Translations/MyMod_English.txt"
     );
-    assert!(manifest["files"][0].get("group").is_none());
+    assert!(workspace["files"][0].get("group").is_none());
 
     let rows = jsonl_rows(
         &out.join(
-            manifest["files"][0]["path"]
+            workspace["files"][0]["path"]
                 .as_str()
                 .expect("entry file path"),
         ),
@@ -70,6 +73,43 @@ async fn exports_scaleform_package_with_manifest_and_clean_entry_rows() {
     assert!(rows[0].get("asset_language").is_none());
     assert!(rows[0].get("source_locale").is_none());
     assert!(rows[0].get("target_locale").is_none());
+}
+
+#[tokio::test]
+async fn import_rejects_legacy_manifest_only_workspace() {
+    let root = TempRoot::new("legacy-manifest-only");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n",
+    );
+    let translations = root.path().join("translations");
+    export_translations(ExportTranslationsOptions {
+        root: utf8(root.path()),
+        out: utf8(&translations),
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+    fs::rename(
+        translations.join("workspace.json"),
+        translations.join("manifest.json"),
+    )
+    .unwrap();
+
+    let error = import_translations(ImportTranslationsOptions {
+        root: utf8(root.path()),
+        translations: utf8(&translations),
+        target: WriteTarget::OverrideDirectory {
+            root: utf8(&root.path().join("override")),
+        },
+    })
+    .await
+    .unwrap_err();
+
+    assert!(error.to_string().contains("legacy translation workspace"));
+    assert!(error.to_string().contains("workspace.json"));
 }
 
 #[tokio::test]
@@ -344,11 +384,11 @@ async fn import_rejects_unsupported_translation_package_schema_version() {
     })
     .await
     .unwrap();
-    let mut manifest = json_file(&translations.join("manifest.json"));
-    manifest["schema_version"] = Value::from(999);
+    let mut workspace = json_file(&translations.join("workspace.json"));
+    workspace["schema_version"] = Value::from(999);
     write_text(
-        &translations.join("manifest.json"),
-        &serde_json::to_string(&manifest).unwrap(),
+        &translations.join("workspace.json"),
+        &serde_json::to_string(&workspace).unwrap(),
     );
 
     let error = import_translations(ImportTranslationsOptions {
@@ -385,11 +425,11 @@ async fn import_rejects_manifest_entry_paths_that_escape_package_root() {
     })
     .await
     .unwrap();
-    let mut manifest = json_file(&translations.join("manifest.json"));
-    manifest["files"][0]["path"] = Value::from("../outside.jsonl");
+    let mut workspace = json_file(&translations.join("workspace.json"));
+    workspace["files"][0]["path"] = Value::from("../outside.jsonl");
     write_text(
-        &translations.join("manifest.json"),
-        &serde_json::to_string(&manifest).unwrap(),
+        &translations.join("workspace.json"),
+        &serde_json::to_string(&workspace).unwrap(),
     );
 
     let error = import_translations(ImportTranslationsOptions {
@@ -626,8 +666,8 @@ async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugi
     })
     .await
     .unwrap();
-    let manifest = json_file(&export_path.join("manifest.json"));
-    let plugin_file = manifest["files"]
+    let workspace = json_file(&export_path.join("workspace.json"));
+    let plugin_file = workspace["files"]
         .as_array()
         .unwrap()
         .iter()
@@ -699,9 +739,9 @@ async fn export_omits_pex_files_with_only_filtered_sources() {
     .unwrap();
 
     assert_eq!(summary.entries, 0);
-    let manifest = json_file(&export_path.join("manifest.json"));
+    let workspace = json_file(&export_path.join("workspace.json"));
     assert!(
-        manifest["files"]
+        workspace["files"]
             .as_array()
             .unwrap()
             .iter()
@@ -748,8 +788,8 @@ async fn import_updates_pex_literals_into_override_script() {
     })
     .await
     .unwrap();
-    let manifest = json_file(&export_path.join("manifest.json"));
-    let pex_file = manifest["files"]
+    let workspace = json_file(&export_path.join("workspace.json"));
+    let pex_file = workspace["files"]
         .as_array()
         .unwrap()
         .iter()

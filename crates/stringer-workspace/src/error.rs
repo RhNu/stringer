@@ -77,6 +77,14 @@ pub enum WorkspaceError {
     #[error("unsupported translation package schema version {version} in `{path}`")]
     UnsupportedTranslationSchema { path: Utf8PathBuf, version: u32 },
 
+    #[error(
+        "legacy translation workspace `{path}` uses manifest.json; recreate or upgrade it to workspace.json"
+    )]
+    LegacyTranslationWorkspace { path: Utf8PathBuf },
+
+    #[error("workspace is locked by `{path}`")]
+    WorkspaceLocked { path: Utf8PathBuf },
+
     #[error("invalid translation package path `{path}`: {message}")]
     InvalidTranslationPackagePath { path: String, message: String },
 
@@ -85,6 +93,18 @@ pub enum WorkspaceError {
 
     #[error("translation id `{id}` does not match any exported entry")]
     UnknownTranslationId { id: String },
+
+    #[error("batch `{batch_id}` was not found")]
+    BatchNotFound { batch_id: String },
+
+    #[error("duplicate batch patch id `{id}`")]
+    DuplicateBatchPatchId { id: String },
+
+    #[error("batch patch entry `{id}` is missing translation")]
+    MissingBatchPatchTranslation { id: String },
+
+    #[error("translation id `{id}` is not claimed by batch `{batch_id}`")]
+    BatchEntryNotClaimed { batch_id: String, id: String },
 
     #[error("duplicate output logical path `{path}`")]
     DuplicateOutputPath { path: String },

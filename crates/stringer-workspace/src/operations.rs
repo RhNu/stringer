@@ -13,6 +13,7 @@ use stringer_scaleform::{
 use tracing::debug;
 
 use crate::WorkspaceError;
+use crate::lock::WorkspaceLock;
 use crate::package::{
     PackagedTranslationRecord, external_entry_id, packaged_record_from_entry,
     read_translation_package, write_translation_package,
@@ -117,6 +118,7 @@ impl EditableBundle {
 pub async fn export_translations(
     options: ExportTranslationsOptions,
 ) -> Result<ExportSummary, WorkspaceError> {
+    let _lock = WorkspaceLock::acquire(&options.out)?;
     let read = read_mod_root(&options.root, ReadModOptions::default())?;
     let bundles = read_editable_bundles(&read.files, &options.settings).await?;
     let mut records = Vec::new();

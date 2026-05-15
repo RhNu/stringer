@@ -12,18 +12,23 @@ use stringer_core::{
 use stringer_pipeline::{PipelineAnnotation, PipelineDiagnostic};
 
 use crate::WorkspaceError;
+use crate::fsutil::{replace_file, temp_path};
+use crate::lock::unix_ms;
 use crate::settings::{
     WorkspaceSettings, game_release_name, language_name, parse_game_release_name,
     parse_language_name,
 };
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
-const MANIFEST_FILE: &str = "manifest.json";
+const WORKSPACE_FILE: &str = "workspace.json";
+const LEGACY_MANIFEST_FILE: &str = "manifest.json";
+const BATCHES_DIR: &str = "batches";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslationManifest {
     pub schema_version: u32,
+    pub kind: String,
     pub game_release: String,
     pub asset_language: String,
     pub source_locale: String,
@@ -46,6 +51,8 @@ pub struct TranslationRecord {
     pub source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation_meta: Option<TranslationMeta>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub context: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -56,6 +63,14 @@ pub struct TranslationRecord {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TranslationMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_at_unix_ms: Option<u128>,
 }
 
 #[derive(Debug, Clone)]
@@ -106,6 +121,7 @@ pub fn packaged_record_from_entry(
             id: external_entry_id(entry),
             source: entry.text().to_string(),
             translation: None,
+            translation_meta: None,
             context,
             hints: Vec::new(),
             diagnostics: Vec::new(),
@@ -121,6 +137,17 @@ pub fn write_translation_package(
 ) -> Result<(), WorkspaceError> {
     fs::create_dir_all(path).map_err(|source| WorkspaceError::WriteFile {
         path: path.to_owned(),
+        source,
+    })?;
+    let batches = path.join(BATCHES_DIR);
+    if batches.exists() {
+        fs::remove_dir_all(&batches).map_err(|source| WorkspaceError::WriteFile {
+            path: batches.clone(),
+            source,
+        })?;
+    }
+    fs::create_dir_all(&batches).map_err(|source| WorkspaceError::WriteFile {
+        path: batches,
         source,
     })?;
 
@@ -143,20 +170,28 @@ pub fn write_translation_package(
 
     let manifest = TranslationManifest {
         schema_version: SCHEMA_VERSION,
+        kind: "stringer.workspace".to_string(),
         game_release: game_release_name(settings.game_release).to_string(),
         asset_language: language_name(settings.asset_language).to_string(),
         source_locale: settings.source_locale.clone(),
         target_locale: settings.target_locale.clone(),
         files,
     };
-    write_manifest(&path.join(MANIFEST_FILE), &manifest)
+    let legacy = path.join(LEGACY_MANIFEST_FILE);
+    if legacy.exists() {
+        fs::remove_file(&legacy).map_err(|source| WorkspaceError::WriteFile {
+            path: legacy,
+            source,
+        })?;
+    }
+    write_manifest(&path.join(WORKSPACE_FILE), &manifest)
 }
 
 pub fn read_translation_package(
     path: &Utf8Path,
 ) -> Result<(WorkspaceSettings, BTreeMap<String, String>), WorkspaceError> {
-    let manifest_path = path.join(MANIFEST_FILE);
-    let manifest = read_manifest(&manifest_path)?;
+    let manifest_path = path.join(WORKSPACE_FILE);
+    let manifest = read_manifest(path, &manifest_path)?;
     if manifest.schema_version != SCHEMA_VERSION {
         return Err(WorkspaceError::UnsupportedTranslationSchema {
             path: manifest_path,
@@ -181,7 +216,7 @@ pub fn read_translation_package(
         if !seen_files.insert(normalized_file) {
             return Err(WorkspaceError::InvalidTranslationPackagePath {
                 path: file.path,
-                message: "manifest lists the same entry file more than once".to_string(),
+                message: "workspace.json lists the same entry file more than once".to_string(),
             });
         }
         read_patch_file(&entry_path, &mut seen_ids, &mut patches)?;
@@ -193,8 +228,8 @@ pub fn read_translation_package(
 pub(crate) fn read_translation_package_records(
     path: &Utf8Path,
 ) -> Result<TranslationPackageRecords, WorkspaceError> {
-    let manifest_path = path.join(MANIFEST_FILE);
-    let manifest = read_manifest(&manifest_path)?;
+    let manifest_path = path.join(WORKSPACE_FILE);
+    let manifest = read_manifest(path, &manifest_path)?;
     if manifest.schema_version != SCHEMA_VERSION {
         return Err(WorkspaceError::UnsupportedTranslationSchema {
             path: manifest_path,
@@ -212,7 +247,7 @@ pub(crate) fn read_translation_package_records(
         if !seen_files.insert(normalized_file) {
             return Err(WorkspaceError::InvalidTranslationPackagePath {
                 path: manifest_file.path,
-                message: "manifest lists the same entry file more than once".to_string(),
+                message: "workspace.json lists the same entry file more than once".to_string(),
             });
         }
         let records = read_record_file(&entry_path, &mut seen_ids)?;
@@ -237,32 +272,46 @@ pub(crate) fn write_translation_package_records(
 }
 
 fn write_manifest(path: &Utf8Path, manifest: &TranslationManifest) -> Result<(), WorkspaceError> {
-    let file = fs::File::create(path).map_err(|source| WorkspaceError::WriteFile {
-        path: path.to_owned(),
+    let temp = temp_path(path, unix_ms().to_string());
+    let file = fs::File::create(&temp).map_err(|source| WorkspaceError::WriteFile {
+        path: temp.clone(),
         source,
     })?;
     let mut writer = BufWriter::new(file);
     serde_json::to_writer_pretty(&mut writer, manifest).map_err(|source| WorkspaceError::Json {
-        path: path.to_owned(),
+        path: temp.clone(),
         source,
     })?;
     writer
         .write_all(b"\n")
         .map_err(|source| WorkspaceError::WriteFile {
-            path: path.to_owned(),
+            path: temp.clone(),
             source,
         })?;
     writer.flush().map_err(|source| WorkspaceError::WriteFile {
-        path: path.to_owned(),
+        path: temp.clone(),
         source,
-    })
+    })?;
+    replace_file(&temp, path)
 }
 
-fn read_manifest(path: &Utf8Path) -> Result<TranslationManifest, WorkspaceError> {
+fn read_manifest(root: &Utf8Path, path: &Utf8Path) -> Result<TranslationManifest, WorkspaceError> {
     let text = fs::read_to_string(path).map_err(|source| WorkspaceError::ReadFile {
         path: path.to_owned(),
         source,
-    })?;
+    });
+    let text = match text {
+        Ok(text) => text,
+        Err(WorkspaceError::ReadFile { source, .. })
+            if source.kind() == std::io::ErrorKind::NotFound
+                && root.join(LEGACY_MANIFEST_FILE).exists() =>
+        {
+            return Err(WorkspaceError::LegacyTranslationWorkspace {
+                path: root.to_owned(),
+            });
+        }
+        Err(error) => return Err(error),
+    };
     serde_json::from_str(&text).map_err(|source| WorkspaceError::Json {
         path: path.to_owned(),
         source,
@@ -293,28 +342,30 @@ fn write_records_jsonl(
             source,
         })?;
     }
-    let file = fs::File::create(path).map_err(|source| WorkspaceError::WriteFile {
-        path: path.to_owned(),
+    let temp = temp_path(path, unix_ms().to_string());
+    let file = fs::File::create(&temp).map_err(|source| WorkspaceError::WriteFile {
+        path: temp.clone(),
         source,
     })?;
     let mut writer = BufWriter::new(file);
     for record in records {
         serde_json::to_writer(&mut writer, record).map_err(|source| WorkspaceError::JsonLine {
-            path: path.to_owned(),
+            path: temp.clone(),
             line: 0,
             source,
         })?;
         writer
             .write_all(b"\n")
             .map_err(|source| WorkspaceError::WriteFile {
-                path: path.to_owned(),
+                path: temp.clone(),
                 source,
             })?;
     }
     writer.flush().map_err(|source| WorkspaceError::WriteFile {
-        path: path.to_owned(),
+        path: temp.clone(),
         source,
-    })
+    })?;
+    replace_file(&temp, path)
 }
 
 fn read_patch_file(

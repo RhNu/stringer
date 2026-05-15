@@ -2,11 +2,12 @@ use std::fs;
 
 use serde_json::Value;
 use stringer_workspace::{
-    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ExportTranslationsOptions,
-    ImportTranslationsOptions, LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions,
-    LookupKnowledgeSource, PipelineEntryKind, ValidateTranslationsOptions, WorkspaceSettings,
-    WriteTarget, annotate_translations, build_knowledge_index, export_translations,
-    import_translations, lookup_knowledge, validate_translations,
+    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ClaimBatchOptions,
+    ExportTranslationsOptions, ImportTranslationsOptions, LookupKnowledgeField,
+    LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource, PipelineEntryKind,
+    ValidateTranslationsOptions, WorkspaceSettings, WriteTarget, annotate_translations,
+    build_knowledge_index, claim_batch, export_translations, import_translations, lookup_knowledge,
+    validate_translations,
 };
 
 #[allow(dead_code)]
@@ -46,14 +47,14 @@ scope = { game = "SkyrimSe" }
     let summary = annotate_translations(AnnotateTranslationsOptions {
         project_root: utf8(root.path()),
         workspace: utf8(&translations),
-        allow_memory_auto_fill: false,
+        skip_memory_fill: true,
     })
     .unwrap();
 
     assert_eq!(summary.entries, 1);
     assert_eq!(summary.auto_filled, 0);
-    let manifest = json_file(&translations.join("manifest.json"));
-    assert_eq!(manifest["schema_version"], 2);
+    let workspace = json_file(&translations.join("workspace.json"));
+    assert_eq!(workspace["schema_version"], 3);
     let rows = entry_rows(&translations, "scaleform", None);
     assert!(rows[0].get("translation").is_none());
     assert_eq!(rows[0]["hints"][0]["kind"], "term");
@@ -62,8 +63,8 @@ scope = { game = "SkyrimSe" }
 }
 
 #[tokio::test]
-async fn annotate_translations_removes_stale_diagnostics() {
-    let root = TempRoot::new("annotate-clears-diagnostics");
+async fn annotate_translations_preserves_existing_diagnostics() {
+    let root = TempRoot::new("annotate-preserves-diagnostics");
     write_text(
         &root
             .path()
@@ -91,17 +92,18 @@ async fn annotate_translations_removes_stale_diagnostics() {
     let summary = annotate_translations(AnnotateTranslationsOptions {
         project_root: utf8(root.path()),
         workspace: utf8(&translations),
-        allow_memory_auto_fill: false,
+        skip_memory_fill: true,
     })
     .unwrap();
 
-    assert_eq!(summary.diagnostics, 0);
+    assert_eq!(summary.diagnostics, 1);
     let rows = entry_rows(&translations, "scaleform", None);
-    assert!(rows[0].get("diagnostics").is_none());
+    assert_eq!(rows[0]["diagnostics"][0]["code"], "stale");
 }
 
 #[tokio::test]
-async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_translation() {
+async fn annotate_translations_fills_missing_memory_by_default_but_preserves_existing_translation()
+{
     let root = TempRoot::new("annotate-memory");
     write_text(
         &root
@@ -136,7 +138,7 @@ async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_
     let summary = annotate_translations(AnnotateTranslationsOptions {
         project_root: utf8(root.path()),
         workspace: utf8(&translations),
-        allow_memory_auto_fill: true,
+        skip_memory_fill: false,
     })
     .unwrap();
 
@@ -152,6 +154,124 @@ async fn annotate_translations_auto_fills_missing_memory_but_preserves_existing_
     );
     assert_eq!(title["translation"], "手工铁剑");
     assert_eq!(desc["translation"], "测试钢源");
+    assert!(title.get("translation_meta").is_none());
+    assert_eq!(desc["translation_meta"]["origin"], "memory");
+    assert!(desc["translation_meta"]["updated_at_unix_ms"].is_number());
+}
+
+#[tokio::test]
+async fn annotate_translations_does_not_fill_agent_origin_entries() {
+    let root = TempRoot::new("annotate-agent-origin");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tStringer Test Iron Source\n",
+    );
+    write_text(
+        &root.path().join("knowledge/memory/project.jsonl"),
+        "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
+    );
+    let translations = root.path().join("translations");
+    export_translations(ExportTranslationsOptions {
+        root: utf8(root.path()),
+        out: utf8(&translations),
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+    write_entry_rows(
+        &translations,
+        "scaleform",
+        "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Stringer Test Iron Source\",\"translation_meta\":{\"origin\":\"agent\"}}\n",
+    );
+
+    let summary = annotate_translations(AnnotateTranslationsOptions {
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
+        skip_memory_fill: false,
+    })
+    .unwrap();
+
+    assert_eq!(summary.auto_filled, 0);
+    let rows = entry_rows(&translations, "scaleform", None);
+    assert!(rows[0].get("translation").is_none());
+    assert_eq!(rows[0]["translation_meta"]["origin"], "agent");
+}
+
+#[tokio::test]
+async fn annotate_translations_does_not_fill_claimed_entries() {
+    let root = TempRoot::new("annotate-claimed-entry");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tStringer Test Iron Source\n",
+    );
+    write_text(
+        &root.path().join("knowledge/memory/project.jsonl"),
+        "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
+    );
+    let translations = root.path().join("translations");
+    export_translations(ExportTranslationsOptions {
+        root: utf8(root.path()),
+        out: utf8(&translations),
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+    let claim = claim_batch(ClaimBatchOptions {
+        workspace: utf8(&translations),
+        file: None,
+        limit: 1,
+    })
+    .unwrap();
+    assert!(claim.batch_id.is_some());
+
+    let summary = annotate_translations(AnnotateTranslationsOptions {
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
+        skip_memory_fill: false,
+    })
+    .unwrap();
+
+    assert_eq!(summary.auto_filled, 0);
+    let rows = entry_rows(&translations, "scaleform", None);
+    assert!(rows[0].get("translation").is_none());
+}
+
+#[tokio::test]
+async fn annotate_translations_can_skip_memory_fill() {
+    let root = TempRoot::new("annotate-skip-memory-fill");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tStringer Test Iron Source\n",
+    );
+    write_text(
+        &root.path().join("knowledge/memory/project.jsonl"),
+        "{\"id\":\"tm:1\",\"source\":\"Stringer Test Iron Source\",\"target\":\"测试铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\",\"created_at\":\"2026-05-14T00:00:00Z\"}\n",
+    );
+    let translations = root.path().join("translations");
+    export_translations(ExportTranslationsOptions {
+        root: utf8(root.path()),
+        out: utf8(&translations),
+        settings: settings(),
+    })
+    .await
+    .unwrap();
+
+    let summary = annotate_translations(AnnotateTranslationsOptions {
+        project_root: utf8(root.path()),
+        workspace: utf8(&translations),
+        skip_memory_fill: true,
+    })
+    .unwrap();
+
+    assert_eq!(summary.auto_filled, 0);
+    let rows = entry_rows(&translations, "scaleform", None);
+    assert!(rows[0].get("translation").is_none());
 }
 
 #[tokio::test]
@@ -440,7 +560,7 @@ async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diag
     let summary = annotate_translations(AnnotateTranslationsOptions {
         project_root: utf8(root.path()),
         workspace: utf8(&translations),
-        allow_memory_auto_fill: false,
+        skip_memory_fill: true,
     })
     .unwrap();
 

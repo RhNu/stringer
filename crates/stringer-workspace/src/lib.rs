@@ -1,14 +1,23 @@
 #![forbid(unsafe_code)]
 
+mod batch;
 mod error;
+mod fsutil;
 mod knowledge;
 mod knowledge_index;
 mod knowledge_lookup;
+mod lock;
 mod operations;
 mod package;
 mod paths;
 mod settings;
 
+pub use batch::{
+    ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
+    BatchCount, ClaimBatchOptions, ClaimedBatch, ClaimedBatchEntry, CountBatchOptions,
+    ReleaseBatchOptions, ReleaseBatchSummary, apply_batch_patch, claim_batch, count_batch,
+    release_batch,
+};
 pub use error::WorkspaceError;
 pub use knowledge::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexSummary,
@@ -25,7 +34,8 @@ pub use operations::{
     WriteTarget, export_translations, import_translations,
 };
 pub use package::{
-    SCHEMA_VERSION, TranslationManifest, TranslationManifestFile, TranslationRecord,
+    SCHEMA_VERSION, TranslationManifest, TranslationManifestFile, TranslationMeta,
+    TranslationRecord,
 };
 pub use settings::{
     LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,

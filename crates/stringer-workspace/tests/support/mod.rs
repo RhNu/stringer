@@ -44,8 +44,8 @@ pub fn write_entry_rows(package: &Path, kind: &str, rows: &str) {
 }
 
 fn entry_file_path(package: &Path, kind: &str, group: Option<&str>) -> PathBuf {
-    let manifest = json_file(&package.join("manifest.json"));
-    let file = manifest["files"]
+    let workspace = json_file(&package.join("workspace.json"));
+    let file = workspace["files"]
         .as_array()
         .unwrap()
         .iter()

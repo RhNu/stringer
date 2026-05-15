@@ -1,11 +1,12 @@
 use std::fs;
-use std::process::Command as ProcessCommand;
+use std::io::Write;
+use std::process::{Command as ProcessCommand, Stdio};
 
 use clap::{CommandFactory, Parser};
 use serde_json::Value;
 use stringer_cli::{
     AdaptCommand, AdaptFormatArg, Cli, Command, KnowledgeCommand, KnowledgeIndexCommand,
-    KnowledgeLookupFieldArg, KnowledgeLookupSourceArg, WorkspaceCommand,
+    KnowledgeLookupFieldArg, KnowledgeLookupSourceArg, WorkspaceBatchCommand, WorkspaceCommand,
 };
 
 #[test]
@@ -65,6 +66,99 @@ fn workspace_finalize_command_uses_root_workspace_and_override_root_paths() {
     assert_eq!(command.root.as_str(), "input");
     assert_eq!(command.workspace.as_str(), "translations");
     assert_eq!(command.override_root.as_str(), "override");
+}
+
+#[test]
+fn workspace_batch_commands_parse_workspace_file_limit_input_and_batch_id() {
+    let cli = Cli::parse_from([
+        "stringer",
+        "workspace",
+        "batch",
+        "claim",
+        "--workspace",
+        "translations",
+        "--file",
+        "entries/plugin/MyMod.esp/WEAP.jsonl",
+        "--limit",
+        "25",
+    ]);
+
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Batch { command } = command else {
+        panic!("expected workspace batch command");
+    };
+    let WorkspaceBatchCommand::Claim(command) = command else {
+        panic!("expected workspace batch claim command");
+    };
+    assert_eq!(command.workspace.as_str(), "translations");
+    assert_eq!(
+        command.file.as_deref(),
+        Some("entries/plugin/MyMod.esp/WEAP.jsonl")
+    );
+    assert_eq!(command.limit, 25);
+
+    let cli = Cli::parse_from([
+        "stringer",
+        "workspace",
+        "batch",
+        "apply",
+        "--workspace",
+        "translations",
+        "--input",
+        "-",
+    ]);
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Batch { command } = command else {
+        panic!("expected workspace batch command");
+    };
+    let WorkspaceBatchCommand::Apply(command) = command else {
+        panic!("expected workspace batch apply command");
+    };
+    assert_eq!(command.input.as_str(), "-");
+
+    let cli = Cli::parse_from([
+        "stringer",
+        "workspace",
+        "batch",
+        "release",
+        "--workspace",
+        "translations",
+        "--batch-id",
+        "b123-4",
+    ]);
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Batch { command } = command else {
+        panic!("expected workspace batch command");
+    };
+    let WorkspaceBatchCommand::Release(command) = command else {
+        panic!("expected workspace batch release command");
+    };
+    assert_eq!(command.batch_id, "b123-4");
+}
+
+#[test]
+fn workspace_upgrade_command_is_placeholder() {
+    let cli = Cli::parse_from([
+        "stringer",
+        "workspace",
+        "upgrade",
+        "--workspace",
+        "translations",
+    ]);
+
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Upgrade(command) = command else {
+        panic!("expected workspace upgrade command");
+    };
+    assert_eq!(command.workspace.as_str(), "translations");
 }
 
 #[test]
@@ -221,7 +315,97 @@ async fn adapt_import_command_writes_memory_jsonl() {
 }
 
 #[test]
-fn knowledge_annotate_command_uses_project_root_workspace_and_auto_fill_flag() {
+fn workspace_batch_claim_emits_json_and_apply_reads_stdin() {
+    let root = test_path("cli-batch-root");
+    let translations = test_path("cli-batch-translations");
+    let asset = root.join("Data/Interface/Translations/MyMod_English.txt");
+    fs::create_dir_all(asset.parent().unwrap()).unwrap();
+    fs::write(&asset, "$Title\tIron Sword\n").unwrap();
+
+    let open = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+        .args([
+            "workspace",
+            "open",
+            "--root",
+            root.as_str(),
+            "--workspace",
+            translations.as_str(),
+            "--game-release",
+            "SkyrimSe",
+            "--asset-language",
+            "English",
+            "--source-locale",
+            "en",
+            "--target-locale",
+            "zh-Hans",
+        ])
+        .output()
+        .unwrap();
+    assert!(open.status.success());
+
+    let claim = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+        .args([
+            "workspace",
+            "batch",
+            "claim",
+            "--workspace",
+            translations.as_str(),
+            "--limit",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(claim.status.success());
+    let claim_json: Value = serde_json::from_slice(&claim.stdout).unwrap();
+    let batch_id = claim_json["batch_id"].as_str().unwrap();
+    let entry_id = claim_json["entries"][0]["id"].as_str().unwrap();
+
+    let patch = serde_json::json!({
+        "batch_id": batch_id,
+        "entries": [
+            { "id": entry_id, "translation": "熟铁剑" }
+        ]
+    })
+    .to_string();
+    let mut apply = ProcessCommand::new(env!("CARGO_BIN_EXE_stringer"))
+        .args([
+            "workspace",
+            "batch",
+            "apply",
+            "--workspace",
+            translations.as_str(),
+            "--input",
+            "-",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    apply
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(patch.as_bytes())
+        .unwrap();
+    let apply = apply.wait_with_output().unwrap();
+    assert!(apply.status.success());
+    let summary: Value = serde_json::from_slice(&apply.stdout).unwrap();
+    assert_eq!(summary["applied_entries"], 1);
+
+    let workspace: Value =
+        serde_json::from_str(&fs::read_to_string(translations.join("workspace.json")).unwrap())
+            .unwrap();
+    let entry_path = translations.join(workspace["files"][0]["path"].as_str().unwrap());
+    let row: Value = serde_json::from_str(fs::read_to_string(entry_path).unwrap().trim()).unwrap();
+    assert_eq!(row["translation"], "熟铁剑");
+    assert_eq!(row["translation_meta"]["origin"], "agent");
+
+    let _ = fs::remove_dir_all(root);
+    let _ = fs::remove_dir_all(translations);
+}
+
+#[test]
+fn knowledge_annotate_command_uses_project_root_workspace_and_skip_fill_flag() {
     let cli = Cli::parse_from([
         "stringer",
         "knowledge",
@@ -230,7 +414,7 @@ fn knowledge_annotate_command_uses_project_root_workspace_and_auto_fill_flag() {
         "input",
         "--workspace",
         "translations",
-        "--auto-fill-memory",
+        "--skip-fill-memory",
     ]);
 
     let Command::Knowledge { command } = cli.command else {
@@ -241,7 +425,7 @@ fn knowledge_annotate_command_uses_project_root_workspace_and_auto_fill_flag() {
     };
     assert_eq!(command.project_root.as_deref(), Some("input".into()));
     assert_eq!(command.workspace.as_str(), "translations");
-    assert!(command.auto_fill_memory);
+    assert!(command.skip_fill_memory);
 }
 
 #[test]
@@ -254,10 +438,24 @@ fn knowledge_annotate_accepts_project_root_and_workspace() {
         "input",
         "--workspace",
         "translations",
-        "--auto-fill-memory",
+        "--skip-fill-memory",
     ]);
 
     assert!(result.is_ok());
+}
+
+#[test]
+fn knowledge_annotate_rejects_removed_auto_fill_memory_flag() {
+    let result = Cli::try_parse_from([
+        "stringer",
+        "knowledge",
+        "annotate",
+        "--workspace",
+        "translations",
+        "--auto-fill-memory",
+    ]);
+
+    assert!(result.is_err());
 }
 
 #[test]
@@ -493,6 +691,7 @@ fn root_help_explains_agent_workflow() {
     assert!(help.contains("Typical workflow"));
     assert!(help.contains("workspace open"));
     assert!(help.contains("workspace finalize"));
+    assert!(help.contains("workspace batch"));
     assert!(help.contains("adapt import"));
     assert!(help.contains("knowledge annotate"));
     assert!(help.contains("entries/**/*.jsonl"));
@@ -511,7 +710,8 @@ fn workspace_open_help_explains_workspace_output() {
         .render_long_help()
         .to_string();
 
-    assert!(help.contains("manifest.json"));
+    assert!(help.contains("workspace.json"));
+    assert!(help.contains("batches"));
     assert!(help.contains("--workspace"));
     assert!(help.contains("--game-release"));
     assert!(help.contains("source-locale"));

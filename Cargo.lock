@@ -783,6 +783,7 @@ dependencies = [
  "camino",
  "clap",
  "miette",
+ "serde",
  "serde_json",
  "stringer-adapt",
  "stringer-workspace",

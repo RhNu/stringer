@@ -52,10 +52,28 @@ cargo run -p stringer-cli -- knowledge annotate `
   --workspace path/to/translations
 ```
 
-3. 编辑 `path/to/translations/entries/**/*.jsonl`。每行是一个翻译记录，通常只需要填写或修改 `translation`：
+3. 统计并认领 Agent 翻译批次：
+
+```powershell
+cargo run -p stringer-cli -- workspace batch count `
+  --workspace path/to/translations `
+  --json
+
+cargo run -p stringer-cli -- workspace batch claim `
+  --workspace path/to/translations `
+  --limit 50
+```
+
+`claim` 会输出 JSON，包含 `batch_id`、原文、当前译文、上下文、`hints` 和 `diagnostics`。Agent 翻译后用一次 JSON patch 回写：
 
 ```json
-{"id":"plugin:Example.esp:WEAP:0x00001234:FULL:0","source":"Iron Sword","translation":"铁剑","context":{"record_type":"WEAP","subrecord":"FULL"}}
+{"batch_id":"b1770000000000-1234","entries":[{"id":"plugin:Example.esp:WEAP:0x00001234:FULL:0","translation":"铁剑"}]}
+```
+
+```powershell
+cargo run -p stringer-cli -- workspace batch apply `
+  --workspace path/to/translations `
+  --input path/to/patch.json
 ```
 
 4. 校验翻译工作区：
@@ -79,27 +97,31 @@ cargo run -p stringer-cli -- workspace finalize `
 
 ## 翻译工作区结构
 
-`workspace open` 输出的是一个目录，不是单个文件。该目录沿用翻译包布局：`manifest.json` 加 `entries/**/*.jsonl`。
+`workspace open` 输出的是一个目录，不是单个文件。Workspace v3 使用 `workspace.json`、`batches/` 和 `entries/**/*.jsonl`。
 
 ```text
 translations/
-  manifest.json
+  workspace.json
+  batches/
   entries/
     plugin/<asset>/<record_type>.jsonl
     pex/<asset>.jsonl
     scaleform/<asset>.jsonl
 ```
 
-`manifest.json` 记录 schema、游戏版本、资产语言、locale 和条目文件列表。`entries/**/*.jsonl` 每行一个记录，常见字段如下：
+`workspace.json` 记录 schema、游戏版本、资产语言、locale 和条目文件列表。旧版 `manifest.json` 工作区不会被 Workspace v3 命令读取；后续会通过 `workspace upgrade` 做显式迁移。`entries/**/*.jsonl` 每行一个记录，常见字段如下：
 
 - `id`：稳定条目 ID，完成工作区时用它定位源文本。
 - `source`：源文本，不建议改。
 - `translation`：译文；缺失时完成工作区会跳过该条。
+- `translation_meta`：译文来源，例如 `memory` 或 `agent`。
 - `context`：记录类型、子记录、Form ID、Scaleform key、PEX 调用位置等上下文。
 - `hints`：`knowledge annotate` 写入的术语和记忆提示。
 - `diagnostics`：`knowledge validate` 写入的校验结果。
 
 `workspace finalize` 只读取 `id` 和 `translation`。`hints`、`diagnostics` 和其他扩展字段不会影响写回。
+
+直接编辑 `entries/**/*.jsonl` 仍可作为人工 fallback，但推荐 Agent 使用 `workspace batch count/claim/apply/release`，避免破坏 JSONL 格式或频繁逐行调用 CLI。
 
 ## 配置
 
@@ -268,7 +290,7 @@ cargo run -p stringer-cli -- knowledge index rebuild --help
 - `workspace open`：扫描模组根目录，打开翻译工作区。
 - `workspace finalize`：读取翻译工作区，把译文写到覆盖目录。
 - `adapt import`：把 EET、EET XML、EET JSON 或 xTranslator SST 转成翻译记忆 JSONL。
-- `knowledge annotate`：给翻译工作区写入术语、记忆和知识提示，可选自动填充高置信记忆。
+- `knowledge annotate`：给翻译工作区写入术语、记忆和知识提示，默认自动填充高置信记忆；需要只写提示时加 `--skip-fill-memory`。
 - `knowledge validate`：重算诊断信息，检查术语、禁用译法、占位符、空译文等风险。
 - `knowledge lookup`：查询单条文本的提示和诊断；加 `--json` 适合 Agent 读取。
 - `knowledge index rebuild`：重建 `.stringer/indexes/knowledge.sqlite`。
