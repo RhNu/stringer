@@ -127,7 +127,8 @@ fn knowledge_term_upsert_and_delete_integrate_with_lookup() {
     assert!(upsert.status.success(), "{}", stderr(&upsert));
     let upsert_json: Value = serde_json::from_slice(&upsert.stdout).unwrap();
     assert_eq!(upsert_json["action"], "upserted");
-    assert_eq!(upsert_json["id"], "term:iron_sword");
+    assert_eq!(upsert_json["ids"][0], "term:iron_sword");
+    assert_eq!(upsert_json["count"], 1);
 
     let lookup = lookup_iron_sword(&project);
     assert!(lookup.status.success(), "{}", stderr(&lookup));

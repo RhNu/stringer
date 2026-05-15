@@ -5,9 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use camino::Utf8PathBuf;
 use stringer_workspace::{
     KnowledgeTermDeleteOptions, KnowledgeTermInput, KnowledgeTermStatus,
-    KnowledgeTermUpsertOptions, LoadKnowledgeLayersOptions, WorkspaceError, WorkspaceSettings,
-    delete_knowledge_term, load_knowledge_layers, parse_game_release_name, parse_language_name,
-    upsert_knowledge_term,
+    KnowledgeTermUpsertOptions, KnowledgeTermsUpsertOptions, LoadKnowledgeLayersOptions,
+    WorkspaceError, WorkspaceSettings, delete_knowledge_term, load_knowledge_layers,
+    parse_game_release_name, parse_language_name, upsert_knowledge_term, upsert_knowledge_terms,
 };
 
 #[test]
@@ -204,6 +204,66 @@ target = "重复铁剑"
     assert!(text.contains("熟铁剑"));
     assert!(!text.contains("旧铁剑"));
     assert!(!text.contains("重复铁剑"));
+}
+
+#[test]
+fn terms_upsert_replaces_existing_terms_and_appends_new_terms() {
+    let root = TempRoot::new("terms-upsert-batch");
+    let terms = root.path().join("knowledge/terms/project.toml");
+    write_text(
+        &terms,
+        r#"# project terminology
+
+[[terms]]
+id = "term:keep"
+source = "Dagger"
+target = "匕首"
+
+[[terms]]
+id = "term:iron_sword"
+source = "Iron Sword"
+target = "旧铁剑"
+
+[[terms]]
+id = "term:steel_sword"
+source = "Steel Sword"
+target = "旧钢剑"
+"#,
+    );
+
+    let mut steel = iron_sword_term("钢剑");
+    steel.id = "term:steel_sword".to_string();
+    steel.source = "Steel Sword".to_string();
+
+    let summary = upsert_knowledge_terms(KnowledgeTermsUpsertOptions {
+        project_root: utf8(root.path()),
+        file: None,
+        terms: vec![iron_sword_term("熟铁剑"), steel],
+        rebuild_index: false,
+        settings: Some(settings()),
+    })
+    .unwrap();
+
+    assert_eq!(summary.action, "upserted");
+    assert_eq!(summary.ids, ["term:iron_sword", "term:steel_sword"]);
+    assert_eq!(summary.count, 2);
+    assert!(summary.index_summary.is_none());
+
+    let text = fs::read_to_string(&terms).unwrap();
+    assert!(text.contains("# project terminology"));
+    assert!(text.contains("term:keep"));
+    assert_eq!(text.matches("term:iron_sword").count(), 1);
+    assert_eq!(text.matches("term:steel_sword").count(), 1);
+    assert!(!text.contains("旧铁剑"));
+    assert!(!text.contains("旧钢剑"));
+
+    let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
+        project_root: utf8(root.path()),
+        settings: settings(),
+        prefer_index: false,
+    })
+    .unwrap();
+    assert_eq!(loaded.knowledge.terms().len(), 3);
 }
 
 #[test]

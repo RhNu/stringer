@@ -42,7 +42,8 @@ pub use knowledge_lookup::{
 };
 pub use knowledge_terms::{
     KnowledgeTermDeleteOptions, KnowledgeTermEditSummary, KnowledgeTermInput, KnowledgeTermStatus,
-    KnowledgeTermUpsertOptions, delete_knowledge_term, upsert_knowledge_term,
+    KnowledgeTermUpsertOptions, KnowledgeTermsEditSummary, KnowledgeTermsUpsertOptions,
+    delete_knowledge_term, upsert_knowledge_term, upsert_knowledge_terms,
 };
 pub use operations::{
     ExportSummary, ExportTranslationsOptions, ImportSummary, ImportTranslationsOptions,

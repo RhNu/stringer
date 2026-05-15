@@ -32,7 +32,7 @@ Supported status values are `preferred`, `allowed`, and `forbidden`. Supported s
 
 MCP equivalents:
 
-- `knowledge_term_upsert` with `{ "project_root": "...", "term": { "id": "...", "source": "...", "target": "...", "status": "preferred", "scope": { "game": ["SkyrimSe"] } }, "rebuild_index": false }`
+- `knowledge_term_upsert` with `{ "project_root": "...", "terms": [{ "id": "...", "source": "...", "target": "...", "status": "preferred", "scope": { "game": ["SkyrimSe"] } }], "rebuild_index": false }`
 - `knowledge_term_delete` with `{ "project_root": "...", "id": "...", "rebuild_index": false }`
 
 ## Lookup

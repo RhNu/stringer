@@ -371,10 +371,10 @@ cargo run -p stringer-mcp -- serve
 
 - `workspace_inspect_files`、`workspace_inspect_entries`、`workspace_inspect_entry`、`workspace_inspect_batch`、`workspace_inspect_diagnostics`：只读查看工作区，不直接暴露原始 JSONL 文件操作。
 
-- `knowledge_term_upsert`：参数包含 `project_root`、可选 `file`、`term`、`rebuild_index` 和 `settings`。
+- `knowledge_term_upsert`：参数包含 `project_root`、可选 `file`、`terms`、`rebuild_index` 和 `settings`；单条更新也使用一个元素的 `terms` 数组。
 - `knowledge_term_delete`：参数包含 `project_root`、可选 `file`、`id`、`rebuild_index` 和 `settings`。
 
-`term.status` 使用 `preferred`、`allowed` 或 `forbidden`；`term.scope` 使用对象加字符串数组值，例如 `{ "game": ["SkyrimSe"], "kind": ["plugin"] }`。
+`terms[].status` 使用 `preferred`、`allowed` 或 `forbidden`；`terms[].scope` 使用对象加字符串数组值，例如 `{ "game": ["SkyrimSe"], "kind": ["plugin"] }`。
 
 ## Agent Skill
 

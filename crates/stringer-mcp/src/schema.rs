@@ -360,7 +360,7 @@ pub struct KnowledgeTermUpsertParams {
     pub project_root: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
-    pub term: KnowledgeTermParam,
+    pub terms: Vec<KnowledgeTermParam>,
     #[serde(default)]
     pub rebuild_index: bool,
     #[serde(default)]
@@ -461,6 +461,17 @@ pub struct KnowledgeIndexRebuildResult {
 pub struct KnowledgeTermEditResult {
     pub action: String,
     pub id: String,
+    pub path: String,
+    pub index_rebuilt: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub index_summary: Option<KnowledgeIndexRebuildResult>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct KnowledgeTermsEditResult {
+    pub action: String,
+    pub ids: Vec<String>,
+    pub count: usize,
     pub path: String,
     pub index_rebuilt: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -21,6 +21,15 @@ pub struct KnowledgeTermUpsertOptions {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnowledgeTermsUpsertOptions {
+    pub project_root: Utf8PathBuf,
+    pub file: Option<Utf8PathBuf>,
+    pub terms: Vec<KnowledgeTermInput>,
+    pub rebuild_index: bool,
+    pub settings: Option<WorkspaceSettings>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KnowledgeTermDeleteOptions {
     pub project_root: Utf8PathBuf,
     pub file: Option<Utf8PathBuf>,
@@ -65,18 +74,54 @@ pub struct KnowledgeTermEditSummary {
     pub index_summary: Option<KnowledgeIndexSummary>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnowledgeTermsEditSummary {
+    pub action: String,
+    pub ids: Vec<String>,
+    pub count: usize,
+    pub path: Utf8PathBuf,
+    pub index_summary: Option<KnowledgeIndexSummary>,
+}
+
 pub fn upsert_knowledge_term(
     options: KnowledgeTermUpsertOptions,
 ) -> Result<KnowledgeTermEditSummary, WorkspaceError> {
-    validate_scope(&options.term)?;
+    let id = options.term.id.clone();
+    let summary = upsert_knowledge_terms(KnowledgeTermsUpsertOptions {
+        project_root: options.project_root,
+        file: options.file,
+        terms: vec![options.term],
+        rebuild_index: options.rebuild_index,
+        settings: options.settings,
+    })?;
+    Ok(KnowledgeTermEditSummary {
+        action: summary.action,
+        id,
+        path: summary.path,
+        index_summary: summary.index_summary,
+    })
+}
+
+pub fn upsert_knowledge_terms(
+    options: KnowledgeTermsUpsertOptions,
+) -> Result<KnowledgeTermsEditSummary, WorkspaceError> {
+    for term in &options.terms {
+        validate_scope(term)?;
+    }
+
     let path = term_file_path(&options.project_root, options.file)?;
     let mut document = read_terms_document(&path)?;
-    let id = options.term.id.clone();
-    let table = term_table(&options.term);
     let terms = terms_array_mut(&mut document, &path)?;
+    let ids = options
+        .terms
+        .iter()
+        .map(|term| term.id.clone())
+        .collect::<Vec<_>>();
 
-    remove_matching_terms(terms, &id);
-    terms.push(table);
+    for term in &options.terms {
+        remove_matching_terms(terms, &term.id);
+        terms.push(term_table(term));
+    }
 
     write_terms_document(&path, &document)?;
     let index_summary = rebuild_index_if_requested(
@@ -84,9 +129,10 @@ pub fn upsert_knowledge_term(
         options.project_root,
         options.settings,
     )?;
-    Ok(KnowledgeTermEditSummary {
+    Ok(KnowledgeTermsEditSummary {
         action: "upserted".to_string(),
-        id,
+        count: ids.len(),
+        ids,
         path,
         index_summary,
     })

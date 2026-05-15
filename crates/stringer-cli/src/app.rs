@@ -631,7 +631,7 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
             let response = knowledge_term_upsert(KnowledgeTermUpsertRequest {
                 project_root: command.project_root.map(|path| path.to_string()),
                 file: command.file.map(|path| path.to_string()),
-                term: KnowledgeTermInput {
+                terms: vec![KnowledgeTermInput {
                     id: command.id,
                     source: command.source,
                     target: command.target,
@@ -641,7 +641,7 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
                     scope: parse_scope_json(command.scope_json)?,
                     tags: command.tags,
                     note: command.note,
-                },
+                }],
                 rebuild_index: command.rebuild_index,
                 settings: settings_input(
                     command.game_release,
@@ -653,7 +653,7 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
             if command.json {
                 print_json(&response)?;
             } else {
-                println!("upserted term {} in {}", response.id, response.path);
+                println!("upserted {} term(s) in {}", response.count, response.path);
             }
             Ok(())
         }

@@ -48,6 +48,22 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
             Some("object")
         );
     }
+    let batch_upsert_schema = tools
+        .tools
+        .iter()
+        .find(|tool| tool.name.as_ref() == "knowledge_term_upsert")
+        .unwrap()
+        .input_schema
+        .clone();
+    assert_eq!(
+        batch_upsert_schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .and_then(|properties| properties.get("terms"))
+            .and_then(|terms| terms.get("type"))
+            .and_then(Value::as_str),
+        Some("array")
+    );
 
     client.cancel().await.unwrap();
     server_handle.await.unwrap();
@@ -141,24 +157,36 @@ async fn mcp_knowledge_term_upsert_integrates_with_lookup() {
         .call_tool(
             CallToolRequestParams::new("knowledge_term_upsert").with_arguments(args(json!({
                 "project_root": path_string(project.path()),
-                "term": {
-                    "id": "term:iron_sword",
-                    "source": "Iron Sword",
-                    "target": "熟铁剑",
-                    "status": "preferred",
-                    "scope": { "game": ["SkyrimSe"], "kind": ["plugin"] }
-                }
+                "terms": [
+                    {
+                        "id": "term:iron_sword",
+                        "source": "Iron Sword",
+                        "target": "熟铁剑",
+                        "status": "preferred",
+                        "scope": { "game": ["SkyrimSe"], "kind": ["plugin"] }
+                    },
+                    {
+                        "id": "term:steel_sword",
+                        "source": "Steel Sword",
+                        "target": "钢剑",
+                        "status": "preferred",
+                        "scope": { "game": ["SkyrimSe"], "kind": ["plugin"] }
+                    }
+                ]
             }))),
         )
         .await
         .unwrap();
-    assert_eq!(upsert.structured_content.unwrap()["action"], "upserted");
+    let content = upsert.structured_content.unwrap();
+    assert_eq!(content["action"], "upserted");
+    assert_eq!(content["count"], 2);
+    assert_eq!(content["ids"][0], "term:iron_sword");
 
     let lookup = client
         .call_tool(
             CallToolRequestParams::new("knowledge_lookup").with_arguments(args(json!({
                 "project_root": path_string(project.path()),
-                "text": "Iron Sword",
+                "text": "Steel Sword",
                 "source": "terms",
                 "settings": {
                     "game_release": "SkyrimSe",
@@ -173,7 +201,7 @@ async fn mcp_knowledge_term_upsert_integrates_with_lookup() {
 
     let content = lookup.structured_content.unwrap();
     assert_eq!(content["total_matches"], 1);
-    assert_eq!(content["results"][0]["target"], "熟铁剑");
+    assert_eq!(content["results"][0]["target"], "钢剑");
 
     client.cancel().await.unwrap();
     server_handle.await.unwrap();

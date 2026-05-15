@@ -1,9 +1,10 @@
 use stringer_workspace::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeLookup, KnowledgeSummary,
     KnowledgeTermDeleteOptions, KnowledgeTermEditSummary, KnowledgeTermInput as WorkspaceTermInput,
-    KnowledgeTermStatus, KnowledgeTermUpsertOptions, LookupKnowledgeMode, LookupKnowledgeOptions,
-    ValidateTranslationsOptions, WorkspaceError, annotate_translations, build_knowledge_index,
-    delete_knowledge_term, lookup_knowledge, upsert_knowledge_term, validate_translations,
+    KnowledgeTermStatus, KnowledgeTermsEditSummary, KnowledgeTermsUpsertOptions,
+    LookupKnowledgeMode, LookupKnowledgeOptions, ValidateTranslationsOptions, WorkspaceError,
+    annotate_translations, build_knowledge_index, delete_knowledge_term, lookup_knowledge,
+    upsert_knowledge_terms, validate_translations,
 };
 
 use crate::dto::{
@@ -11,7 +12,7 @@ use crate::dto::{
     KnowledgeKindInput, KnowledgeLookupRequest, KnowledgeLookupResponse,
     KnowledgeLookupResultResponse, KnowledgeOperationResponse, KnowledgeTermDeleteRequest,
     KnowledgeTermEditResponse, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest,
-    KnowledgeValidateRequest,
+    KnowledgeTermsEditResponse, KnowledgeValidateRequest,
 };
 use crate::error::{AppError, serialize_value};
 use crate::paths::{path, project_root_or_current};
@@ -81,30 +82,24 @@ pub fn knowledge_index_rebuild(
 
 pub fn knowledge_term_upsert(
     request: KnowledgeTermUpsertRequest,
-) -> Result<KnowledgeTermEditResponse, AppError> {
+) -> Result<KnowledgeTermsEditResponse, AppError> {
     let project_root = project_root_or_current(request.project_root)?;
     let settings = request
         .rebuild_index
         .then(|| load_settings_for_project(&project_root, request.settings))
         .transpose()?;
-    let summary = upsert_knowledge_term(KnowledgeTermUpsertOptions {
+    let summary = upsert_knowledge_terms(KnowledgeTermsUpsertOptions {
         project_root,
         file: request.file.map(path),
-        term: WorkspaceTermInput {
-            id: request.term.id,
-            source: request.term.source,
-            target: request.term.target,
-            aliases: request.term.aliases,
-            case_sensitive: request.term.case_sensitive,
-            status: request.term.status.into(),
-            scope: request.term.scope,
-            tags: request.term.tags,
-            note: request.term.note,
-        },
+        terms: request
+            .terms
+            .into_iter()
+            .map(workspace_term_input)
+            .collect(),
         rebuild_index: request.rebuild_index,
         settings,
     })?;
-    Ok(knowledge_term_edit_response(summary))
+    Ok(knowledge_terms_edit_response(summary))
 }
 
 pub fn knowledge_term_delete(
@@ -158,6 +153,43 @@ fn knowledge_term_edit_response(summary: KnowledgeTermEditSummary) -> KnowledgeT
                 fts_rows: summary.fts_rows,
                 rebuild_reason: summary.rebuild_reason,
             }),
+    }
+}
+
+fn knowledge_terms_edit_response(summary: KnowledgeTermsEditSummary) -> KnowledgeTermsEditResponse {
+    let index_rebuilt = summary.index_summary.is_some();
+    KnowledgeTermsEditResponse {
+        action: summary.action,
+        ids: summary.ids,
+        count: summary.count,
+        path: summary.path.as_str().replace('\\', "/"),
+        index_rebuilt,
+        index_summary: summary
+            .index_summary
+            .map(|summary| KnowledgeIndexRebuildResponse {
+                files: summary.files,
+                terms: summary.terms,
+                memory: summary.memory,
+                rules: summary.rules,
+                diagnostics: summary.diagnostics,
+                indexed_items: summary.indexed_items,
+                fts_rows: summary.fts_rows,
+                rebuild_reason: summary.rebuild_reason,
+            }),
+    }
+}
+
+fn workspace_term_input(term: crate::dto::KnowledgeTermInput) -> WorkspaceTermInput {
+    WorkspaceTermInput {
+        id: term.id,
+        source: term.source,
+        target: term.target,
+        aliases: term.aliases,
+        case_sensitive: term.case_sensitive,
+        status: term.status.into(),
+        scope: term.scope,
+        tags: term.tags,
+        note: term.note,
     }
 }
 

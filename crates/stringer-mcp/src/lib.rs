@@ -238,14 +238,14 @@ impl StringerMcp {
 
     #[tool(
         name = "knowledge_term_upsert",
-        description = "Create or replace a project terminology entry.",
+        description = "Create or replace project terminology entries.",
         input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermUpsertParams>>(),
-        output_schema = compatible_output_schema_for_type::<KnowledgeTermEditResult>()
+        output_schema = compatible_output_schema_for_type::<KnowledgeTermsEditResult>()
     )]
     pub async fn knowledge_term_upsert(
         &self,
         Parameters(request): Parameters<KnowledgeTermUpsertParams>,
-    ) -> Result<Json<KnowledgeTermEditResult>, ErrorData> {
+    ) -> Result<Json<KnowledgeTermsEditResult>, ErrorData> {
         app_json(knowledge_term_upsert(app_request(request)?))
     }
 
