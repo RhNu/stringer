@@ -4,86 +4,102 @@ use clap::{CommandFactory, Parser};
 use serde_json::Value;
 use stringer_cli::{
     AdaptCommand, AdaptFormatArg, Cli, Command, KnowledgeCommand, KnowledgeIndexCommand,
-    KnowledgeLookupFieldArg, KnowledgeLookupSourceArg,
+    KnowledgeLookupFieldArg, KnowledgeLookupSourceArg, WorkspaceCommand,
 };
 
 #[test]
-fn export_command_uses_root_and_out_paths() {
+fn workspace_open_command_uses_root_workspace_and_settings() {
     let cli = Cli::parse_from([
         "stringer",
-        "export",
+        "workspace",
+        "open",
         "--root",
         "input",
-        "--out",
+        "--workspace",
         "translations",
+        "--game-release",
+        "SkyrimSe",
+        "--asset-language",
+        "English",
+        "--source-locale",
+        "en",
+        "--target-locale",
+        "zh-Hans",
     ]);
 
-    let Command::Export(command) = cli.command else {
-        panic!("expected export command");
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Open(command) = command else {
+        panic!("expected workspace open command");
     };
     assert_eq!(command.root.as_str(), "input");
-    assert_eq!(command.out.as_str(), "translations");
+    assert_eq!(command.workspace.as_str(), "translations");
+    assert_eq!(command.game_release.as_deref(), Some("SkyrimSe"));
+    assert_eq!(command.asset_language.as_deref(), Some("English"));
+    assert_eq!(command.source_locale.as_deref(), Some("en"));
+    assert_eq!(command.target_locale.as_deref(), Some("zh-Hans"));
 }
 
 #[test]
-fn import_command_uses_root_translations_and_override_root_paths() {
+fn workspace_finalize_command_uses_root_workspace_and_override_root_paths() {
     let cli = Cli::parse_from([
         "stringer",
-        "import",
+        "workspace",
+        "finalize",
         "--root",
         "input",
-        "--translations",
+        "--workspace",
         "translations",
         "--override-root",
         "override",
     ]);
 
-    let Command::Import(command) = cli.command else {
-        panic!("expected import command");
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Finalize(command) = command else {
+        panic!("expected workspace finalize command");
     };
     assert_eq!(command.root.as_str(), "input");
-    assert_eq!(command.translations.as_str(), "translations");
+    assert_eq!(command.workspace.as_str(), "translations");
     assert_eq!(command.override_root.as_str(), "override");
 }
 
 #[test]
-fn export_command_does_not_define_config_override_flag() {
-    let error = Cli::try_parse_from([
+fn top_level_export_command_is_removed() {
+    let mut command = Cli::command();
+    assert!(command.find_subcommand_mut("export").is_none());
+
+    let result = Cli::try_parse_from([
         "stringer",
         "export",
         "--root",
         "input",
-        "--out",
+        "--workspace",
         "translations",
-        "--config",
-        "config.toml",
-    ])
-    .unwrap_err();
+    ]);
 
-    assert!(error.to_string().contains("unexpected argument '--config'"));
+    assert!(result.is_err());
 }
 
 #[test]
-fn import_command_does_not_define_settings_flags() {
-    let error = Cli::try_parse_from([
+fn top_level_import_command_is_removed() {
+    let mut command = Cli::command();
+    assert!(command.find_subcommand_mut("import").is_none());
+
+    let result = Cli::try_parse_from([
         "stringer",
         "import",
         "--root",
         "input",
-        "--translations",
+        "--workspace",
         "translations",
         "--override-root",
         "override",
-        "--game-release",
-        "SkyrimSe",
-    ])
-    .unwrap_err();
+    ]);
 
-    assert!(
-        error
-            .to_string()
-            .contains("unexpected argument '--game-release'")
-    );
+    assert!(result.is_err());
 }
 
 #[test]
@@ -479,23 +495,46 @@ fn root_help_explains_agent_workflow() {
     let help = Cli::command().render_long_help().to_string();
 
     assert!(help.contains("Typical workflow"));
+    assert!(help.contains("workspace open"));
+    assert!(help.contains("workspace finalize"));
     assert!(help.contains("adapt import"));
     assert!(help.contains("knowledge annotate"));
     assert!(help.contains("entries/**/*.jsonl"));
+    assert!(!help.contains("stringer export --root"));
+    assert!(!help.contains("stringer import --root"));
 }
 
 #[test]
-fn export_help_explains_translation_package_output() {
+fn workspace_open_help_explains_workspace_output() {
     let mut command = Cli::command();
     let help = command
-        .find_subcommand_mut("export")
-        .expect("export subcommand exists")
+        .find_subcommand_mut("workspace")
+        .expect("workspace subcommand exists")
+        .find_subcommand_mut("open")
+        .expect("workspace open subcommand exists")
         .render_long_help()
         .to_string();
 
     assert!(help.contains("manifest.json"));
+    assert!(help.contains("--workspace"));
     assert!(help.contains("--game-release"));
     assert!(help.contains("source-locale"));
+}
+
+#[test]
+fn workspace_finalize_help_explains_override_output() {
+    let mut command = Cli::command();
+    let help = command
+        .find_subcommand_mut("workspace")
+        .expect("workspace subcommand exists")
+        .find_subcommand_mut("finalize")
+        .expect("workspace finalize subcommand exists")
+        .render_long_help()
+        .to_string();
+
+    assert!(help.contains("--workspace"));
+    assert!(help.contains("--override-root"));
+    assert!(help.contains("override directory"));
 }
 
 #[test]

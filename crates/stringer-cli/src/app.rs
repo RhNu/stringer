@@ -5,23 +5,24 @@ use stringer_adapt::{
     write_memory_jsonl,
 };
 use stringer_workspace::{
-    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, ExportTranslationsOptions,
-    ImportTranslationsOptions, KnowledgeLayerOverrides, LoadWorkspaceSettingsOptions,
-    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
-    PipelineEntryKind, ValidateTranslationsOptions, WorkspaceError, WorkspaceSettingsOverrides,
-    WriteTarget, annotate_translations, build_knowledge_index, export_translations,
-    game_release_name, import_translations, load_global_knowledge_root, load_workspace_settings,
-    lookup_knowledge, parse_game_release_name, parse_language_name, validate_translations,
+    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeLayerOverrides,
+    LoadWorkspaceSettingsOptions, LookupKnowledgeField, LookupKnowledgeMode,
+    LookupKnowledgeOptions, LookupKnowledgeSource, PipelineEntryKind, ValidateTranslationsOptions,
+    WorkspaceError, annotate_translations, build_knowledge_index, game_release_name,
+    load_global_knowledge_root, load_workspace_settings, lookup_knowledge, parse_game_release_name,
+    validate_translations,
 };
 use thiserror::Error;
 
+use crate::cli_settings::overrides;
 use crate::help::*;
+use crate::workspace::{WorkspaceCommand, run_workspace};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "stringer",
     version,
-    about = "Bethesda mod localization import, export, and knowledge tool",
+    about = "Bethesda mod localization workspace and knowledge tool",
     long_about = ROOT_LONG_ABOUT,
     after_long_help = ROOT_AFTER_LONG_HELP,
     arg_required_else_help = true
@@ -34,17 +35,14 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     #[command(
-        about = "Export a translation package from a mod root",
-        long_about = EXPORT_LONG_ABOUT,
-        after_long_help = EXPORT_AFTER_LONG_HELP
+        about = "Open and finalize translation workspaces",
+        long_about = WORKSPACE_LONG_ABOUT,
+        arg_required_else_help = true
     )]
-    Export(ExportCommand),
-    #[command(
-        about = "Apply a translation package into an override directory",
-        long_about = IMPORT_LONG_ABOUT,
-        after_long_help = IMPORT_AFTER_LONG_HELP
-    )]
-    Import(ImportCommand),
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommand,
+    },
     #[command(
         about = "Adapt external translation resources into Stringer memory",
         long_about = ADAPT_LONG_ABOUT,
@@ -63,77 +61,6 @@ pub enum Command {
         #[command(subcommand)]
         command: KnowledgeCommand,
     },
-}
-
-#[derive(Debug, Parser)]
-pub struct ExportCommand {
-    #[arg(
-        long,
-        value_name = "MOD_ROOT",
-        help = "Source mod root directory",
-        long_help = "Source mod root directory. Stringer recursively reads plugin, STRINGS, PEX, and Scaleform translation-table assets from this directory."
-    )]
-    pub root: Utf8PathBuf,
-    #[arg(
-        long,
-        value_name = "TRANSLATIONS",
-        help = "Translation package output directory",
-        long_help = "Translation package output directory. The command creates manifest.json and entries/**/*.jsonl. If the directory already exists, files managed by the export are rewritten with the current output."
-    )]
-    pub out: Utf8PathBuf,
-    #[arg(
-        long,
-        value_name = "GAME",
-        help = "Game release, for example SkyrimSe",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub game_release: Option<String>,
-    #[arg(
-        long,
-        value_name = "LANGUAGE",
-        help = "Bethesda asset language, for example English",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub asset_language: Option<String>,
-    #[arg(
-        long,
-        value_name = "LOCALE",
-        help = "Source locale, for example en",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub source_locale: Option<String>,
-    #[arg(
-        long,
-        value_name = "LOCALE",
-        help = "Target locale, for example zh-Hans",
-        long_help = SETTINGS_LONG_HELP
-    )]
-    pub target_locale: Option<String>,
-}
-
-#[derive(Debug, Parser)]
-pub struct ImportCommand {
-    #[arg(
-        long,
-        value_name = "MOD_ROOT",
-        help = "Source mod root directory",
-        long_help = "Source mod root directory. import rereads the original assets from this directory before applying translation fields to matching entries."
-    )]
-    pub root: Utf8PathBuf,
-    #[arg(
-        long,
-        value_name = "TRANSLATIONS",
-        help = "Translation package directory",
-        long_help = "Translation package directory. It must contain manifest.json and entries/**/*.jsonl. import only reads id and translation from each row."
-    )]
-    pub translations: Utf8PathBuf,
-    #[arg(
-        long,
-        value_name = "OVERRIDE_ROOT",
-        help = "Override output directory",
-        long_help = "Override output directory. Stringer writes only changed assets and requires this directory to be outside the source mod root."
-    )]
-    pub override_root: Utf8PathBuf,
 }
 
 #[derive(Debug, Subcommand)]
@@ -521,38 +448,8 @@ pub enum CliError {
 
 pub async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
-        Command::Export(command) => {
-            let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                config_path: None,
-                overrides: overrides(
-                    command.game_release,
-                    command.asset_language,
-                    command.source_locale,
-                    command.target_locale,
-                )?,
-            })?;
-            let summary = export_translations(ExportTranslationsOptions {
-                root: command.root,
-                out: command.out,
-                settings,
-            })
-            .await?;
-            println!("exported {} entries", summary.entries);
-            Ok(())
-        }
-        Command::Import(command) => {
-            let summary = import_translations(ImportTranslationsOptions {
-                root: command.root,
-                translations: command.translations,
-                target: WriteTarget::OverrideDirectory {
-                    root: command.override_root,
-                },
-            })
-            .await?;
-            println!(
-                "applied {} entries and wrote {} files",
-                summary.applied_entries, summary.written_files
-            );
+        Command::Workspace { command } => {
+            run_workspace(command).await?;
             Ok(())
         }
         Command::Adapt { command } => run_adapt(command).await,
@@ -827,24 +724,4 @@ fn default_adapt_memory_path(
         .join("memory")
         .join("adapt")
         .join(format!("{file_name}.jsonl")))
-}
-
-fn overrides(
-    game_release: Option<String>,
-    asset_language: Option<String>,
-    source_locale: Option<String>,
-    target_locale: Option<String>,
-) -> Result<WorkspaceSettingsOverrides, WorkspaceError> {
-    Ok(WorkspaceSettingsOverrides {
-        game_release: game_release
-            .as_deref()
-            .map(parse_game_release_name)
-            .transpose()?,
-        asset_language: asset_language
-            .as_deref()
-            .map(parse_language_name)
-            .transpose()?,
-        source_locale,
-        target_locale,
-    })
 }
