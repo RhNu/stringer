@@ -1,20 +1,17 @@
 [package]
-name = "stringer-cli"
+name = "stringer-app"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "stringer"
-path = "src/main.rs"
-
 [dependencies]
 camino.workspace = true
-clap = { workspace = true, features = ["derive"] }
-miette = { workspace = true, features = ["fancy"] }
-serde.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-stringer-app = { path = "../stringer-app" }
+stringer-adapt = { path = "../stringer-adapt" }
+stringer-workspace = { path = "../stringer-workspace" }
 thiserror.workspace = true
+
+[dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 
 mod app;
-mod cli_settings;
 mod help;
 mod workspace;
 

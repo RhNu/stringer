@@ -2,7 +2,9 @@
 members = [
     "crates/stringer-core",
     "crates/stringer-adapt",
+    "crates/stringer-app",
     "crates/stringer-cli",
+    "crates/stringer-mcp",
     "crates/stringer-pex",
     "crates/stringer-pipeline",
     "crates/stringer-plugin",
@@ -32,6 +34,7 @@ regex = "1.12.2"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 serde = "1.0.228"
 serde_json = "1.0.149"
+schemars = "1.1.0"
 thiserror = "2.0.18"
 tokio = "1.52.3"
 toml = "1.1.2"

@@ -295,6 +295,14 @@ cargo run -p stringer-cli -- knowledge index rebuild --help
 - `knowledge lookup`：查询单条文本的提示和诊断；加 `--json` 适合 Agent 读取。
 - `knowledge index rebuild`：重建 `.stringer/indexes/knowledge.sqlite`。
 
+## MCP
+
+Stringer 也提供本地 stdio MCP server，供支持 MCP 的 Agent 使用。MCP tools 覆盖已实现的 CLI 工作流，并返回结构化 JSON 结果。
+
+```powershell
+cargo run -p stringer-mcp -- serve
+```
+
 ## Workspace 布局
 
 - `crates/stringer-core`：共享文件、语言和字符串条目模型。
@@ -304,6 +312,8 @@ cargo run -p stringer-cli -- knowledge index rebuild --help
 - `crates/stringer-adapt`：旧翻译资源到翻译记忆的转换。
 - `crates/stringer-pipeline`：术语、记忆、规则和诊断管线。
 - `crates/stringer-workspace`：工作区 API、翻译工作区、知识层和打开/完成流程。
+- `crates/stringer-app`：CLI 和 MCP 共用的应用服务层。
 - `crates/stringer-cli`：命令行薄入口。
+- `crates/stringer-mcp`：本地 stdio MCP server，面向 Agent 暴露结构化 tools。
 - `xtask`：维护脚本，例如行数预算检查。
 - `docs`：设计和调研文档。

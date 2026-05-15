@@ -1,20 +1,20 @@
 [package]
-name = "stringer-cli"
+name = "stringer-mcp"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "stringer"
+name = "stringer-mcp"
 path = "src/main.rs"
 
 [dependencies]
-camino.workspace = true
-clap = { workspace = true, features = ["derive"] }
-miette = { workspace = true, features = ["fancy"] }
+rmcp = { version = "1.7.0", features = ["client", "server", "macros", "schemars", "transport-io"] }
+schemars = { workspace = true, features = ["derive"] }
 serde.workspace = true
 serde_json.workspace = true
 stringer-app = { path = "../stringer-app" }
-thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing.workspace = true
+tracing-subscriber = "0.3.20"

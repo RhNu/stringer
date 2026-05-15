@@ -1,19 +1,17 @@
+use std::fs;
+use std::io::{self, Read};
+
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
-use stringer_adapt::{
-    AdaptError, AdaptFormat, AdaptImportOptions, merge_memory_jsonl, read_adapt_catalog,
-    write_memory_jsonl,
-};
-use stringer_workspace::{
-    AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, LoadWorkspaceSettingsOptions,
-    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
-    PipelineEntryKind, ValidateTranslationsOptions, WorkspaceError, annotate_translations,
-    build_knowledge_index, game_release_name, load_global_knowledge_root, load_workspace_settings,
-    lookup_knowledge, parse_game_release_name, validate_translations,
+use stringer_app::{
+    AdaptFormatInput, AdaptImportRequest, AppError, KnowledgeAnnotateRequest,
+    KnowledgeIndexRebuildRequest, KnowledgeLookupFieldInput, KnowledgeLookupRequest,
+    KnowledgeLookupSourceInput, KnowledgeValidateRequest, SettingsInput, adapt_import,
+    knowledge_annotate, knowledge_index_rebuild, knowledge_lookup, knowledge_validate,
+    parse_knowledge_kind,
 };
 use thiserror::Error;
 
-use crate::cli_settings::overrides;
 use crate::help::*;
 use crate::workspace::{WorkspaceCommand, run_workspace};
 
@@ -376,10 +374,21 @@ pub struct KnowledgeIndexRebuildCommand {
 #[derive(Debug, Error)]
 pub enum CliError {
     #[error(transparent)]
-    Workspace(#[from] WorkspaceError),
+    App(#[from] AppError),
 
-    #[error(transparent)]
-    Adapt(#[from] AdaptError),
+    #[error("failed to read `{path}`: {source}")]
+    ReadInput {
+        path: Utf8PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("failed to process JSON `{path}`: {source}")]
+    Json {
+        path: Utf8PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
 }
 
 pub async fn run(cli: Cli) -> Result<(), CliError> {
@@ -396,41 +405,23 @@ pub async fn run(cli: Cli) -> Result<(), CliError> {
 async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
     match command {
         AdaptCommand::Import(command) => {
-            let input = command.input;
-            let game = command
-                .game
-                .as_deref()
-                .map(parse_game_release_name)
-                .transpose()?
-                .map(game_release_name)
-                .map(str::to_string);
-            let catalog = read_adapt_catalog(
-                &input,
-                AdaptImportOptions {
-                    source_locale: command.source_locale,
-                    target_locale: command.target_locale,
-                    game,
-                    format: command.format.into(),
-                },
-            )?;
-            let (summary, action, output) = if let Some(output) = command.out {
-                (write_memory_jsonl(&catalog, &output)?, "wrote", output)
-            } else {
-                let root =
-                    load_global_knowledge_root(None)?.ok_or(WorkspaceError::MissingSetting {
-                        name: "knowledge.global_root",
-                    })?;
-                let output = default_adapt_memory_path(&root, &input)?;
-                (merge_memory_jsonl(&catalog, &output)?, "merged", output)
-            };
+            let imported = adapt_import(AdaptImportRequest {
+                format: command.format.into(),
+                input: command.input.to_string(),
+                out: command.out.map(|path| path.to_string()),
+                source_locale: command.source_locale,
+                target_locale: command.target_locale,
+                game: command.game,
+            })
+            .await?;
             println!(
                 "adapted {} entries, {} {} memory entries to {}, skipped {} entries, reported {} diagnostics",
-                summary.total_entries,
-                action,
-                summary.written_entries,
-                output,
-                summary.skipped_entries,
-                summary.diagnostics
+                imported.summary.total_entries,
+                imported.action,
+                imported.summary.written_entries,
+                imported.output,
+                imported.summary.skipped_entries,
+                imported.summary.diagnostics
             );
             Ok(())
         }
@@ -440,11 +431,10 @@ async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
 async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
     match command {
         KnowledgeCommand::Annotate(command) => {
-            let project_root = project_root_or_current(command.project_root)?;
-            let summary = annotate_translations(AnnotateTranslationsOptions {
-                project_root,
-                workspace: command.workspace,
-                skip_memory_fill: command.skip_fill_memory,
+            let summary = knowledge_annotate(KnowledgeAnnotateRequest {
+                project_root: command.project_root.map(|path| path.to_string()),
+                workspace: command.workspace.to_string(),
+                skip_fill_memory: command.skip_fill_memory,
             })?;
             println!(
                 "annotated {} entries, added {} hints, wrote {} diagnostics, auto-filled {} entries",
@@ -453,10 +443,9 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             Ok(())
         }
         KnowledgeCommand::Validate(command) => {
-            let project_root = project_root_or_current(command.project_root)?;
-            let summary = validate_translations(ValidateTranslationsOptions {
-                project_root,
-                workspace: command.workspace,
+            let summary = knowledge_validate(KnowledgeValidateRequest {
+                project_root: command.project_root.map(|path| path.to_string()),
+                workspace: command.workspace.to_string(),
             })?;
             println!(
                 "validated {} entries and wrote {} diagnostics",
@@ -465,29 +454,23 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             Ok(())
         }
         KnowledgeCommand::Lookup(command) => {
-            let project_root = project_root_or_current(command.project_root)?;
-            let project_config_path = project_config_path(&project_root);
-            let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                user_config_path: None,
-                project_config_path,
-                overrides: overrides(
+            let lookup = knowledge_lookup(KnowledgeLookupRequest {
+                project_root: command.project_root.map(|path| path.to_string()),
+                text: command.text,
+                kind: parse_knowledge_kind(&command.kind)?,
+                record_type: command.record_type,
+                subrecord: command.subrecord,
+                settings: settings_input(
                     command.game_release,
                     command.asset_language,
                     command.source_locale,
                     command.target_locale,
-                )?,
-            })?;
-            let lookup = lookup_knowledge(LookupKnowledgeOptions {
-                project_root,
-                settings,
-                text: command.text,
-                kind: parse_pipeline_kind(command.kind)?,
-                context: lookup_context(command.record_type, command.subrecord),
-                mode: lookup_mode(command.regex),
-                source: command.source.into(),
-                field: command.field.into(),
+                ),
+                regex: command.regex,
                 limit: command.limit,
                 case_sensitive: command.case_sensitive,
+                source: command.source.into(),
+                field: command.field.into(),
             })?;
             if command.json {
                 println!(
@@ -495,12 +478,12 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
                     serde_json::to_string_pretty(&serde_json::json!({
                         "index_used": lookup.index_used,
                         "query": lookup.query,
-                        "mode": lookup.mode.as_str(),
+                        "mode": lookup.mode,
                         "total_matches": lookup.total_matches,
                         "results": lookup.results,
                         "diagnostics": lookup.diagnostics,
                     }))
-                    .map_err(|source| WorkspaceError::Json {
+                    .map_err(|source| CliError::Json {
                         path: Utf8PathBuf::from("<stdout>"),
                         source,
                     })?
@@ -537,21 +520,14 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
 async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliError> {
     match command {
         KnowledgeIndexCommand::Rebuild(command) => {
-            let project_root = project_root_or_current(command.project_root)?;
-            let project_config_path = project_config_path(&project_root);
-            let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                user_config_path: None,
-                project_config_path,
-                overrides: overrides(
+            let summary = knowledge_index_rebuild(KnowledgeIndexRebuildRequest {
+                project_root: command.project_root.map(|path| path.to_string()),
+                settings: settings_input(
                     command.game_release,
                     command.asset_language,
                     command.source_locale,
                     command.target_locale,
-                )?,
-            })?;
-            let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-                project_root,
-                settings,
+                ),
             })?;
             println!(
                 "indexed {} files, {} terms, {} memory entries, {} rules, {} diagnostics",
@@ -562,22 +538,7 @@ async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliEr
     }
 }
 
-fn parse_pipeline_kind(value: String) -> Result<PipelineEntryKind, WorkspaceError> {
-    PipelineEntryKind::from_package_kind(&value).ok_or(WorkspaceError::InvalidSetting {
-        name: "kind",
-        value,
-    })
-}
-
-fn lookup_mode(regex: bool) -> LookupKnowledgeMode {
-    if regex {
-        LookupKnowledgeMode::Regex
-    } else {
-        LookupKnowledgeMode::Contains
-    }
-}
-
-impl From<KnowledgeLookupSourceArg> for LookupKnowledgeSource {
+impl From<KnowledgeLookupSourceArg> for KnowledgeLookupSourceInput {
     fn from(value: KnowledgeLookupSourceArg) -> Self {
         match value {
             KnowledgeLookupSourceArg::All => Self::All,
@@ -587,7 +548,7 @@ impl From<KnowledgeLookupSourceArg> for LookupKnowledgeSource {
     }
 }
 
-impl From<KnowledgeLookupFieldArg> for LookupKnowledgeField {
+impl From<KnowledgeLookupFieldArg> for KnowledgeLookupFieldInput {
     fn from(value: KnowledgeLookupFieldArg) -> Self {
         match value {
             KnowledgeLookupFieldArg::Both => Self::Both,
@@ -597,10 +558,10 @@ impl From<KnowledgeLookupFieldArg> for LookupKnowledgeField {
     }
 }
 
-impl From<AdaptFormatArg> for AdaptFormat {
+impl From<AdaptFormatArg> for AdaptFormatInput {
     fn from(value: AdaptFormatArg) -> Self {
         match value {
-            AdaptFormatArg::Eet => Self::EetBinary,
+            AdaptFormatArg::Eet => Self::Eet,
             AdaptFormatArg::EetXml => Self::EetXml,
             AdaptFormatArg::EetJson => Self::EetJson,
             AdaptFormatArg::XtSst => Self::XtSst,
@@ -608,46 +569,44 @@ impl From<AdaptFormatArg> for AdaptFormat {
     }
 }
 
-fn lookup_context(record_type: Option<String>, subrecord: Option<String>) -> Vec<(String, String)> {
-    let mut context = Vec::new();
-    if let Some(record_type) = record_type {
-        context.push(("record_type".to_string(), record_type));
+fn settings_input(
+    game_release: Option<String>,
+    asset_language: Option<String>,
+    source_locale: Option<String>,
+    target_locale: Option<String>,
+) -> SettingsInput {
+    SettingsInput {
+        game_release,
+        asset_language,
+        source_locale,
+        target_locale,
     }
-    if let Some(subrecord) = subrecord {
-        context.push(("subrecord".to_string(), subrecord));
-    }
-    context
 }
 
-fn project_config_path(root: &Utf8PathBuf) -> Option<Utf8PathBuf> {
-    let path = root.join("stringer.toml");
-    path.exists().then_some(path)
-}
-
-fn project_root_or_current(root: Option<Utf8PathBuf>) -> Result<Utf8PathBuf, WorkspaceError> {
-    if let Some(root) = root {
-        return Ok(root);
+pub(crate) fn read_input(path: &Utf8PathBuf) -> Result<String, CliError> {
+    if path.as_str() == "-" {
+        let mut text = String::new();
+        io::stdin()
+            .read_to_string(&mut text)
+            .map_err(|source| CliError::ReadInput {
+                path: path.clone(),
+                source,
+            })?;
+        return Ok(text);
     }
-    let current =
-        std::env::current_dir().map_err(|source| WorkspaceError::CurrentDirectory { source })?;
-    Utf8PathBuf::from_path_buf(current).map_err(|path| WorkspaceError::InvalidLogicalPath {
-        path: path.display().to_string(),
-        message: "current directory is not valid UTF-8".to_string(),
+    fs::read_to_string(path).map_err(|source| CliError::ReadInput {
+        path: path.clone(),
+        source,
     })
 }
 
-fn default_adapt_memory_path(
-    root: &Utf8PathBuf,
-    input: &Utf8PathBuf,
-) -> Result<Utf8PathBuf, WorkspaceError> {
-    let file_name = input
-        .file_name()
-        .ok_or_else(|| WorkspaceError::InvalidLogicalPath {
-            path: input.to_string(),
-            message: "adapt input path must include a file name".to_string(),
-        })?;
-    Ok(root
-        .join("memory")
-        .join("adapt")
-        .join(format!("{file_name}.jsonl")))
+pub(crate) fn print_json(value: &impl serde::Serialize) -> Result<(), CliError> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).map_err(|source| CliError::Json {
+            path: Utf8PathBuf::from("<stdout>"),
+            source,
+        })?
+    );
+    Ok(())
 }

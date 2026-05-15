@@ -1,16 +1,14 @@
-use std::fs;
-use std::io::{self, Read};
-
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
-use stringer_workspace::{
-    ApplyBatchPatchInput, ApplyBatchPatchOptions, ClaimBatchOptions, CountBatchOptions,
-    ExportTranslationsOptions, ImportTranslationsOptions, LoadWorkspaceSettingsOptions,
-    ReleaseBatchOptions, WorkspaceError, WriteTarget, apply_batch_patch, claim_batch, count_batch,
-    export_translations, import_translations, load_workspace_settings, release_batch,
+use stringer_app::{
+    SettingsInput, WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest,
+    WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchReleaseRequest,
+    WorkspaceFinalizeRequest, WorkspaceOpenRequest, workspace_batch_apply, workspace_batch_claim,
+    workspace_batch_count, workspace_batch_release, workspace_finalize, workspace_open,
+    workspace_upgrade_unsupported,
 };
 
-use crate::cli_settings::overrides;
+use crate::app::{CliError, print_json, read_input};
 use crate::help::*;
 
 #[derive(Debug, Subcommand)]
@@ -218,35 +216,28 @@ pub struct WorkspaceUpgradeCommand {
     pub workspace: Utf8PathBuf,
 }
 
-pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), WorkspaceError> {
+pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), CliError> {
     match command {
         WorkspaceCommand::Open(command) => {
-            let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
-                user_config_path: None,
-                project_config_path: project_config_path(&command.root),
-                overrides: overrides(
+            let summary = workspace_open(WorkspaceOpenRequest {
+                root: command.root.to_string(),
+                workspace: command.workspace.to_string(),
+                settings: settings_input(
                     command.game_release,
                     command.asset_language,
                     command.source_locale,
                     command.target_locale,
-                )?,
-            })?;
-            let summary = export_translations(ExportTranslationsOptions {
-                root: command.root,
-                out: command.workspace,
-                settings,
+                ),
             })
             .await?;
             println!("opened workspace with {} entries", summary.entries);
             Ok(())
         }
         WorkspaceCommand::Finalize(command) => {
-            let summary = import_translations(ImportTranslationsOptions {
-                root: command.root,
-                translations: command.workspace,
-                target: WriteTarget::OverrideDirectory {
-                    root: command.override_root,
-                },
+            let summary = workspace_finalize(WorkspaceFinalizeRequest {
+                root: command.root.to_string(),
+                workspace: command.workspace.to_string(),
+                override_root: command.override_root.to_string(),
             })
             .await?;
             println!(
@@ -256,19 +247,17 @@ pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), WorkspaceErr
             Ok(())
         }
         WorkspaceCommand::Batch { command } => run_workspace_batch(command),
-        WorkspaceCommand::Upgrade(command) => Err(WorkspaceError::InvalidTranslationPackagePath {
-            path: command.workspace.to_string(),
-            message: "workspace upgrade is not implemented; recreate/open a v3 workspace instead"
-                .to_string(),
-        }),
+        WorkspaceCommand::Upgrade(command) => {
+            Err(workspace_upgrade_unsupported(command.workspace.to_string()).into())
+        }
     }
 }
 
-fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), WorkspaceError> {
+fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
     match command {
         WorkspaceBatchCommand::Count(command) => {
-            let count = count_batch(CountBatchOptions {
-                workspace: command.workspace,
+            let count = workspace_batch_count(WorkspaceBatchCountRequest {
+                workspace: command.workspace.to_string(),
                 file: command.file,
             })?;
             if command.json {
@@ -287,8 +276,8 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), WorkspaceEr
             Ok(())
         }
         WorkspaceBatchCommand::Claim(command) => {
-            let claim = claim_batch(ClaimBatchOptions {
-                workspace: command.workspace,
+            let claim = workspace_batch_claim(WorkspaceBatchClaimRequest {
+                workspace: command.workspace.to_string(),
                 file: command.file,
                 limit: command.limit,
             })?;
@@ -296,21 +285,28 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), WorkspaceEr
         }
         WorkspaceBatchCommand::Apply(command) => {
             let input = read_input(&command.input)?;
-            let patch: ApplyBatchPatchInput =
-                serde_json::from_str(&input).map_err(|source| WorkspaceError::Json {
+            let patch: WorkspaceBatchApplyPatchInput =
+                serde_json::from_str(&input).map_err(|source| CliError::Json {
                     path: command.input.clone(),
                     source,
                 })?;
-            let summary = apply_batch_patch(ApplyBatchPatchOptions {
-                workspace: command.workspace,
+            let summary = workspace_batch_apply(WorkspaceBatchApplyRequest {
+                workspace: command.workspace.to_string(),
                 batch_id: patch.batch_id,
-                entries: patch.entries,
+                entries: patch
+                    .entries
+                    .into_iter()
+                    .map(|entry| WorkspaceBatchApplyEntry {
+                        id: entry.id,
+                        translation: entry.translation,
+                    })
+                    .collect(),
             })?;
             print_json(&summary)
         }
         WorkspaceBatchCommand::Release(command) => {
-            let summary = release_batch(ReleaseBatchOptions {
-                workspace: command.workspace,
+            let summary = workspace_batch_release(WorkspaceBatchReleaseRequest {
+                workspace: command.workspace.to_string(),
                 batch_id: command.batch_id,
             })?;
             print_json(&summary)
@@ -318,35 +314,29 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), WorkspaceEr
     }
 }
 
-fn read_input(path: &Utf8PathBuf) -> Result<String, WorkspaceError> {
-    if path.as_str() == "-" {
-        let mut text = String::new();
-        io::stdin()
-            .read_to_string(&mut text)
-            .map_err(|source| WorkspaceError::ReadFile {
-                path: path.clone(),
-                source,
-            })?;
-        return Ok(text);
+#[derive(Debug, serde::Deserialize)]
+struct WorkspaceBatchApplyPatchInput {
+    batch_id: String,
+    entries: Vec<WorkspaceBatchApplyPatchEntry>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct WorkspaceBatchApplyPatchEntry {
+    id: String,
+    #[serde(default)]
+    translation: Option<String>,
+}
+
+fn settings_input(
+    game_release: Option<String>,
+    asset_language: Option<String>,
+    source_locale: Option<String>,
+    target_locale: Option<String>,
+) -> SettingsInput {
+    SettingsInput {
+        game_release,
+        asset_language,
+        source_locale,
+        target_locale,
     }
-    fs::read_to_string(path).map_err(|source| WorkspaceError::ReadFile {
-        path: path.clone(),
-        source,
-    })
-}
-
-fn print_json(value: &impl serde::Serialize) -> Result<(), WorkspaceError> {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(value).map_err(|source| WorkspaceError::Json {
-            path: Utf8PathBuf::from("<stdout>"),
-            source,
-        })?
-    );
-    Ok(())
-}
-
-fn project_config_path(root: &Utf8PathBuf) -> Option<Utf8PathBuf> {
-    let path = root.join("stringer.toml");
-    path.exists().then_some(path)
 }
