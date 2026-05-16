@@ -1162,7 +1162,7 @@ dependencies = [
  "stringer-adapt",
  "stringer-knowledge",
  "stringer-pipeline",
- "stringer-workspace",
+ "stringer-workspace-api",
  "stringer-workspace-core",
  "thiserror 2.0.18",
  "tokio",
@@ -1206,7 +1206,7 @@ dependencies = [
  "stringer-pex",
  "stringer-pipeline",
  "stringer-plugin",
- "stringer-workspace",
+ "stringer-workspace-api",
  "stringer-workspace-core",
  "thiserror 2.0.18",
  "tokio",
@@ -1288,7 +1288,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "stringer-workspace"
+name = "stringer-workspace-api"
 version = "0.1.0"
 dependencies = [
  "bytes",

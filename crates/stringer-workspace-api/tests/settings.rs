@@ -1,6 +1,6 @@
 use stringer_core::Language;
 use stringer_plugin::GameRelease;
-use stringer_workspace::{
+use stringer_workspace_api::{
     LoadWorkspaceSettingsOptions, WorkspaceSettingsOverrides, load_global_knowledge_root,
     load_workspace_settings,
 };

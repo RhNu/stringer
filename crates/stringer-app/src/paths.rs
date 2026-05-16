@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use stringer_workspace::WorkspaceError;
+use stringer_workspace_api::WorkspaceError;
 
 pub(crate) fn path(value: String) -> Utf8PathBuf {
     Utf8PathBuf::from(value)

@@ -2,7 +2,7 @@ use camino::Utf8PathBuf;
 use stringer_adapt::AdaptFormat;
 use stringer_knowledge::{LookupKnowledgeField, LookupKnowledgeSource};
 use stringer_pipeline::PipelineEntryKind;
-use stringer_workspace::WorkspaceError;
+use stringer_workspace_api::WorkspaceError;
 use stringer_workspace_core::{
     LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
     load_workspace_settings, parse_game_release_name, parse_language_name,

@@ -1,4 +1,4 @@
-use stringer_workspace::{
+use stringer_workspace_api::{
     ApplyBatchPatchEntry, ApplyBatchPatchOptions, BatchCount, ClaimBatchOptions, ClaimedBatch,
     CountBatchOptions, ExportTranslationsOptions, ImportTranslationsOptions,
     InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceBatchOptions,
@@ -76,7 +76,7 @@ pub fn workspace_batch_count(
 pub fn workspace_batch_claim(
     request: WorkspaceBatchClaimRequest,
 ) -> Result<WorkspaceBatchClaimResponse, AppError> {
-    claimed_batch_response(stringer_workspace::claim_batch(ClaimBatchOptions {
+    claimed_batch_response(stringer_workspace_api::claim_batch(ClaimBatchOptions {
         workspace: workspace_or_current(request.workspace)?,
         file: request.file,
         limit: request.limit,

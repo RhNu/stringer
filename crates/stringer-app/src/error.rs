@@ -2,7 +2,7 @@ use camino::Utf8PathBuf;
 use serde_json::{Value, json};
 use stringer_adapt::AdaptError;
 use stringer_knowledge::KnowledgeError;
-use stringer_workspace::WorkspaceError;
+use stringer_workspace_api::WorkspaceError;
 use stringer_workspace_core::WorkspaceCoreError;
 use thiserror::Error;
 

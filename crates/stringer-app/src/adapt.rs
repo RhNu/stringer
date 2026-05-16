@@ -1,7 +1,7 @@
 use stringer_adapt::{
     AdaptImportOptions, merge_memory_jsonl, read_adapt_catalog, write_memory_jsonl,
 };
-use stringer_workspace::{
+use stringer_workspace_api::{
     WorkspaceError, game_release_name, load_global_knowledge_root, parse_game_release_name,
 };
 

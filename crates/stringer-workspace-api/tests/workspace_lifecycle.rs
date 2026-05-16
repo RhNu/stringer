@@ -1,6 +1,6 @@
 use std::fs;
 
-use stringer_workspace::{
+use stringer_workspace_api::{
     ExportTranslationsOptions, ImportTranslationsOptions, export_translations, import_translations,
 };
 
@@ -178,7 +178,7 @@ async fn force_open_does_not_replace_generated_artifacts_when_workspace_is_locke
 
     assert!(matches!(
         error,
-        stringer_workspace::WorkspaceError::WorkspaceLocked { .. }
+        stringer_workspace_api::WorkspaceError::WorkspaceLocked { .. }
     ));
     assert!(workspace.join("workspace.json").exists());
     assert!(workspace.join("entries/stale.jsonl").exists());

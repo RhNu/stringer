@@ -1,4 +1,4 @@
-use stringer_workspace::{
+use stringer_workspace_api::{
     ApplyBatchPatchEntry, ApplyBatchPatchOptions, ClaimBatchOptions, CountBatchOptions,
     ExportTranslationsOptions, ReleaseBatchOptions, apply_batch_patch, claim_batch, count_batch,
     export_translations, release_batch,

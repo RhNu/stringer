@@ -1,4 +1,4 @@
-use stringer_workspace::{
+use stringer_workspace_api::{
     ClaimBatchOptions, ExportTranslationsOptions, InspectDiagnosticSeverity, InspectEntryStatus,
     InspectWorkspaceBatchOptions, InspectWorkspaceDiagnosticsOptions,
     InspectWorkspaceEntriesOptions, InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions,
@@ -236,7 +236,7 @@ async fn inspect_rejects_file_not_listed_in_workspace_manifest() {
 fn inspect_entries(
     translations: &std::path::Path,
     status: InspectEntryStatus,
-) -> stringer_workspace::WorkspaceInspectEntries {
+) -> stringer_workspace_api::WorkspaceInspectEntries {
     inspect_workspace_entries(InspectWorkspaceEntriesOptions {
         workspace: utf8(translations),
         file: Some(ENTRY_FILE.to_string()),

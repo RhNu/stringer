@@ -11,7 +11,7 @@ use stringer_pex::{
     PexValue,
 };
 use stringer_plugin::GameRelease;
-use stringer_workspace::WorkspaceSettings;
+use stringer_workspace_api::WorkspaceSettings;
 
 pub fn settings() -> WorkspaceSettings {
     WorkspaceSettings {

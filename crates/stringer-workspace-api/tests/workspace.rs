@@ -3,7 +3,7 @@ use std::fs;
 use serde_json::Value;
 use stringer_core::Language;
 use stringer_plugin::{GameRelease, StringsFile, StringsKind, write_strings_file};
-use stringer_workspace::{
+use stringer_workspace_api::{
     ExportTranslationsOptions, ImportTranslationsOptions, WorkspaceSettings, export_translations,
     import_translations,
 };

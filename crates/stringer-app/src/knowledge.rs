@@ -6,7 +6,7 @@ use stringer_knowledge::{
     ValidateTranslationsOptions, annotate_translations, build_knowledge_index,
     delete_knowledge_term, lookup_knowledge, upsert_knowledge_terms, validate_translations,
 };
-use stringer_workspace::WorkspaceError;
+use stringer_workspace_api::WorkspaceError;
 use stringer_workspace_core::{WorkspaceSettings, read_workspace_settings};
 
 use crate::dto::{

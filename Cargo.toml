@@ -11,7 +11,7 @@ members = [
     "crates/stringer-plugin",
     "crates/stringer-reader",
     "crates/stringer-scaleform",
-    "crates/stringer-workspace",
+    "crates/stringer-workspace-api",
     "crates/stringer-workspace-core",
     "crates/stringer-workspace-ops",
     "xtask",

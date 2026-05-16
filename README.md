@@ -383,7 +383,7 @@ Agent workflow guidance lives in `skills/stringer-workflows/`. Use that Skill fo
 - `crates/stringer-scaleform`：Scaleform 翻译表读写。
 - `crates/stringer-adapt`：旧翻译资源到翻译记忆的转换。
 - `crates/stringer-pipeline`：术语、记忆、规则和诊断管线。
-- `crates/stringer-workspace`：工作区 API、翻译工作区、知识层和打开/完成流程。
+- `crates/stringer-workspace-api`：工作区 API、翻译工作区、知识层和打开/完成流程。
 - `crates/stringer-app`：CLI 和 MCP 共用的应用服务层。
 - `crates/stringer-cli`：命令行薄入口。
 - `crates/stringer-mcp`：本地 stdio MCP server，面向 Agent 暴露结构化 tools。

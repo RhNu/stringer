@@ -8,7 +8,7 @@ use stringer_knowledge::{
     validate_translations,
 };
 use stringer_pipeline::PipelineEntryKind;
-use stringer_workspace::{
+use stringer_workspace_api::{
     ClaimBatchOptions, ExportTranslationsOptions, ImportTranslationsOptions, claim_batch,
     export_translations, import_translations,
 };
