@@ -36,7 +36,8 @@ For each entry:
 
 - Preserve placeholders, variables, menu tokens, newlines, and punctuation that carry UI meaning.
 - Use `hints` first for preferred terms and memory candidates.
-- Use `knowledge_lookup` when a source term is ambiguous, repeated, or contradicted by diagnostics.
+- Treat suspected terminology as lookup-required. Before choosing a translation for an uncertain name, proper noun, repeated phrase, or domain term, run `knowledge_lookup` and use the returned evidence with the entry context.
+- Do not write a canonical term into the workspace unless it has been verified by lookup evidence and context. Memory hits and prior knowledge are evidence to inspect, not permission to upsert terms by intuition.
 - Keep names consistent across entries in the same asset and record type.
 - Leave `translation` as `null` or omit it only when no safe translation can be produced.
 - Work from entries returned by `workspace_inspect_batch`. Do not open raw `entries/**/*.jsonl` files to translate.

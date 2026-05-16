@@ -7,7 +7,7 @@ Use Stringer MCP tools directly. They return structured JSON, so consume their f
 1. `workspace_open`: create or refresh the workspace from a read-only source root. Pass explicit `settings` when known.
 2. `knowledge_annotate`: write terminology, memory, and diagnostic hints into workspace rows.
 3. `workspace_inspect_files`, `workspace_batch_count`, and `workspace_inspect_diagnostics`: understand scope, remaining work, and risks without raw-file reads.
-4. Terminology pass before formal translation: use `knowledge_lookup` for recurring or ambiguous source terms, then `knowledge_term_upsert` or `knowledge_term_delete` to normalize workspace terminology.
+4. Terminology pass before formal translation: use `knowledge_lookup` for suspected, recurring, or ambiguous source terms, then `knowledge_term_upsert` or `knowledge_term_delete` only for terms verified by lookup evidence and entry context.
 5. `knowledge_annotate`: run again after terminology changes so later claims include updated hints.
 6. `workspace_batch_claim`: claim a bounded set of entries for translation ownership.
 7. `workspace_inspect_batch`: read claimed entries in pages.
