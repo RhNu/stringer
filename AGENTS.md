@@ -4,11 +4,11 @@
 
 Update this section when folder layout changes.
 
-- `/docs`: documentaion root.
+- `/docs`: documentation root.
 - `/crates`: Rust workspace crates.
 - `/skills`: project-local Codex skills for Stringer agent workflows.
 - `/xtask`: workspace automation and maintenance scripts.
-- `/temp`: temp folder containing temporary test fixture, reference codes; outside the folder should never reference or mention the specific sub path inside.
+- `/temp`: temp folder containing temporary test fixtures and reference code; files outside this folder should never reference or mention specific subpaths inside it.
 
 # Code Rules
 

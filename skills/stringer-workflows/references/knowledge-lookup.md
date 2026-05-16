@@ -8,7 +8,7 @@ Rebuild after changing workspace knowledge or importing memory:
 stringer knowledge index rebuild --workspace <WORKSPACE>
 ```
 
-Knowledge is layered as global first, then workspace. Workspace term, rule, and memory ids override matching global ids. `annotate`, `validate`, and `lookup` automatically refresh missing or stale layer indexes before using them.
+Knowledge is layered as global first, then workspace. Workspace term, rule, and memory ids override matching global ids. `annotate`, `validate`, and `lookup` automatically refresh missing, stale, or corrupt layer indexes before using them.
 
 ## Edit Workspace Terms
 

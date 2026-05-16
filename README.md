@@ -116,7 +116,7 @@ translations/
   output/
 ```
 
-`workspace.json` 记录 schema、只读 `source_root`、游戏版本、资产语言、locale 和条目文件列表。旧版 `manifest.json` 工作区不会被 Workspace v4 命令读取；后续会通过 `workspace upgrade` 做显式迁移。`entries/**/*.jsonl` 每行一个记录，常见字段如下：
+`workspace.json` 记录 schema、只读 `source_root`、游戏版本、资产语言、locale 和条目文件列表。旧版 `manifest.json` 工作区不会被 Workspace v4 命令读取；当前 `workspace upgrade` 只报告迁移尚未实现，旧工作区需要用 `workspace open` 重建。`entries/**/*.jsonl` 每行一个记录，常见字段如下：
 
 - `id`：稳定条目 ID，完成工作区时用它定位源文本。
 - `source`：源文本，不建议改。
@@ -246,7 +246,7 @@ cargo run -p stringer-cli -- knowledge index rebuild `
   --workspace path/to/translations
 ```
 
-普通 `annotate`、`validate` 和 `lookup` 会优先使用新鲜索引；索引缺失或过期时会回退到文件知识库，并报告 `knowledge.index_stale`。
+普通 `annotate`、`validate` 和 `lookup` 会优先使用派生索引；索引缺失、过期或损坏时会按层自动重建后再使用。显式运行 `knowledge index rebuild` 适合在导入旧资源或批量编辑知识库后提前刷新全局和 workspace 索引。
 
 ### 编辑 Workspace 术语
 
@@ -333,6 +333,7 @@ cargo run -p stringer-cli -- --help
 ```powershell
 cargo run -p stringer-cli -- workspace open --help
 cargo run -p stringer-cli -- workspace finalize --help
+cargo run -p stringer-cli -- workspace upgrade --help
 cargo run -p stringer-cli -- adapt import --help
 cargo run -p stringer-cli -- knowledge annotate --help
 cargo run -p stringer-cli -- knowledge validate --help
@@ -346,6 +347,7 @@ cargo run -p stringer-cli -- knowledge term delete --help
 
 - `workspace open`：从只读 source root 扫描资产，打开翻译工作区。
 - `workspace finalize`：读取翻译工作区，把译文写到输出目录。
+- `workspace upgrade`：当前仅报告旧 `manifest.json` 工作区迁移未实现；需要重建旧工作区。
 - `workspace inspect`：只读查看 entry files、条目、batch 和 diagnostics，默认输出 JSON。
 - `adapt import`：把 EET、EET XML、EET JSON 或 xTranslator SST 转成翻译记忆 JSONL。
 - `knowledge annotate`：给翻译工作区写入术语、记忆和知识提示，默认自动填充高置信记忆；需要只写提示时加 `--skip-fill-memory`。
@@ -377,16 +379,20 @@ Agent workflow guidance lives in `skills/stringer-workflows/`. Use that Skill fo
 
 ## Workspace 布局
 
-- `crates/stringer-core`：共享文件、语言和字符串条目模型。
-- `crates/stringer-plugin`：Bethesda plugin 和 STRINGS 读写。
-- `crates/stringer-pex`：PEX 字符串读写。
-- `crates/stringer-scaleform`：Scaleform 翻译表读写。
 - `crates/stringer-adapt`：旧翻译资源到翻译记忆的转换。
-- `crates/stringer-pipeline`：术语、记忆、规则和诊断管线。
-- `crates/stringer-workspace-api`：工作区 API、翻译工作区、知识层和打开/完成流程。
 - `crates/stringer-app`：CLI 和 MCP 共用的应用服务层。
 - `crates/stringer-cli`：命令行薄入口。
+- `crates/stringer-core`：共享文件、语言、诊断和字符串条目模型。
+- `crates/stringer-knowledge`：术语、翻译记忆、规则、lookup 和派生索引。
 - `crates/stringer-mcp`：本地 stdio MCP server，面向 Agent 暴露结构化 tools。
+- `crates/stringer-pex`：PEX 字符串读写。
+- `crates/stringer-pipeline`：术语、记忆、规则和诊断处理管线。
+- `crates/stringer-plugin`：Bethesda plugin 和 STRINGS 读写。
+- `crates/stringer-reader`：扫描模组目录、BSA/BA2 归档和 loose text assets。
+- `crates/stringer-scaleform`：Scaleform 翻译表读写。
+- `crates/stringer-workspace-api`：工作区生命周期 API 和对外 Rust facade。
+- `crates/stringer-workspace-core`：workspace package、settings、lock 和共享基础设施。
+- `crates/stringer-workspace-ops`：workspace inspect 和 batch 操作。
 - `skills`：项目内 Agent 工作流 Skill。
 - `xtask`：维护脚本，例如行数预算检查。
 - `docs`：设计和调研文档。
