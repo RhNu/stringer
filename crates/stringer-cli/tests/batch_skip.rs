@@ -5,7 +5,7 @@ use std::process::{Command as ProcessCommand, Stdio};
 use serde_json::Value;
 
 #[test]
-fn workspace_batch_apply_can_skip_entries_without_writing_translation() {
+fn workspace_batch_submit_can_skip_entries_without_writing_translation() {
     let root = test_path("cli-batch-skip-root");
     let translations = test_path("cli-batch-skip-translations");
     let asset = root.join("Data/Interface/Translations/MyMod_English.txt");
@@ -52,12 +52,12 @@ fn workspace_batch_apply_can_skip_entries_without_writing_translation() {
     let claim_json: Value = serde_json::from_slice(&claim.stdout).unwrap();
     let batch_id = claim_json["batch_id"].as_str().unwrap();
 
-    let inspected = assert_success(
+    let read = assert_success(
         stringer_command()
             .args([
                 "workspace",
-                "inspect",
                 "batch",
+                "read",
                 "--workspace",
                 translations.as_str(),
                 "--batch-id",
@@ -66,19 +66,21 @@ fn workspace_batch_apply_can_skip_entries_without_writing_translation() {
             .output()
             .unwrap(),
     );
-    let inspected_json: Value = serde_json::from_slice(&inspected.stdout).unwrap();
-    let entry_id = inspected_json["entries"][0]["id"].as_str().unwrap();
+    let read_json: Value = serde_json::from_slice(&read.stdout).unwrap();
+    let key = read_json["entries"][0]["key"].as_str().unwrap();
+    let revision = read_json["revision"].as_u64().unwrap();
 
     let patch = serde_json::json!({
         "batch_id": batch_id,
-        "entries": [{ "id": entry_id, "skip": true, "skip_reason": "not_translatable" }]
+        "revision": revision,
+        "entries": [{ "key": key, "action": "skip", "skip_reason": "not_translatable" }]
     })
     .to_string();
-    let mut apply = stringer_command()
+    let mut submit = stringer_command()
         .args([
             "workspace",
             "batch",
-            "apply",
+            "submit",
             "--workspace",
             translations.as_str(),
             "--input",
@@ -88,14 +90,14 @@ fn workspace_batch_apply_can_skip_entries_without_writing_translation() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    apply
+    submit
         .stdin
         .as_mut()
         .unwrap()
         .write_all(patch.as_bytes())
         .unwrap();
-    let apply = assert_success(apply.wait_with_output().unwrap());
-    let summary: Value = serde_json::from_slice(&apply.stdout).unwrap();
+    let submit = assert_success(submit.wait_with_output().unwrap());
+    let summary: Value = serde_json::from_slice(&submit.stdout).unwrap();
     assert_eq!(summary["applied_entries"], 1);
     assert_eq!(summary["remaining_entries"], 0);
 

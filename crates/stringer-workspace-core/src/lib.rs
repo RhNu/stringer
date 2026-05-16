@@ -8,7 +8,7 @@ mod package;
 mod settings;
 
 pub use batch_claims::{
-    BatchFile, BatchScope, batch_entry_ids, claimed_entry_batches, claimed_entry_ids,
+    BatchEntry, BatchFile, BatchScope, batch_entry_ids, claimed_entry_batches, claimed_entry_ids,
     read_batch_file, validate_batch_id,
 };
 pub use error::WorkspaceCoreError;

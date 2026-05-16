@@ -15,10 +15,11 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
 use stringer_app::{
     AppError, adapt_import, knowledge_annotate, knowledge_index_rebuild, knowledge_lookup,
-    knowledge_term_delete, knowledge_term_upsert, knowledge_validate, workspace_batch_apply,
-    workspace_batch_claim, workspace_batch_count, workspace_batch_release, workspace_finalize,
-    workspace_inspect_batch, workspace_inspect_diagnostics, workspace_inspect_entries,
-    workspace_inspect_entry, workspace_inspect_files, workspace_normalize, workspace_open,
+    knowledge_term_delete, knowledge_term_upsert, knowledge_validate, workspace_batch_claim,
+    workspace_batch_count, workspace_batch_detail, workspace_batch_export, workspace_batch_read,
+    workspace_batch_release, workspace_batch_submit, workspace_finalize,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
+    workspace_inspect_files, workspace_normalize, workspace_open,
 };
 
 pub use schema::*;
@@ -81,19 +82,6 @@ impl StringerMcp {
     }
 
     #[tool(
-        name = "workspace_batch_apply",
-        description = "Apply translations or mark entries skipped for a claimed batch.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchApplyParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchApplyResult>()
-    )]
-    pub async fn workspace_batch_apply(
-        &self,
-        Parameters(request): Parameters<WorkspaceBatchApplyParams>,
-    ) -> Result<Json<WorkspaceBatchApplyResult>, ErrorData> {
-        app_json(workspace_batch_apply(app_request(request)?))
-    }
-
-    #[tool(
         name = "workspace_batch_release",
         description = "Release a claimed batch without applying translations.",
         input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReleaseParams>>(),
@@ -104,6 +92,58 @@ impl StringerMcp {
         Parameters(request): Parameters<WorkspaceBatchReleaseParams>,
     ) -> Result<Json<WorkspaceBatchReleaseResult>, ErrorData> {
         app_json(workspace_batch_release(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_batch_read",
+        description = "Read compact entries from a claimed batch.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReadParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchReadResult>()
+    )]
+    pub async fn workspace_batch_read(
+        &self,
+        Parameters(request): Parameters<WorkspaceBatchReadParams>,
+    ) -> Result<Json<WorkspaceBatchReadResult>, ErrorData> {
+        app_json(workspace_batch_read(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_batch_detail",
+        description = "Read full detail for one or more claimed batch keys.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchDetailParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchDetailResult>()
+    )]
+    pub async fn workspace_batch_detail(
+        &self,
+        Parameters(request): Parameters<WorkspaceBatchDetailParams>,
+    ) -> Result<Json<WorkspaceBatchDetailResult>, ErrorData> {
+        app_json(workspace_batch_detail(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_batch_submit",
+        description = "Submit translate, skip, or pending actions for a claimed batch.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchSubmitParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchSubmitResult>()
+    )]
+    pub async fn workspace_batch_submit(
+        &self,
+        Parameters(request): Parameters<WorkspaceBatchSubmitParams>,
+    ) -> Result<Json<WorkspaceBatchSubmitResult>, ErrorData> {
+        app_json(workspace_batch_submit(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_batch_export",
+        description = "Export a claimed batch to an editable JSON or CSV patch file.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchExportParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchExportResult>()
+    )]
+    pub async fn workspace_batch_export(
+        &self,
+        Parameters(request): Parameters<WorkspaceBatchExportParams>,
+    ) -> Result<Json<WorkspaceBatchExportResult>, ErrorData> {
+        app_json(workspace_batch_export(app_request(request)?))
     }
 
     #[tool(
@@ -156,19 +196,6 @@ impl StringerMcp {
         Parameters(request): Parameters<WorkspaceInspectEntryParams>,
     ) -> Result<Json<WorkspaceInspectEntry>, ErrorData> {
         app_json(workspace_inspect_entry(app_request(request)?))
-    }
-
-    #[tool(
-        name = "workspace_inspect_batch",
-        description = "Read a claimed batch without applying or releasing it.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectBatchParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceInspectBatchResult>()
-    )]
-    pub async fn workspace_inspect_batch(
-        &self,
-        Parameters(request): Parameters<WorkspaceInspectBatchParams>,
-    ) -> Result<Json<WorkspaceInspectBatchResult>, ErrorData> {
-        app_json(workspace_inspect_batch(app_request(request)?))
     }
 
     #[tool(

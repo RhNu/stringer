@@ -49,6 +49,7 @@ pub fn workspace_with_rows(label: &str, rows: &str) -> WorkspaceFixture {
     }
 }
 
+#[allow(dead_code)]
 pub fn write_batch(workspace: &Path, batch_id: &str, entry_ids: &[&str]) {
     let ids = entry_ids
         .iter()
@@ -73,10 +74,10 @@ pub fn write_batch(workspace: &Path, batch_id: &str, entry_ids: &[&str]) {
 #[allow(dead_code)]
 pub fn rows() -> &'static str {
     concat!(
-        "{\"id\":\"scaleform:MyMod:$Title\",\"source\":\"Iron Sword\"}\n",
-        "{\"id\":\"scaleform:MyMod:$Desc\",\"source\":\"Steel Sword\",\"translation\":\"钢剑\",\"translation_meta\":{\"origin\":\"memory\"},\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"memory.conflict\",\"message\":\"check\"}]}\n",
-        "{\"id\":\"scaleform:MyMod:$Done\",\"source\":\"Done\",\"translation\":\"完成\",\"translation_meta\":{\"origin\":\"agent\"}}\n",
-        "{\"id\":\"scaleform:MyMod:$Warn\",\"source\":\"Needs Review\",\"diagnostics\":[{\"severity\":\"info\",\"code\":\"review.note\",\"message\":\"inspect\"}]}\n",
+        "{\"id\":\"scaleform:MyMod:$Title\",\"source\":\"Iron Sword\",\"context\":{\"key\":\"$Title\"}}\n",
+        "{\"id\":\"scaleform:MyMod:$Desc\",\"source\":\"Steel Sword\",\"translation\":\"钢剑\",\"translation_meta\":{\"origin\":\"memory\"},\"context\":{\"key\":\"$Desc\"},\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"memory.conflict\",\"message\":\"check\"}]}\n",
+        "{\"id\":\"scaleform:MyMod:$Done\",\"source\":\"Done\",\"translation\":\"完成\",\"translation_meta\":{\"origin\":\"agent\"},\"context\":{\"key\":\"$Done\"}}\n",
+        "{\"id\":\"scaleform:MyMod:$Warn\",\"source\":\"Needs Review\",\"context\":{\"key\":\"$Warn\"},\"diagnostics\":[{\"severity\":\"info\",\"code\":\"review.note\",\"message\":\"inspect\"}]}\n",
     )
 }
 

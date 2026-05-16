@@ -7,9 +7,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use stringer_workspace_core::fsutil::{replace_file, temp_path};
 use stringer_workspace_core::{
-    BatchFile, BatchScope, TranslationMeta, TranslationRecord, WorkspaceLock, claimed_entry_ids,
-    read_batch_file, read_translation_package_records, unix_ms, validate_batch_id,
-    write_translation_package_records,
+    BatchEntry, BatchFile, BatchScope, TranslationMeta, TranslationRecord, WorkspaceLock,
+    claimed_entry_ids, read_batch_file, read_translation_package_records, unix_ms,
+    validate_batch_id, write_translation_package_records,
 };
 
 use crate::WorkspaceOpsError;
@@ -26,6 +26,7 @@ pub struct CountBatchOptions {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct BatchCount {
     pub total: usize,
+    pub claimable: usize,
     pub empty: usize,
     pub memory_prefilled: usize,
     pub translated: usize,
@@ -44,7 +45,10 @@ pub struct ClaimBatchOptions {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ClaimedBatch {
     pub batch_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub revision: Option<u64>,
     pub claimed_entries: usize,
+    pub remaining_claimable: usize,
     pub scope: BatchScope,
 }
 
@@ -112,6 +116,9 @@ pub fn count_batch(options: CountBatchOptions) -> Result<BatchCount, WorkspaceOp
             if claimed.contains(&record.id) {
                 count.claimed += 1;
             }
+            if !claimed.contains(&record.id) && is_claim_eligible(record) {
+                count.claimable += 1;
+            }
             if !record.diagnostics.is_empty() {
                 count.diagnostics += 1;
             }
@@ -148,24 +155,40 @@ pub fn claim_batch(options: ClaimBatchOptions) -> Result<ClaimedBatch, Workspace
     if ids.is_empty() {
         return Ok(ClaimedBatch {
             batch_id: None,
+            revision: None,
             claimed_entries: 0,
+            remaining_claimable: 0,
             scope,
         });
     }
 
     let batch_id = next_batch_id(&options.workspace);
     let claimed_entries = ids.len();
+    let mut claimed_after = claimed.clone();
+    claimed_after.extend(ids.iter().cloned());
     let batch = BatchFile {
         schema_version: stringer_workspace_core::SCHEMA_VERSION,
+        batch_format_version: Some(2),
         batch_id: batch_id.clone(),
         created_at_unix_ms: unix_ms(),
+        revision: Some(1),
         scope: scope.clone(),
-        entry_ids: ids,
+        entries: ids
+            .into_iter()
+            .enumerate()
+            .map(|(index, id)| BatchEntry {
+                key: batch_key(index),
+                id,
+            })
+            .collect(),
+        entry_ids: Vec::new(),
     };
     write_batch_file(&options.workspace, &batch)?;
     Ok(ClaimedBatch {
         batch_id: Some(batch_id),
+        revision: Some(1),
         claimed_entries,
+        remaining_claimable: count_claimable_unclaimed(&package, file.as_deref(), &claimed_after)?,
         scope,
     })
 }
@@ -175,6 +198,7 @@ pub fn apply_batch_patch(
 ) -> Result<ApplyBatchPatchSummary, WorkspaceOpsError> {
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut batch = read_batch_file(&options.workspace, &options.batch_id)?;
+    let batch_ids = batch.remaining_ids();
     let mut seen = BTreeSet::new();
     for entry in &options.entries {
         if !seen.insert(entry.id.clone()) {
@@ -187,7 +211,7 @@ pub fn apply_batch_patch(
                 id: entry.id.clone(),
             });
         }
-        if !batch.entry_ids.contains(&entry.id) {
+        if !batch_ids.contains(&entry.id) {
             return Err(WorkspaceOpsError::BatchEntryNotClaimed {
                 batch_id: options.batch_id.clone(),
                 id: entry.id.clone(),
@@ -230,13 +254,16 @@ pub fn apply_batch_patch(
         .iter()
         .map(|entry| entry.id.as_str())
         .collect::<BTreeSet<_>>();
-    batch
-        .entry_ids
-        .retain(|id| !applied_ids.contains(id.as_str()));
-    let remaining = batch.entry_ids.len();
+    let mut keyed_entries = batch.keyed_entries();
+    keyed_entries.retain(|entry| !applied_ids.contains(entry.id.as_str()));
+    batch.entries = keyed_entries;
+    batch.entry_ids.clear();
+    batch.batch_format_version = Some(2);
+    batch.revision = Some(batch.revision().saturating_add(1));
+    let remaining = batch.entries.len();
 
     write_translation_package_records(&options.workspace, &package)?;
-    if batch.entry_ids.is_empty() {
+    if batch.entries.is_empty() {
         remove_batch_file(&options.workspace, &options.batch_id)?;
     } else {
         write_batch_file(&options.workspace, &batch)?;
@@ -252,7 +279,7 @@ pub fn release_batch(
 ) -> Result<ReleaseBatchSummary, WorkspaceOpsError> {
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let batch = read_batch_file(&options.workspace, &options.batch_id)?;
-    let released_entries = batch.entry_ids.len();
+    let released_entries = batch.remaining_ids().len();
     remove_batch_file(&options.workspace, &options.batch_id)?;
     Ok(ReleaseBatchSummary { released_entries })
 }
@@ -278,6 +305,24 @@ fn validate_file_filter(
         }
         .into(),
     )
+}
+
+fn count_claimable_unclaimed(
+    package: &stringer_workspace_core::TranslationPackageRecords,
+    file: Option<&str>,
+    existing_claimed: &BTreeSet<String>,
+) -> Result<usize, WorkspaceOpsError> {
+    let mut claimable = 0;
+    for file_records in package.files.iter().filter(|file_records| {
+        file.is_none_or(|expected| file_records.manifest_file.path == expected)
+    }) {
+        for record in &file_records.records {
+            if !existing_claimed.contains(&record.id) && is_claim_eligible(record) {
+                claimable += 1;
+            }
+        }
+    }
+    Ok(claimable)
 }
 
 fn is_claim_eligible(record: &TranslationRecord) -> bool {
@@ -383,4 +428,8 @@ fn write_json_atomic<T: Serialize>(path: &Utf8Path, value: &T) -> Result<(), Wor
 
 fn normalize_file_filter(file: Option<&str>) -> Option<String> {
     file.map(|value| value.replace('\\', "/"))
+}
+
+fn batch_key(index: usize) -> String {
+    format!("e{:03}", index + 1)
 }

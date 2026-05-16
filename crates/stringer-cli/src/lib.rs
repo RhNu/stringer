@@ -4,6 +4,7 @@ mod app;
 mod feedback;
 mod help;
 mod workspace;
+mod workspace_batch_input;
 
 pub use app::{
     AdaptCommand, AdaptFormatArg, AdaptImportCommand, Cli, CliError, Command,
@@ -14,10 +15,11 @@ pub use app::{
 };
 pub use feedback::ProgressModeArg;
 pub use workspace::{
-    InspectDiagnosticSeverityArg, InspectEntryStatusArg, WorkspaceBatchApplyCommand,
-    WorkspaceBatchClaimCommand, WorkspaceBatchCommand, WorkspaceBatchCountCommand,
-    WorkspaceBatchReleaseCommand, WorkspaceCommand, WorkspaceFinalizeCommand,
-    WorkspaceInspectBatchCommand, WorkspaceInspectCommand, WorkspaceInspectDiagnosticsCommand,
+    InspectDiagnosticSeverityArg, InspectEntryStatusArg, WorkspaceBatchClaimCommand,
+    WorkspaceBatchCommand, WorkspaceBatchCountCommand, WorkspaceBatchDetailCommand,
+    WorkspaceBatchExportCommand, WorkspaceBatchExportFormatArg, WorkspaceBatchReadCommand,
+    WorkspaceBatchReleaseCommand, WorkspaceBatchSubmitCommand, WorkspaceCommand,
+    WorkspaceFinalizeCommand, WorkspaceInspectCommand, WorkspaceInspectDiagnosticsCommand,
     WorkspaceInspectEntriesCommand, WorkspaceInspectEntryCommand, WorkspaceInspectFilesCommand,
     WorkspaceNormalizeCommand, WorkspaceNormalizeEncodingArg, WorkspaceOpenCommand,
     WorkspaceUpgradeCommand,

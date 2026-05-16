@@ -5,12 +5,13 @@ use serde_json::Value;
 use stringer_app::{
     AdaptFormatInput, AdaptImportRequest, AppError, InspectDiagnosticSeverityInput,
     InspectEntryStatusInput, KnowledgeTermInput, KnowledgeTermStatusInput,
-    KnowledgeTermUpsertRequest, SettingsInput, StringerApp, WorkspaceBatchApplyEntry,
-    WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest,
-    WorkspaceFinalizeRequest, WorkspaceInspectBatchRequest, WorkspaceInspectDiagnosticsRequest,
-    WorkspaceInspectEntriesRequest, WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest,
-    WorkspaceOpenRequest, adapt_import, knowledge_term_upsert, workspace_batch_apply,
-    workspace_batch_claim, workspace_batch_count, workspace_finalize, workspace_inspect_batch,
+    KnowledgeTermUpsertRequest, SettingsInput, StringerApp, WorkspaceBatchClaimRequest,
+    WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest, WorkspaceBatchReadRequest,
+    WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry, WorkspaceBatchSubmitRequest,
+    WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
+    WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest, WorkspaceOpenRequest, adapt_import,
+    knowledge_term_upsert, workspace_batch_claim, workspace_batch_count, workspace_batch_detail,
+    workspace_batch_read, workspace_batch_submit, workspace_finalize,
     workspace_inspect_diagnostics, workspace_inspect_entries, workspace_normalize,
 };
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceCoreError};
@@ -56,24 +57,36 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     let batch_id = claim.batch_id.expect("batch id");
     assert_eq!(claim.claimed_entries, 1);
 
-    let page = workspace_inspect_batch(WorkspaceInspectBatchRequest {
+    let page = workspace_batch_read(WorkspaceBatchReadRequest {
         workspace: Some(path_string(workspace.path())),
         batch_id: batch_id.clone(),
         offset: 0,
         limit: 10,
     })
     .unwrap();
-    let entry_id = page.entries[0].id.clone();
-    assert_eq!(page.total, 1);
+    let key = page.entries[0].key.clone();
+    let revision = page.revision;
+    assert_eq!(page.total_entries, 1);
     assert_eq!(page.entries[0].source, "Iron Sword");
+    assert_eq!(page.entries[0].context_label, "scaleform $Title");
 
-    let summary = workspace_batch_apply(WorkspaceBatchApplyRequest {
+    let detail = workspace_batch_detail(WorkspaceBatchDetailRequest {
+        workspace: Some(path_string(workspace.path())),
+        batch_id: batch_id.clone(),
+        keys: vec![key.clone()],
+    })
+    .unwrap();
+    assert_eq!(detail.entries[0].key, key);
+    assert!(detail.entries[0].id.contains("scaleform:"));
+
+    let summary = workspace_batch_submit(WorkspaceBatchSubmitRequest {
         workspace: Some(path_string(workspace.path())),
         batch_id,
-        entries: vec![WorkspaceBatchApplyEntry {
-            id: entry_id,
+        revision,
+        entries: vec![WorkspaceBatchSubmitEntry {
+            key,
+            action: WorkspaceBatchSubmitActionInput::Translate,
             translation: Some("熟铁剑".to_string()),
-            skip: false,
             skip_reason: None,
         }],
     })
@@ -83,7 +96,7 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
 }
 
 #[tokio::test]
-async fn app_workspace_batch_apply_can_mark_entry_skipped() {
+async fn app_workspace_batch_submit_can_mark_entry_skipped() {
     let root = TempRoot::new("workspace-skip-root");
     let workspace = TempRoot::new("workspace-skip-output");
     let asset = root
@@ -111,24 +124,25 @@ async fn app_workspace_batch_apply_can_mark_entry_skipped() {
     })
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
-    let page = workspace_inspect_batch(WorkspaceInspectBatchRequest {
+    let page = workspace_batch_read(WorkspaceBatchReadRequest {
         workspace: Some(path_string(workspace.path())),
         batch_id: batch_id.clone(),
         offset: 0,
         limit: 10,
     })
     .unwrap();
-    let entry_id = page.entries[0].id.clone();
+    let key = page.entries[0].key.clone();
 
-    let request: WorkspaceBatchApplyRequest = serde_json::from_value(serde_json::json!({
+    let request: WorkspaceBatchSubmitRequest = serde_json::from_value(serde_json::json!({
         "workspace": path_string(workspace.path()),
         "batch_id": batch_id,
+        "revision": page.revision,
         "entries": [
-            { "id": entry_id, "skip": true, "skip_reason": "not_translatable" }
+            { "key": key, "action": "skip", "skip_reason": "not_translatable" }
         ]
     }))
     .unwrap();
-    let summary = workspace_batch_apply(request).unwrap();
+    let summary = workspace_batch_submit(request).unwrap();
     assert_eq!(summary.applied_entries, 1);
     assert_eq!(summary.remaining_entries, 0);
 
@@ -149,15 +163,8 @@ async fn app_workspace_batch_apply_can_mark_entry_skipped() {
     })
     .unwrap();
     assert_eq!(skipped.total, 1);
-    assert!(skipped.entries[0].translation.is_none());
-    assert_eq!(
-        skipped.entries[0].translation_meta.as_ref().unwrap()["origin"],
-        "skipped"
-    );
-    assert_eq!(
-        skipped.entries[0].translation_meta.as_ref().unwrap()["skip_reason"],
-        "not_translatable"
-    );
+    assert!(skipped.entries[0].current_translation.is_none());
+    assert_eq!(skipped.entries[0].origin.as_deref(), Some("skipped"));
 }
 
 #[tokio::test]
@@ -489,10 +496,15 @@ async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_va
     .unwrap();
     assert_eq!(entries.total, 1);
     assert_eq!(entries.entries[0].source, "Steel Sword");
-    assert_eq!(entries.entries[0].translation.as_deref(), Some("钢剑"));
     assert_eq!(
-        entries.entries[0].translation_meta.as_ref().unwrap()["origin"],
-        "memory"
+        entries.entries[0].current_translation.as_deref(),
+        Some("钢剑")
+    );
+    assert_eq!(entries.entries[0].origin.as_deref(), Some("memory"));
+    assert!(
+        entries.entries[0]
+            .diagnostic_codes
+            .contains(&"memory.conflict".to_string())
     );
 
     let diagnostics = workspace_inspect_diagnostics(WorkspaceInspectDiagnosticsRequest {
@@ -508,10 +520,7 @@ async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_va
         diagnostics.diagnostics[0].entry_id,
         "scaleform:Interface/Translations/MyMod_English.txt:$Desc"
     );
-    assert_eq!(
-        diagnostics.diagnostics[0].diagnostic["code"],
-        "memory.conflict"
-    );
+    assert_eq!(diagnostics.diagnostics[0].code, "memory.conflict");
 }
 
 fn settings() -> SettingsInput {

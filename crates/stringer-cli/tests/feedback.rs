@@ -61,7 +61,7 @@ fn progress_always_writes_status_to_stderr_without_changing_stdout() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        "counted 0 entries: 0 empty, 0 memory-prefilled, 0 translated, 0 skipped, 0 claimed, 0 with diagnostics\n"
+        "counted 0 entries: 0 claimable, 0 empty, 0 memory-prefilled, 0 translated, 0 skipped, 0 claimed, 0 with diagnostics\n"
     );
     assert!(
         String::from_utf8(output.stderr)

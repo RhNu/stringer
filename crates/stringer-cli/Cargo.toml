@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
+csv.workspace = true
 indicatif = "0.18.4"
 miette = { workspace = true, features = ["fancy"] }
 serde.workspace = true

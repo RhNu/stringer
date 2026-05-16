@@ -10,11 +10,12 @@ Use Stringer MCP tools directly. They return structured JSON, so consume their f
 4. Terminology pass before formal translation: use `knowledge_lookup` for suspected, recurring, or ambiguous source terms, then `knowledge_term_upsert` or `knowledge_term_delete` only for terms verified by lookup evidence and entry context.
 5. `knowledge_annotate`: run again after terminology changes so later claims include updated hints.
 6. `workspace_batch_claim`: claim a bounded set of entries for translation ownership.
-7. `workspace_inspect_batch`: read claimed entries in pages.
-8. `workspace_batch_apply`: apply translations for that exact claimed batch.
-9. `knowledge_validate`: recompute diagnostics.
-10. `workspace_inspect_diagnostics`: review any remaining warnings or errors with entry context.
-11. `workspace_finalize`: write translated assets to a fresh output directory only after validation.
+7. `workspace_batch_read`: read compact claimed entries in pages.
+8. `workspace_batch_detail`: fetch full context, hints, and diagnostics for specific keys when compact rows are insufficient.
+9. `workspace_batch_submit`: submit translate, skip, or pending actions for that exact batch revision.
+10. `knowledge_validate`: recompute diagnostics.
+11. `workspace_inspect_diagnostics`: review any remaining warnings or errors with entry context.
+12. `workspace_finalize`: write translated assets to a fresh output directory only after validation.
 
 When the MCP host is already operating from the workspace directory, the optional `workspace` argument can be omitted. Otherwise pass it explicitly.
 

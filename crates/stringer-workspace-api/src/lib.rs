@@ -9,8 +9,12 @@ mod paths;
 
 pub use batch::{
     ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
-    BatchCount, ClaimBatchOptions, ClaimedBatch, CountBatchOptions, ReleaseBatchOptions,
-    ReleaseBatchSummary, apply_batch_patch, claim_batch, count_batch, release_batch,
+    BatchCount, BatchDetail, BatchDetailEntry, BatchExportFormat, BatchExportOptions,
+    BatchExportSummary, BatchRead, BatchReadEntry, BatchSubmitAction, BatchSubmitEntry,
+    BatchSubmitEntryResult, BatchSubmitOptions, BatchSubmitStatus, BatchSubmitSummary,
+    ClaimBatchOptions, ClaimedBatch, CountBatchOptions, ReadBatchDetailOptions, ReadBatchOptions,
+    ReleaseBatchOptions, ReleaseBatchSummary, apply_batch_patch, claim_batch, count_batch,
+    export_batch_patch, read_batch, read_batch_detail, release_batch, submit_batch,
 };
 pub use error::WorkspaceError;
 pub use inspect::{

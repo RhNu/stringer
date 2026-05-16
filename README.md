@@ -66,29 +66,38 @@ cargo run -p stringer-cli -- workspace batch claim `
   --workspace path/to/translations `
   --limit 50
 
-cargo run -p stringer-cli -- workspace inspect batch `
+cargo run -p stringer-cli -- workspace batch read `
   --workspace path/to/translations `
   --batch-id b1770000000000-1234 `
   --limit 10 `
   --offset 0
 ```
 
-`claim` 只负责认领，会输出紧凑 JSON，包含 `batch_id`、`claimed_entries` 和认领 scope。用 `workspace inspect batch` 按页读取该 batch 的原文、当前译文、上下文、`hints` 和 `diagnostics`。Agent 翻译后用一次或多次 JSON patch 回写；每次回写后从 `--offset 0` 重新读取剩余 batch，因为已应用的条目会从 batch 中移除：
+`claim` 只负责认领，会输出紧凑 JSON，包含 `batch_id`、`revision`、`claimed_entries`、`remaining_claimable` 和认领 scope。用 `workspace batch read` 按页读取该 batch 的短行：`key`、原文、当前译文、简短上下文、hint 数量和 diagnostic code。需要完整 `context`、`hints`、`diagnostics` 或长 `id` 时，用 `workspace batch detail --key e001` 按需读取。Agent 翻译后用一次或多次 JSON patch 回写；提交时必须带当前 `revision`：
 
 ```json
-{"batch_id":"b1770000000000-1234","entries":[{"id":"plugin:Example.esp:WEAP:0x00001234:FULL:0","translation":"铁剑"}]}
+{"batch_id":"b1770000000000-1234","revision":1,"entries":[{"key":"e001","action":"translate","translation":"铁剑"}]}
 ```
 
 如果条目经判断不需要翻译，不要把 `source` 原样写成译文；用 `skip` 明确完成该条：
 
 ```json
-{"batch_id":"b1770000000000-1234","entries":[{"id":"plugin:Example.esp:WEAP:0x00001235:FULL:0","skip":true,"skip_reason":"not_translatable"}]}
+{"batch_id":"b1770000000000-1234","revision":1,"entries":[{"key":"e002","action":"skip","skip_reason":"not_translatable"}]}
 ```
 
 ```powershell
-cargo run -p stringer-cli -- workspace batch apply `
+cargo run -p stringer-cli -- workspace batch submit `
   --workspace path/to/translations `
   --input path/to/patch.json
+```
+
+如果工具输出可能被截断，先导出可编辑 patch 文件，再分多轮修改并提交：
+
+```powershell
+cargo run -p stringer-cli -- workspace batch export `
+  --workspace path/to/translations `
+  --batch-id b1770000000000-1234 `
+  --format json
 ```
 
 4. 校验翻译工作区：
@@ -140,7 +149,7 @@ translations/
 
 `workspace finalize` 只读取 `id` 和 `translation`。`hints`、`diagnostics` 和其他扩展字段不会影响写回。
 
-直接编辑 `entries/**/*.jsonl` 仍可作为人工 fallback。Agent 应优先使用 `workspace inspect ...` 做只读查看和审阅，并使用 `workspace batch count/claim/apply/release` 写入翻译，避免破坏 JSONL 格式或频繁逐行调用 CLI。
+直接编辑 `entries/**/*.jsonl` 仍可作为人工 fallback。Agent 应优先使用 `workspace inspect ...` 做只读查看和审阅，并使用 `workspace batch count/claim/read/detail/submit/export/release` 处理翻译，避免破坏 JSONL 格式或频繁逐行调用 CLI。
 
 ## 工作区只读查看
 
@@ -159,18 +168,12 @@ cargo run -p stringer-cli -- workspace inspect entry `
   --workspace path/to/translations `
   --id "plugin:Example.esp:WEAP:0x00001234:FULL:0"
 
-cargo run -p stringer-cli -- workspace inspect batch `
-  --workspace path/to/translations `
-  --batch-id b1770000000000-1234 `
-  --limit 10 `
-  --offset 0
-
 cargo run -p stringer-cli -- workspace inspect diagnostics `
   --workspace path/to/translations `
   --severity warning
 ```
 
-`entries --status` 支持 `all`、`empty`、`memory`、`translated`、`skipped`、`claimed` 和 `diagnostic`。`diagnostics --severity` 支持 `all`、`error`、`warning` 和 `info`。`inspect batch` 支持 `--limit` 和 `--offset`，返回当前剩余 batch 的 `total`；如果中途 apply，下一次应从 `--offset 0` 读取剩余条目。Inspect 命令只读，不会创建 claim、释放 batch 或写入译文。
+`entries --status` 支持 `all`、`empty`、`memory`、`translated`、`skipped`、`claimed` 和 `diagnostic`。`diagnostics --severity` 支持 `all`、`error`、`warning` 和 `info`。列表型 inspect 命令默认返回 compact JSON；单条 `inspect entry` 保留完整条目细节。Inspect 命令只读，不会创建 claim、释放 batch 或写入译文。
 
 ## 配置
 
@@ -397,7 +400,8 @@ cargo run -p stringer-mcp -- serve
 
 术语编辑对应 MCP tools：
 
-- `workspace_inspect_files`、`workspace_inspect_entries`、`workspace_inspect_entry`、`workspace_inspect_batch`、`workspace_inspect_diagnostics`：只读查看工作区，不直接暴露原始 JSONL 文件操作。
+- `workspace_inspect_files`、`workspace_inspect_entries`、`workspace_inspect_entry`、`workspace_inspect_diagnostics`：只读查看工作区，不直接暴露原始 JSONL 文件操作。
+- `workspace_batch_count`、`workspace_batch_claim`、`workspace_batch_read`、`workspace_batch_detail`、`workspace_batch_submit`、`workspace_batch_export`、`workspace_batch_release`：认领、读取、提交和导出 Agent 翻译批次。
 
 - `knowledge_term_upsert`：参数包含可选 `workspace`、可选 `file`、`terms` 和 `rebuild_index`；单条更新也使用一个元素的 `terms` 数组。
 - `knowledge_term_delete`：参数包含可选 `workspace`、可选 `file`、`id` 和 `rebuild_index`。

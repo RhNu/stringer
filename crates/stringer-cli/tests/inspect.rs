@@ -42,32 +42,19 @@ fn workspace_inspect_commands_parse_agent_read_flags() {
     assert_eq!(command.limit, 25);
     assert_eq!(command.offset, 5);
 
-    let cli = Cli::parse_from([
-        "stringer",
-        "workspace",
-        "inspect",
-        "batch",
-        "--workspace",
-        "translations",
-        "--batch-id",
-        "b123-4",
-        "--limit",
-        "10",
-        "--offset",
-        "20",
-    ]);
-    let Command::Workspace { command } = cli.command else {
-        panic!("expected workspace command");
-    };
-    let WorkspaceCommand::Inspect { command } = command else {
-        panic!("expected workspace inspect command");
-    };
-    let WorkspaceInspectCommand::Batch(command) = command else {
-        panic!("expected inspect batch command");
-    };
-    assert_eq!(command.batch_id, "b123-4");
-    assert_eq!(command.limit, 10);
-    assert_eq!(command.offset, 20);
+    assert!(
+        Cli::try_parse_from([
+            "stringer",
+            "workspace",
+            "inspect",
+            "batch",
+            "--workspace",
+            "translations",
+            "--batch-id",
+            "b123-4",
+        ])
+        .is_err()
+    );
 
     let cli = Cli::parse_from([
         "stringer",
@@ -151,6 +138,8 @@ fn workspace_inspect_entries_and_diagnostics_emit_json() {
     let entries_json: Value = serde_json::from_slice(&entries.stdout).unwrap();
     assert_eq!(entries_json["total"], 1);
     assert_eq!(entries_json["entries"][0]["source"], "Steel Sword");
+    assert!(entries_json["entries"][0].get("hints").is_none());
+    assert!(entries_json["entries"][0].get("diagnostics").is_none());
 
     let diagnostics = stringer_command()
         .args([
@@ -168,8 +157,13 @@ fn workspace_inspect_entries_and_diagnostics_emit_json() {
     let diagnostics_json: Value = serde_json::from_slice(&diagnostics.stdout).unwrap();
     assert_eq!(diagnostics_json["total"], 1);
     assert_eq!(
-        diagnostics_json["diagnostics"][0]["diagnostic"]["code"],
+        diagnostics_json["diagnostics"][0]["code"],
         "memory.conflict"
+    );
+    assert!(
+        diagnostics_json["diagnostics"][0]
+            .get("diagnostic")
+            .is_none()
     );
 
     let _ = fs::remove_dir_all(root);

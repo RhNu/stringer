@@ -1,12 +1,11 @@
 use std::fs;
-use std::io::Write;
-use std::process::{Command as ProcessCommand, Stdio};
+use std::process::Command as ProcessCommand;
 
 use clap::{CommandFactory, Parser};
 use serde_json::Value;
 use stringer_cli::{
     AdaptCommand, AdaptFormatArg, Cli, Command, KnowledgeCommand, KnowledgeIndexCommand,
-    KnowledgeLookupFieldArg, KnowledgeLookupSourceArg, WorkspaceBatchCommand, WorkspaceCommand,
+    KnowledgeLookupFieldArg, KnowledgeLookupSourceArg, WorkspaceCommand,
     WorkspaceNormalizeEncodingArg,
 };
 
@@ -118,72 +117,6 @@ fn workspace_commands_reject_removed_path_flags() {
         ])
         .is_err()
     );
-}
-
-#[test]
-fn workspace_batch_commands_parse_workspace_file_limit_input_and_batch_id() {
-    let cli = Cli::parse_from([
-        "stringer",
-        "workspace",
-        "batch",
-        "claim",
-        "--workspace",
-        "translations",
-        "--file",
-        "entries/plugin/MyMod.esp/WEAP.jsonl",
-        "--limit",
-        "25",
-    ]);
-
-    let Command::Workspace { command } = cli.command else {
-        panic!("expected workspace command");
-    };
-    let WorkspaceCommand::Batch { command } = command else {
-        panic!("expected workspace batch command");
-    };
-    let WorkspaceBatchCommand::Claim(command) = command else {
-        panic!("expected workspace batch claim command");
-    };
-    assert_eq!(command.workspace.as_str(), "translations");
-    assert_eq!(
-        command.file.as_deref(),
-        Some("entries/plugin/MyMod.esp/WEAP.jsonl")
-    );
-    assert_eq!(command.limit, 25);
-
-    let cli = Cli::parse_from(["stringer", "workspace", "batch", "apply", "--input", "-"]);
-    let Command::Workspace { command } = cli.command else {
-        panic!("expected workspace command");
-    };
-    let WorkspaceCommand::Batch { command } = command else {
-        panic!("expected workspace batch command");
-    };
-    let WorkspaceBatchCommand::Apply(command) = command else {
-        panic!("expected workspace batch apply command");
-    };
-    assert_eq!(command.workspace.as_str(), ".");
-    assert_eq!(command.input.as_str(), "-");
-
-    let cli = Cli::parse_from([
-        "stringer",
-        "workspace",
-        "batch",
-        "release",
-        "--workspace",
-        "translations",
-        "--batch-id",
-        "b123-4",
-    ]);
-    let Command::Workspace { command } = cli.command else {
-        panic!("expected workspace command");
-    };
-    let WorkspaceCommand::Batch { command } = command else {
-        panic!("expected workspace batch command");
-    };
-    let WorkspaceBatchCommand::Release(command) = command else {
-        panic!("expected workspace batch release command");
-    };
-    assert_eq!(command.batch_id, "b123-4");
 }
 
 #[test]
@@ -335,117 +268,6 @@ async fn adapt_import_command_writes_memory_jsonl() {
     assert_eq!(row["target_locale"], "zh-Hans");
     assert_eq!(row["context"]["record_type"], "WEAP");
     assert_eq!(row["context"]["game"], "SkyrimSe");
-}
-
-#[test]
-fn workspace_batch_claim_emits_json_and_apply_reads_stdin() {
-    let root = test_path("cli-batch-root");
-    let translations = test_path("cli-batch-translations");
-    let asset = root.join("Data/Interface/Translations/MyMod_English.txt");
-    fs::create_dir_all(asset.parent().unwrap()).unwrap();
-    fs::write(&asset, "$Title\tIron Sword\n").unwrap();
-
-    let open = stringer_command()
-        .args([
-            "workspace",
-            "open",
-            "--source-root",
-            root.as_str(),
-            "--workspace",
-            translations.as_str(),
-            "--force",
-            "--game-release",
-            "SkyrimSe",
-            "--asset-language",
-            "English",
-            "--source-locale",
-            "en",
-            "--target-locale",
-            "zh-Hans",
-        ])
-        .output()
-        .unwrap();
-    assert!(open.status.success());
-
-    let claim = stringer_command()
-        .args([
-            "workspace",
-            "batch",
-            "claim",
-            "--workspace",
-            translations.as_str(),
-            "--limit",
-            "1",
-        ])
-        .output()
-        .unwrap();
-    assert!(claim.status.success());
-    let claim_json: Value = serde_json::from_slice(&claim.stdout).unwrap();
-    let batch_id = claim_json["batch_id"].as_str().unwrap();
-    assert_eq!(claim_json["claimed_entries"], 1);
-    assert!(claim_json.get("entries").is_none());
-
-    let inspected = stringer_command()
-        .args([
-            "workspace",
-            "inspect",
-            "batch",
-            "--workspace",
-            translations.as_str(),
-            "--batch-id",
-            batch_id,
-            "--limit",
-            "1",
-        ])
-        .output()
-        .unwrap();
-    assert!(inspected.status.success());
-    let inspected_json: Value = serde_json::from_slice(&inspected.stdout).unwrap();
-    assert_eq!(inspected_json["total"], 1);
-    let entry_id = inspected_json["entries"][0]["id"].as_str().unwrap();
-
-    let patch = serde_json::json!({
-        "batch_id": batch_id,
-        "entries": [
-            { "id": entry_id, "translation": "熟铁剑" }
-        ]
-    })
-    .to_string();
-    let mut apply = stringer_command()
-        .args([
-            "workspace",
-            "batch",
-            "apply",
-            "--workspace",
-            translations.as_str(),
-            "--input",
-            "-",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    apply
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(patch.as_bytes())
-        .unwrap();
-    let apply = apply.wait_with_output().unwrap();
-    assert!(apply.status.success());
-    let summary: Value = serde_json::from_slice(&apply.stdout).unwrap();
-    assert_eq!(summary["applied_entries"], 1);
-
-    let workspace: Value =
-        serde_json::from_str(&fs::read_to_string(translations.join("workspace.json")).unwrap())
-            .unwrap();
-    let entry_path = translations.join(workspace["files"][0]["path"].as_str().unwrap());
-    let row: Value = serde_json::from_str(fs::read_to_string(entry_path).unwrap().trim()).unwrap();
-    assert_eq!(row["translation"], "熟铁剑");
-    assert_eq!(row["translation_meta"]["origin"], "agent");
-
-    let _ = fs::remove_dir_all(root);
-    let _ = fs::remove_dir_all(translations);
 }
 
 #[test]

@@ -2,20 +2,22 @@ use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 use stringer_app::{
     InspectDiagnosticSeverityInput, InspectEntryStatusInput, SettingsInput,
-    WorkspaceBatchApplyEntry, WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest,
-    WorkspaceBatchCountRequest, WorkspaceBatchReleaseRequest, WorkspaceFinalizeRequest,
-    WorkspaceInspectBatchRequest, WorkspaceInspectDiagnosticsRequest,
-    WorkspaceInspectEntriesRequest, WorkspaceInspectEntryRequest, WorkspaceInspectFilesRequest,
-    WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest, WorkspaceNormalizeResponse,
-    WorkspaceOpenRequest, workspace_batch_apply, workspace_batch_claim, workspace_batch_count,
-    workspace_batch_release, workspace_finalize, workspace_inspect_batch,
+    WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest,
+    WorkspaceBatchExportFormatInput, WorkspaceBatchExportRequest, WorkspaceBatchReadRequest,
+    WorkspaceBatchReleaseRequest, WorkspaceBatchSubmitEntry, WorkspaceBatchSubmitRequest,
+    WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
+    WorkspaceInspectEntryRequest, WorkspaceInspectFilesRequest, WorkspaceNormalizeEncodingInput,
+    WorkspaceNormalizeRequest, WorkspaceNormalizeResponse, WorkspaceOpenRequest,
+    workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
+    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
     workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
     workspace_inspect_files, workspace_normalize, workspace_open, workspace_upgrade_unsupported,
 };
 
-use crate::app::{CliError, print_json, read_input};
+use crate::app::{CliError, print_json};
 use crate::feedback::Feedback;
 use crate::help::*;
+use crate::workspace_batch_input::read_batch_submit_patch;
 
 #[derive(Debug, Subcommand)]
 pub enum WorkspaceCommand {
@@ -177,10 +179,25 @@ pub enum WorkspaceBatchCommand {
     )]
     Claim(WorkspaceBatchClaimCommand),
     #[command(
-        about = "Apply translated or skipped entries for a claimed batch",
-        long_about = WORKSPACE_BATCH_APPLY_LONG_ABOUT
+        about = "Read compact entries from a claimed batch",
+        long_about = WORKSPACE_BATCH_READ_LONG_ABOUT
     )]
-    Apply(WorkspaceBatchApplyCommand),
+    Read(WorkspaceBatchReadCommand),
+    #[command(
+        about = "Read full detail for one or more batch entry keys",
+        long_about = WORKSPACE_BATCH_DETAIL_LONG_ABOUT
+    )]
+    Detail(WorkspaceBatchDetailCommand),
+    #[command(
+        about = "Submit translated, skipped, or pending batch entries",
+        long_about = WORKSPACE_BATCH_SUBMIT_LONG_ABOUT
+    )]
+    Submit(WorkspaceBatchSubmitCommand),
+    #[command(
+        about = "Export an editable batch patch file",
+        long_about = WORKSPACE_BATCH_EXPORT_LONG_ABOUT
+    )]
+    Export(WorkspaceBatchExportCommand),
     #[command(
         about = "Release a claimed translation batch",
         long_about = WORKSPACE_BATCH_RELEASE_LONG_ABOUT
@@ -196,8 +213,6 @@ pub enum WorkspaceInspectCommand {
     Entries(WorkspaceInspectEntriesCommand),
     #[command(about = "Read one workspace entry by id as JSON")]
     Entry(WorkspaceInspectEntryCommand),
-    #[command(about = "Read a claimed batch as JSON")]
-    Batch(WorkspaceInspectBatchCommand),
     #[command(about = "List workspace diagnostics as JSON")]
     Diagnostics(WorkspaceInspectDiagnosticsCommand),
 }
@@ -228,18 +243,6 @@ pub struct WorkspaceInspectEntryCommand {
     pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "ENTRY_ID")]
     pub id: String,
-}
-
-#[derive(Debug, Parser)]
-pub struct WorkspaceInspectBatchCommand {
-    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
-    pub workspace: Utf8PathBuf,
-    #[arg(long, value_name = "BATCH_ID")]
-    pub batch_id: String,
-    #[arg(long, default_value_t = 10, value_name = "N")]
-    pub limit: usize,
-    #[arg(long, default_value_t = 0, value_name = "N")]
-    pub offset: usize,
 }
 
 #[derive(Debug, Parser)]
@@ -330,7 +333,7 @@ pub struct WorkspaceBatchClaimCommand {
 }
 
 #[derive(Debug, Parser)]
-pub struct WorkspaceBatchApplyCommand {
+pub struct WorkspaceBatchReadCommand {
     #[arg(
         long,
         default_value = ".",
@@ -338,12 +341,53 @@ pub struct WorkspaceBatchApplyCommand {
         help = "Translation workspace directory"
     )]
     pub workspace: Utf8PathBuf,
+    #[arg(long, value_name = "BATCH_ID", help = "Batch id to read")]
+    pub batch_id: String,
+    #[arg(long, default_value_t = 10, value_name = "N")]
+    pub limit: usize,
+    #[arg(long, default_value_t = 0, value_name = "N")]
+    pub offset: usize,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceBatchDetailCommand {
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
+    #[arg(long, value_name = "BATCH_ID")]
+    pub batch_id: String,
+    #[arg(long = "key", value_name = "KEY", required = true)]
+    pub keys: Vec<String>,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceBatchSubmitCommand {
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
     #[arg(
         long,
-        value_name = "PATCH_JSON",
-        help = "Patch JSON file path, or - to read JSON from stdin"
+        value_name = "PATCH_JSON_OR_CSV",
+        help = "Patch JSON/CSV file path, or - to read JSON from stdin"
     )]
     pub input: Utf8PathBuf,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceBatchExportCommand {
+    #[arg(long, default_value = ".", value_name = "WORKSPACE")]
+    pub workspace: Utf8PathBuf,
+    #[arg(long, value_name = "BATCH_ID")]
+    pub batch_id: String,
+    #[arg(long, value_name = "DIR")]
+    pub out: Option<Utf8PathBuf>,
+    #[arg(long, default_value = "json", value_name = "FORMAT")]
+    pub format: WorkspaceBatchExportFormatArg,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum WorkspaceBatchExportFormatArg {
+    #[default]
+    Json,
+    Csv,
 }
 
 #[derive(Debug, Parser)]
@@ -469,17 +513,6 @@ fn run_workspace_inspect(
             status.finish();
             print_json(&inspected)
         }
-        WorkspaceInspectCommand::Batch(command) => {
-            let status = feedback.command("workspace inspect batch");
-            let inspected = workspace_inspect_batch(WorkspaceInspectBatchRequest {
-                workspace: Some(command.workspace.to_string()),
-                batch_id: command.batch_id,
-                offset: command.offset,
-                limit: command.limit,
-            })?;
-            status.finish();
-            print_json(&inspected)
-        }
         WorkspaceInspectCommand::Diagnostics(command) => {
             let status = feedback.command("workspace inspect diagnostics");
             let inspected = workspace_inspect_diagnostics(WorkspaceInspectDiagnosticsRequest {
@@ -511,8 +544,9 @@ fn run_workspace_batch(
                 print_json(&count)?;
             } else {
                 println!(
-                    "counted {} entries: {} empty, {} memory-prefilled, {} translated, {} skipped, {} claimed, {} with diagnostics",
+                    "counted {} entries: {} claimable, {} empty, {} memory-prefilled, {} translated, {} skipped, {} claimed, {} with diagnostics",
                     count.total,
+                    count.claimable,
                     count.empty,
                     count.memory_prefilled,
                     count.translated,
@@ -533,27 +567,61 @@ fn run_workspace_batch(
             status.finish();
             print_json(&claim)
         }
-        WorkspaceBatchCommand::Apply(command) => {
-            let status = feedback.command("workspace batch apply");
-            let input = read_input(&command.input)?;
-            let patch: WorkspaceBatchApplyPatchInput =
-                serde_json::from_str(&input).map_err(|source| CliError::Json {
-                    path: command.input.clone(),
-                    source,
-                })?;
-            let summary = workspace_batch_apply(WorkspaceBatchApplyRequest {
+        WorkspaceBatchCommand::Read(command) => {
+            let status = feedback.command("workspace batch read");
+            let page = workspace_batch_read(WorkspaceBatchReadRequest {
+                workspace: Some(command.workspace.to_string()),
+                batch_id: command.batch_id,
+                offset: command.offset,
+                limit: command.limit,
+            })?;
+            status.finish();
+            print_json(&page)
+        }
+        WorkspaceBatchCommand::Detail(command) => {
+            let status = feedback.command("workspace batch detail");
+            let detail = workspace_batch_detail(WorkspaceBatchDetailRequest {
+                workspace: Some(command.workspace.to_string()),
+                batch_id: command.batch_id,
+                keys: command.keys,
+            })?;
+            status.finish();
+            print_json(&detail)
+        }
+        WorkspaceBatchCommand::Submit(command) => {
+            let status = feedback.command("workspace batch submit");
+            let patch = read_batch_submit_patch(&command.input)?;
+            let summary = workspace_batch_submit(WorkspaceBatchSubmitRequest {
                 workspace: Some(command.workspace.to_string()),
                 batch_id: patch.batch_id,
+                revision: patch.revision,
                 entries: patch
                     .entries
                     .into_iter()
-                    .map(|entry| WorkspaceBatchApplyEntry {
-                        id: entry.id,
+                    .map(|entry| WorkspaceBatchSubmitEntry {
+                        key: entry.key,
+                        action: entry.action,
                         translation: entry.translation,
-                        skip: entry.skip,
                         skip_reason: entry.skip_reason,
                     })
                     .collect(),
+            })?;
+            status.finish();
+            print_json(&summary)
+        }
+        WorkspaceBatchCommand::Export(command) => {
+            let status = feedback.command("workspace batch export");
+            let out = command.out.map(|dir| {
+                dir.join(match command.format {
+                    WorkspaceBatchExportFormatArg::Json => "patch.json",
+                    WorkspaceBatchExportFormatArg::Csv => "patch.csv",
+                })
+            });
+            let summary = workspace_batch_export(WorkspaceBatchExportRequest {
+                workspace: Some(command.workspace.to_string()),
+                batch_id: command.batch_id,
+                out: out.map(|path| path.to_string()),
+                format: command.format.into(),
             })?;
             status.finish();
             print_json(&summary)
@@ -589,23 +657,6 @@ fn print_normalize_summary(summary: &WorkspaceNormalizeResponse, apply: bool) {
     println!(
         "run `stringer knowledge validate` after applying normalization to refresh diagnostics"
     );
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct WorkspaceBatchApplyPatchInput {
-    batch_id: String,
-    entries: Vec<WorkspaceBatchApplyPatchEntry>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct WorkspaceBatchApplyPatchEntry {
-    id: String,
-    #[serde(default)]
-    translation: Option<String>,
-    #[serde(default)]
-    skip: bool,
-    #[serde(default)]
-    skip_reason: Option<String>,
 }
 
 fn settings_input(
@@ -657,6 +708,15 @@ impl From<WorkspaceNormalizeEncodingArg> for WorkspaceNormalizeEncodingInput {
     }
 }
 
+impl From<WorkspaceBatchExportFormatArg> for WorkspaceBatchExportFormatInput {
+    fn from(value: WorkspaceBatchExportFormatArg) -> Self {
+        match value {
+            WorkspaceBatchExportFormatArg::Json => Self::Json,
+            WorkspaceBatchExportFormatArg::Csv => Self::Csv,
+        }
+    }
+}
+
 impl std::fmt::Display for InspectEntryStatusArg {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
@@ -688,6 +748,15 @@ impl std::fmt::Display for WorkspaceNormalizeEncodingArg {
             Self::Auto => "auto",
             Self::Utf8 => "utf-8",
             Self::Cp936 => "cp936",
+        })
+    }
+}
+
+impl std::fmt::Display for WorkspaceBatchExportFormatArg {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Json => "json",
+            Self::Csv => "csv",
         })
     }
 }

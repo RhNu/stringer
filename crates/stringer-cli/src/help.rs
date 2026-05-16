@@ -6,8 +6,8 @@ pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
   stringer knowledge annotate
   stringer workspace batch count --json
   stringer workspace batch claim --limit 50
-  stringer workspace inspect batch --batch-id <BATCH_ID> --limit 10
-  stringer workspace batch apply --input <PATCH_JSON>
+  stringer workspace batch read --batch-id <BATCH_ID> --limit 10
+  stringer workspace batch submit --input <PATCH_JSON>
   stringer knowledge validate
   stringer workspace finalize
 
@@ -40,15 +40,23 @@ pub(crate) const WORKSPACE_FINALIZE_AFTER_LONG_HELP: &str = r#"Example:
 Run knowledge validate first. The output defaults to <workspace>/output and must stay outside the source root. Use --source-root only to override the source_root stored in workspace.json."#;
 
 pub(crate) const WORKSPACE_BATCH_LONG_ABOUT: &str =
-    r#"Count, claim, apply, and release translation batches for agent work."#;
+    r#"Count, claim, read, submit, export, and release translation batches for agent work."#;
 
 pub(crate) const WORKSPACE_BATCH_COUNT_LONG_ABOUT: &str =
     r#"Count total, empty, memory-prefilled, translated, skipped, claimed, and diagnostic rows."#;
 
-pub(crate) const WORKSPACE_BATCH_CLAIM_LONG_ABOUT: &str = r#"Claim eligible untranslated or memory-prefilled rows and print a compact batch summary. Read claimed entries with workspace inspect batch."#;
+pub(crate) const WORKSPACE_BATCH_CLAIM_LONG_ABOUT: &str = r#"Claim eligible untranslated or memory-prefilled rows and print a compact batch summary. Read claimed entries with workspace batch read."#;
 
-pub(crate) const WORKSPACE_BATCH_APPLY_LONG_ABOUT: &str =
-    r#"Apply translations or mark skipped ids owned by a claimed batch."#;
+pub(crate) const WORKSPACE_BATCH_READ_LONG_ABOUT: &str = r#"Read compact source, current translation, context label, hint counts, and diagnostic codes for a claimed batch."#;
+
+pub(crate) const WORKSPACE_BATCH_DETAIL_LONG_ABOUT: &str =
+    r#"Read full context, hints, diagnostics, and metadata for one or more claimed batch keys."#;
+
+pub(crate) const WORKSPACE_BATCH_SUBMIT_LONG_ABOUT: &str =
+    r#"Submit translate, skip, or pending actions for batch-local keys from a JSON or CSV patch."#;
+
+pub(crate) const WORKSPACE_BATCH_EXPORT_LONG_ABOUT: &str =
+    r#"Export a claimed batch to an editable JSON or CSV patch file under batch-work by default."#;
 
 pub(crate) const WORKSPACE_BATCH_RELEASE_LONG_ABOUT: &str =
     r#"Release a claimed batch so its remaining entries can be claimed again."#;

@@ -11,11 +11,11 @@ Claim a bounded batch with `workspace_batch_claim` after the workspace has been 
 }
 ```
 
-The result contains `batch_id`, `claimed_entries`, and `scope`.
+The result contains `batch_id`, `revision`, `claimed_entries`, `remaining_claimable`, and `scope`.
 
 ## Read
 
-Read claimed entries with `workspace_inspect_batch`:
+Read claimed entries with `workspace_batch_read`:
 
 ```json
 {
@@ -26,7 +26,17 @@ Read claimed entries with `workspace_inspect_batch`:
 }
 ```
 
-The result contains `total` and entries with `id`, `source`, optional `translation`, `context`, `hints`, and `diagnostics`. If you apply a partial page, read the batch again from `offset: 0` because applied entries are removed from the remaining claim.
+The result contains compact rows with `key`, `source`, optional `current_translation`, optional `origin`, `context_label`, hint and diagnostic counts, and diagnostic codes. It intentionally omits full `id`, `context`, `hints`, and `diagnostics` to keep tool output short.
+
+Fetch full detail only for keys that need it:
+
+```json
+{
+  "workspace": "<WORKSPACE>",
+  "batch_id": "<BATCH_ID>",
+  "keys": ["e001"]
+}
+```
 
 Skip entries already translated by `agent` or `manual` origin unless the user explicitly asks for revision. Memory-prefilled entries can be claimed and improved.
 
@@ -35,34 +45,43 @@ Skip entries already translated by `agent` or `manual` origin unless the user ex
 For each entry:
 
 - Preserve placeholders, variables, menu tokens, newlines, and punctuation that carry UI meaning.
-- Use `hints` first for preferred terms and memory candidates.
+- Use compact diagnostic codes to decide which rows need `workspace_batch_detail`.
+- Use `hints` from detail first for preferred terms and memory candidates.
 - Treat suspected terminology as lookup-required. Before choosing a translation for an uncertain name, proper noun, repeated phrase, or domain term, run `knowledge_lookup` and use the returned evidence with the entry context.
 - Do not write a canonical term into the workspace unless it has been verified by lookup evidence and context. Memory hits and prior knowledge are evidence to inspect, not permission to upsert terms by intuition.
 - Keep names consistent across entries in the same asset and record type.
-- Use `skip: true` when an entry does not need translation. Do not repeat `source` as `translation` just to complete the batch.
-- Leave an entry out of the patch only when no safe translation or skip decision can be made.
-- Work from entries returned by `workspace_inspect_batch`. Do not open raw `entries/**/*.jsonl` files to translate.
+- Use `action: "skip"` when an entry does not need translation. Do not repeat `source` as `translation` just to complete the batch.
+- Use `action: "pending"` when no safe translation or skip decision can be made yet.
+- Work from entries returned by batch tools. Do not open raw `entries/**/*.jsonl` files to translate.
 
-## Apply
+## Submit
 
-Submit one patch for the claimed batch through `workspace_batch_apply`:
+Submit one patch for the claimed batch through `workspace_batch_submit`:
 
 ```json
 {
   "workspace": "<WORKSPACE>",
   "batch_id": "<BATCH_ID>",
+  "revision": 1,
   "entries": [
     {
-      "id": "<ENTRY_ID>",
+      "key": "e001",
+      "action": "translate",
       "translation": "<TRANSLATION>"
     },
     {
-      "id": "<ENTRY_ID>",
-      "skip": true,
+      "key": "e002",
+      "action": "skip",
       "skip_reason": "not_translatable"
+    },
+    {
+      "key": "e003",
+      "action": "pending"
     }
   ]
 }
 ```
 
-Skipped entries are removed from the remaining batch and will not be claimed again. Never apply ids from a different batch. If stopping early, release the batch so remaining undecided entries can be claimed again.
+The submit result reports `applied`, `ignored`, or `rejected` per key. If the batch revision is stale, re-read the batch and resubmit against the current revision. If stopping early, release the batch so remaining undecided entries can be claimed again.
+
+For long work or tool-output limits, use `workspace_batch_export` to create an editable JSON patch under `batch-work/<batch_id>/patch.json`, then submit that file through the CLI.

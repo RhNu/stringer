@@ -101,6 +101,18 @@ pub enum WorkspaceError {
     )]
     BatchEntryNotClaimed { batch_id: String, id: String },
 
+    #[error(
+        "batch `{batch_id}` revision conflict: expected {expected}, current {current}; re-read the batch before retrying"
+    )]
+    BatchRevisionConflict {
+        batch_id: String,
+        expected: u64,
+        current: u64,
+    },
+
+    #[error("batch `{batch_id}` detail requires at least one key")]
+    BatchDetailKeysRequired { batch_id: String },
+
     #[error("failed to decode normalization rules `{path}` as {encoding}")]
     NormalizeRuleDecode {
         path: Utf8PathBuf,
@@ -188,6 +200,18 @@ impl From<WorkspaceOpsError> for WorkspaceError {
             }
             WorkspaceOpsError::BatchEntryNotClaimed { batch_id, id } => {
                 Self::BatchEntryNotClaimed { batch_id, id }
+            }
+            WorkspaceOpsError::BatchRevisionConflict {
+                batch_id,
+                expected,
+                current,
+            } => Self::BatchRevisionConflict {
+                batch_id,
+                expected,
+                current,
+            },
+            WorkspaceOpsError::BatchDetailKeysRequired { batch_id } => {
+                Self::BatchDetailKeysRequired { batch_id }
             }
             WorkspaceOpsError::NormalizeRuleDecode { path, encoding } => {
                 Self::NormalizeRuleDecode { path, encoding }

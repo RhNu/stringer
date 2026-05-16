@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod batch;
+mod batch_packet;
 mod error;
 mod inspect;
 mod normalize;
@@ -9,6 +10,12 @@ pub use batch::{
     ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
     BatchCount, ClaimBatchOptions, ClaimedBatch, CountBatchOptions, ReleaseBatchOptions,
     ReleaseBatchSummary, apply_batch_patch, claim_batch, count_batch, release_batch,
+};
+pub use batch_packet::{
+    BatchDetail, BatchDetailEntry, BatchExportFormat, BatchExportOptions, BatchExportSummary,
+    BatchRead, BatchReadEntry, BatchSubmitAction, BatchSubmitEntry, BatchSubmitEntryResult,
+    BatchSubmitOptions, BatchSubmitStatus, BatchSubmitSummary, ReadBatchDetailOptions,
+    ReadBatchOptions, export_batch_patch, read_batch, read_batch_detail, submit_batch,
 };
 pub use error::WorkspaceOpsError;
 pub use inspect::{

@@ -63,6 +63,7 @@ pub struct WorkspaceBatchCountParams {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct WorkspaceBatchCountResult {
     pub total: usize,
+    pub claimable: usize,
     pub empty: usize,
     pub memory_prefilled: usize,
     pub translated: usize,
@@ -90,35 +91,11 @@ pub struct WorkspaceBatchScope {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct WorkspaceBatchClaimResult {
     pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<u64>,
     pub claimed_entries: usize,
+    pub remaining_claimable: usize,
     pub scope: WorkspaceBatchScope,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct WorkspaceBatchApplyParams {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<String>,
-    pub batch_id: String,
-    pub entries: Vec<WorkspaceBatchApplyEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct WorkspaceBatchApplyEntry {
-    pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translation: Option<String>,
-    #[serde(default)]
-    pub skip: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub skip_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct WorkspaceBatchApplyResult {
-    pub applied_entries: usize,
-    pub remaining_entries: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -132,6 +109,161 @@ pub struct WorkspaceBatchReleaseParams {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct WorkspaceBatchReleaseResult {
     pub released_entries: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceBatchReadParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    pub batch_id: String,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_batch_read_limit")]
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceBatchDetailParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    pub batch_id: String,
+    pub keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceBatchReadResult {
+    pub batch_id: String,
+    pub revision: u64,
+    pub total_entries: usize,
+    pub open_entries: usize,
+    pub offset: usize,
+    pub limit: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
+    pub entries: Vec<WorkspaceBatchReadEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceBatchReadEntry {
+    pub key: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_translation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    pub context_label: String,
+    pub hint_count: usize,
+    pub diagnostic_count: usize,
+    pub diagnostic_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceBatchDetailResult {
+    pub batch_id: String,
+    pub revision: u64,
+    pub entries: Vec<WorkspaceBatchDetailEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceBatchDetailEntry {
+    pub key: String,
+    pub file: String,
+    pub id: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation_meta: Option<Value>,
+    pub context: BTreeMap<String, String>,
+    pub hints: Vec<Value>,
+    pub diagnostics: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceBatchSubmitParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    pub batch_id: String,
+    pub revision: u64,
+    pub entries: Vec<WorkspaceBatchSubmitEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceBatchSubmitEntry {
+    pub key: String,
+    pub action: WorkspaceBatchSubmitAction,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceBatchSubmitAction {
+    Translate,
+    Skip,
+    Pending,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceBatchSubmitResult {
+    pub batch_id: String,
+    pub revision: u64,
+    pub applied_entries: usize,
+    pub ignored_entries: usize,
+    pub rejected_entries: usize,
+    pub remaining_entries: usize,
+    pub next_read_offset: usize,
+    pub results: Vec<WorkspaceBatchSubmitEntryResult>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceBatchSubmitEntryResult {
+    pub key: String,
+    pub status: WorkspaceBatchSubmitStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceBatchSubmitStatus {
+    Applied,
+    Ignored,
+    Rejected,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkspaceBatchExportFormat {
+    Json,
+    Csv,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceBatchExportParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    pub batch_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out: Option<String>,
+    #[serde(default = "default_batch_export_format")]
+    pub format: WorkspaceBatchExportFormat,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceBatchExportResult {
+    pub path: String,
+    pub format: WorkspaceBatchExportFormat,
+    pub entries: usize,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -248,7 +380,24 @@ pub struct WorkspaceInspectEntriesParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct WorkspaceInspectEntriesResult {
     pub total: usize,
-    pub entries: Vec<WorkspaceInspectEntry>,
+    pub entries: Vec<WorkspaceInspectEntrySummary>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WorkspaceInspectEntrySummary {
+    pub file: String,
+    pub id: String,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_translation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+    pub context_label: String,
+    pub hint_count: usize,
+    pub diagnostic_count: usize,
+    pub diagnostic_codes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -273,29 +422,6 @@ pub struct WorkspaceInspectEntryParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
     pub id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct WorkspaceInspectBatchParams {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace: Option<String>,
-    pub batch_id: String,
-    #[serde(default)]
-    pub offset: usize,
-    #[serde(default = "default_batch_inspect_limit")]
-    pub limit: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct WorkspaceInspectBatchResult {
-    pub batch_id: String,
-    pub total: usize,
-    pub offset: usize,
-    pub limit: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub next_offset: Option<usize>,
-    pub entries: Vec<WorkspaceInspectEntry>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -335,9 +461,11 @@ pub struct WorkspaceInspectDiagnostic {
     pub file: String,
     pub source: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translation: Option<String>,
-    pub context: BTreeMap<String, String>,
-    pub diagnostic: Value,
+    pub current_translation: Option<String>,
+    pub context_label: String,
+    pub code: String,
+    pub severity: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -583,8 +711,12 @@ fn default_normalize_limit() -> usize {
     50
 }
 
-fn default_batch_inspect_limit() -> usize {
+fn default_batch_read_limit() -> usize {
     10
+}
+
+fn default_batch_export_format() -> WorkspaceBatchExportFormat {
+    WorkspaceBatchExportFormat::Json
 }
 
 fn default_inspect_limit() -> usize {

@@ -17,7 +17,7 @@ Common diagnostics:
 - `translation.empty`: translation is missing.
 - `memory.conflict`: translation conflicts with memory evidence.
 
-Review entries with `workspace_inspect_diagnostics`, `workspace_inspect_entry`, or `workspace_inspect_batch`. Use `knowledge_lookup` for terminology or memory evidence before changing a translation. Some diagnostics can be acceptable if the context justifies the wording; note the reason in the final report.
+Review entries with `workspace_inspect_diagnostics`, `workspace_inspect_entry`, `workspace_batch_read`, or `workspace_batch_detail`. Use `knowledge_lookup` for terminology or memory evidence before changing a translation. Some diagnostics can be acceptable if the context justifies the wording; note the reason in the final report.
 
 ## Finalize
 

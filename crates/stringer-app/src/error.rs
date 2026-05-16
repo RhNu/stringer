@@ -88,6 +88,8 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
             "workspace.missing_batch_patch_translation"
         }
         WorkspaceError::BatchEntryNotClaimed { .. } => "workspace.batch_entry_not_claimed",
+        WorkspaceError::BatchRevisionConflict { .. } => "workspace.batch_revision_conflict",
+        WorkspaceError::BatchDetailKeysRequired { .. } => "workspace.batch_detail_keys_required",
         WorkspaceError::NormalizeRuleDecode { .. } => "workspace.normalize_rule_decode",
         WorkspaceError::NormalizeRuleParse { .. } => "workspace.normalize_rule_parse",
         WorkspaceError::DuplicateOutputPath { .. } => "workspace.duplicate_output_path",
@@ -141,6 +143,20 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
                 "recovery": "inspect_batch_from_offset_0",
             })
         }
+        WorkspaceError::BatchRevisionConflict {
+            batch_id,
+            expected,
+            current,
+        } => json!({
+            "batch_id": batch_id,
+            "expected_revision": expected,
+            "current_revision": current,
+            "recovery": "read_batch_before_retrying",
+        }),
+        WorkspaceError::BatchDetailKeysRequired { batch_id } => json!({
+            "batch_id": batch_id,
+            "recovery": "pass_one_or_more_keys_from_batch_read",
+        }),
         WorkspaceError::NormalizeRuleDecode { path, encoding } => {
             json!({ "path": json_path(path), "encoding": encoding })
         }
