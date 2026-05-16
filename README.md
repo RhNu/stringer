@@ -65,9 +65,15 @@ cargo run -p stringer-cli -- workspace inspect diagnostics `
 cargo run -p stringer-cli -- workspace batch claim `
   --workspace path/to/translations `
   --limit 50
+
+cargo run -p stringer-cli -- workspace inspect batch `
+  --workspace path/to/translations `
+  --batch-id b1770000000000-1234 `
+  --limit 10 `
+  --offset 0
 ```
 
-`claim` 会输出 JSON，包含 `batch_id`、原文、当前译文、上下文、`hints` 和 `diagnostics`。Agent 翻译后用一次 JSON patch 回写：
+`claim` 只负责认领，会输出紧凑 JSON，包含 `batch_id`、`claimed_entries` 和认领 scope。用 `workspace inspect batch` 按页读取该 batch 的原文、当前译文、上下文、`hints` 和 `diagnostics`。Agent 翻译后用一次或多次 JSON patch 回写；每次回写后从 `--offset 0` 重新读取剩余 batch，因为已应用的条目会从 batch 中移除：
 
 ```json
 {"batch_id":"b1770000000000-1234","entries":[{"id":"plugin:Example.esp:WEAP:0x00001234:FULL:0","translation":"铁剑"}]}
@@ -149,14 +155,16 @@ cargo run -p stringer-cli -- workspace inspect entry `
 
 cargo run -p stringer-cli -- workspace inspect batch `
   --workspace path/to/translations `
-  --batch-id b1770000000000-1234
+  --batch-id b1770000000000-1234 `
+  --limit 10 `
+  --offset 0
 
 cargo run -p stringer-cli -- workspace inspect diagnostics `
   --workspace path/to/translations `
   --severity warning
 ```
 
-`entries --status` 支持 `all`、`empty`、`memory`、`translated`、`claimed` 和 `diagnostic`。`diagnostics --severity` 支持 `all`、`error`、`warning` 和 `info`。Inspect 命令只读，不会创建 claim、释放 batch 或写入译文。
+`entries --status` 支持 `all`、`empty`、`memory`、`translated`、`claimed` 和 `diagnostic`。`diagnostics --severity` 支持 `all`、`error`、`warning` 和 `info`。`inspect batch` 支持 `--limit` 和 `--offset`，返回当前剩余 batch 的 `total`；如果中途 apply，下一次应从 `--offset 0` 读取剩余条目。Inspect 命令只读，不会创建 claim、释放 batch 或写入译文。
 
 ## 配置
 

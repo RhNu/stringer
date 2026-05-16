@@ -13,6 +13,7 @@ If batches are not available, split by one entry file reported by `workspace_ins
 Tell each worker:
 
 - Work only on the assigned batch or entry file.
+- Read assigned batch entries with `workspace_inspect_batch`; claim output is only an ownership summary.
 - Preserve `id`, `source`, `context`, `hints`, and `diagnostics`.
 - Use `knowledge_lookup` for uncertain terms.
 - Use inspect and batch tools instead of reading raw workspace files.

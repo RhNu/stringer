@@ -73,11 +73,18 @@ pub struct InspectWorkspaceEntryOptions {
 pub struct InspectWorkspaceBatchOptions {
     pub workspace: Utf8PathBuf,
     pub batch_id: String,
+    pub offset: usize,
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkspaceInspectBatch {
     pub batch_id: String,
+    pub total: usize,
+    pub offset: usize,
+    pub limit: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
     pub entries: Vec<WorkspaceInspectEntry>,
 }
 
@@ -177,8 +184,11 @@ pub fn inspect_workspace_batch(
             records.insert(record.id.as_str(), (&file.manifest_file.path, record));
         }
     }
+    let total = ids.len();
+    let start = options.offset.min(total);
+    let end = start.saturating_add(options.limit).min(total);
     let mut entries = Vec::new();
-    for id in ids {
+    for id in ids.into_iter().skip(start).take(end.saturating_sub(start)) {
         let Some((file, record)) = records.get(id.as_str()) else {
             return Err(WorkspaceOpsError::UnknownTranslationId { id });
         };
@@ -186,6 +196,12 @@ pub fn inspect_workspace_batch(
     }
     Ok(WorkspaceInspectBatch {
         batch_id: options.batch_id,
+        total,
+        offset: start,
+        limit: options.limit,
+        // Applying entries mutates the batch file, so callers must re-read
+        // mutable batches from offset 0 after each apply.
+        next_offset: None,
         entries,
     })
 }

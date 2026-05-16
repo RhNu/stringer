@@ -82,7 +82,9 @@ pub enum WorkspaceError {
     #[error("translation id `{id}` does not match any exported entry")]
     UnknownTranslationId { id: String },
 
-    #[error("batch `{batch_id}` was not found")]
+    #[error(
+        "batch `{batch_id}` was not found; it may already be fully applied, released, or cleared; claim a fresh batch before applying translations"
+    )]
     BatchNotFound { batch_id: String },
 
     #[error("duplicate batch patch id `{id}`")]
@@ -91,7 +93,9 @@ pub enum WorkspaceError {
     #[error("batch patch entry `{id}` is missing translation")]
     MissingBatchPatchTranslation { id: String },
 
-    #[error("translation id `{id}` is not claimed by batch `{batch_id}`")]
+    #[error(
+        "translation id `{id}` is not claimed by batch `{batch_id}`; it is not in the remaining batch entries; re-read the batch from offset 0 before retrying"
+    )]
     BatchEntryNotClaimed { batch_id: String, id: String },
 
     #[error("duplicate output logical path `{path}`")]

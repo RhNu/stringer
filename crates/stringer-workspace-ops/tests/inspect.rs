@@ -68,10 +68,17 @@ fn inspect_batch_and_diagnostics_read_hand_written_batch_fixtures() {
     let batch = inspect_workspace_batch(InspectWorkspaceBatchOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: "b-review".to_string(),
+        offset: 1,
+        limit: 1,
     })
     .unwrap();
     assert_eq!(batch.batch_id, "b-review");
-    assert_eq!(batch.entries.len(), 2);
+    assert_eq!(batch.total, 2);
+    assert_eq!(batch.offset, 1);
+    assert_eq!(batch.limit, 1);
+    assert_eq!(batch.next_offset, None);
+    assert_eq!(batch.entries.len(), 1);
+    assert_eq!(batch.entries[0].source, "Steel Sword");
     assert_eq!(batch.entries[0].claimed_by.as_deref(), Some("b-review"));
 
     let diagnostics = inspect_workspace_diagnostics(InspectWorkspaceDiagnosticsOptions {

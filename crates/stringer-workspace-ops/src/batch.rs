@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ use stringer_workspace_core::{
 use crate::WorkspaceOpsError;
 
 const BATCHES_DIR: &str = "batches";
+static BATCH_ID_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CountBatchOptions {
@@ -41,20 +43,8 @@ pub struct ClaimBatchOptions {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ClaimedBatch {
     pub batch_id: Option<String>,
-    pub entries: Vec<ClaimedBatchEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ClaimedBatchEntry {
-    pub id: String,
-    pub source: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub translation: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub translation_meta: Option<TranslationMeta>,
-    pub context: BTreeMap<String, String>,
-    pub hints: Vec<stringer_pipeline::PipelineAnnotation>,
-    pub diagnostics: Vec<stringer_pipeline::PipelineDiagnostic>,
+    pub claimed_entries: usize,
+    pub scope: BatchScope,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -129,45 +119,47 @@ pub fn claim_batch(options: ClaimBatchOptions) -> Result<ClaimedBatch, Workspace
     let file = normalize_file_filter(options.file.as_deref());
     validate_file_filter(&package, file.as_deref())?;
     let claimed = claimed_entry_ids(&options.workspace)?;
-    let mut entries = Vec::new();
+    let scope = BatchScope { file: file.clone() };
     let mut ids = Vec::new();
     for file_records in package.files.iter().filter(|file_records| {
         file.as_deref()
             .is_none_or(|expected| file_records.manifest_file.path == expected)
     }) {
         for record in &file_records.records {
-            if entries.len() >= options.limit {
+            if ids.len() >= options.limit {
                 break;
             }
             if claimed.contains(&record.id) || !is_claim_eligible(record) {
                 continue;
             }
             ids.push(record.id.clone());
-            entries.push(claimed_entry(record));
         }
-        if entries.len() >= options.limit {
+        if ids.len() >= options.limit {
             break;
         }
     }
-    if entries.is_empty() {
+    if ids.is_empty() {
         return Ok(ClaimedBatch {
             batch_id: None,
-            entries,
+            claimed_entries: 0,
+            scope,
         });
     }
 
-    let batch_id = format!("b{}-{}", unix_ms(), std::process::id());
+    let batch_id = next_batch_id(&options.workspace);
+    let claimed_entries = ids.len();
     let batch = BatchFile {
         schema_version: stringer_workspace_core::SCHEMA_VERSION,
         batch_id: batch_id.clone(),
         created_at_unix_ms: unix_ms(),
-        scope: BatchScope { file },
+        scope: scope.clone(),
         entry_ids: ids,
     };
     write_batch_file(&options.workspace, &batch)?;
     Ok(ClaimedBatch {
         batch_id: Some(batch_id),
-        entries,
+        claimed_entries,
+        scope,
     })
 }
 
@@ -278,18 +270,6 @@ fn is_claim_eligible(record: &TranslationRecord) -> bool {
     is_empty_translation(record) || translation_origin(record) == Some("memory")
 }
 
-fn claimed_entry(record: &TranslationRecord) -> ClaimedBatchEntry {
-    ClaimedBatchEntry {
-        id: record.id.clone(),
-        source: record.source.clone(),
-        translation: record.translation.clone(),
-        translation_meta: record.translation_meta.clone(),
-        context: record.context.clone(),
-        hints: record.hints.clone(),
-        diagnostics: record.diagnostics.clone(),
-    }
-}
-
 fn is_empty_translation(record: &TranslationRecord) -> bool {
     record
         .translation
@@ -320,6 +300,16 @@ fn remove_batch_file(workspace: &Utf8Path, batch_id: &str) -> Result<(), Workspa
 
 fn batch_path(workspace: &Utf8Path, batch_id: &str) -> Utf8PathBuf {
     workspace.join(BATCHES_DIR).join(format!("{batch_id}.json"))
+}
+
+fn next_batch_id(workspace: &Utf8Path) -> String {
+    loop {
+        let sequence = BATCH_ID_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let batch_id = format!("b{}-{}-{}", unix_ms(), std::process::id(), sequence);
+        if !batch_path(workspace, &batch_id).exists() {
+            return batch_id;
+        }
+    }
 }
 
 fn write_json_atomic<T: Serialize>(path: &Utf8Path, value: &T) -> Result<(), WorkspaceOpsError> {

@@ -8,9 +8,8 @@ mod paths;
 
 pub use batch::{
     ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
-    BatchCount, ClaimBatchOptions, ClaimedBatch, ClaimedBatchEntry, CountBatchOptions,
-    ReleaseBatchOptions, ReleaseBatchSummary, apply_batch_patch, claim_batch, count_batch,
-    release_batch,
+    BatchCount, ClaimBatchOptions, ClaimedBatch, CountBatchOptions, ReleaseBatchOptions,
+    ReleaseBatchSummary, apply_batch_patch, claim_batch, count_batch, release_batch,
 };
 pub use error::WorkspaceError;
 pub use inspect::{

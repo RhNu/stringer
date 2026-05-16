@@ -14,9 +14,9 @@ use stringer_workspace_core::GlobalConfigSource;
 
 use crate::dto::{
     InspectDiagnosticSeverityInput, InspectEntryStatusInput, WorkspaceBatchApplyRequest,
-    WorkspaceBatchApplyResponse, WorkspaceBatchClaimEntry, WorkspaceBatchClaimRequest,
-    WorkspaceBatchClaimResponse, WorkspaceBatchCountRequest, WorkspaceBatchCountResponse,
-    WorkspaceBatchReleaseRequest, WorkspaceBatchReleaseResponse, WorkspaceFinalizeRequest,
+    WorkspaceBatchApplyResponse, WorkspaceBatchClaimRequest, WorkspaceBatchClaimResponse,
+    WorkspaceBatchCountRequest, WorkspaceBatchCountResponse, WorkspaceBatchReleaseRequest,
+    WorkspaceBatchReleaseResponse, WorkspaceBatchScope, WorkspaceFinalizeRequest,
     WorkspaceFinalizeResponse, WorkspaceInspectBatchRequest, WorkspaceInspectBatchResponse,
     WorkspaceInspectDiagnosticResponse, WorkspaceInspectDiagnosticsRequest,
     WorkspaceInspectDiagnosticsResponse, WorkspaceInspectEntriesRequest,
@@ -166,6 +166,8 @@ pub fn workspace_inspect_batch(
     inspect_batch_response(inspect_workspace_batch(InspectWorkspaceBatchOptions {
         workspace: workspace_or_current(request.workspace)?,
         batch_id: request.batch_id,
+        offset: request.offset,
+        limit: request.limit,
     })?)
 }
 
@@ -212,32 +214,10 @@ fn batch_count_response(count: BatchCount) -> WorkspaceBatchCountResponse {
 fn claimed_batch_response(claimed: ClaimedBatch) -> Result<WorkspaceBatchClaimResponse, AppError> {
     Ok(WorkspaceBatchClaimResponse {
         batch_id: claimed.batch_id,
-        entries: claimed
-            .entries
-            .into_iter()
-            .map(|entry| {
-                Ok(WorkspaceBatchClaimEntry {
-                    id: entry.id,
-                    source: entry.source,
-                    translation: entry.translation,
-                    translation_meta: entry
-                        .translation_meta
-                        .map(|meta| serialize_value("translation_meta", meta))
-                        .transpose()?,
-                    context: entry.context,
-                    hints: entry
-                        .hints
-                        .into_iter()
-                        .map(|hint| serialize_value("batch hint", hint))
-                        .collect::<Result<_, _>>()?,
-                    diagnostics: entry
-                        .diagnostics
-                        .into_iter()
-                        .map(|diagnostic| serialize_value("batch diagnostic", diagnostic))
-                        .collect::<Result<_, _>>()?,
-                })
-            })
-            .collect::<Result<_, AppError>>()?,
+        claimed_entries: claimed.claimed_entries,
+        scope: WorkspaceBatchScope {
+            file: claimed.scope.file,
+        },
     })
 }
 
@@ -269,6 +249,10 @@ fn inspect_batch_response(
 ) -> Result<WorkspaceInspectBatchResponse, AppError> {
     Ok(WorkspaceInspectBatchResponse {
         batch_id: inspected.batch_id,
+        total: inspected.total,
+        offset: inspected.offset,
+        limit: inspected.limit,
+        next_offset: inspected.next_offset,
         entries: inspected
             .entries
             .into_iter()

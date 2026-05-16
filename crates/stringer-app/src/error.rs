@@ -126,9 +126,16 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         WorkspaceError::UnknownTranslationId { id }
         | WorkspaceError::DuplicateBatchPatchId { id }
         | WorkspaceError::MissingBatchPatchTranslation { id } => json!({ "id": id }),
-        WorkspaceError::BatchNotFound { batch_id } => json!({ "batch_id": batch_id }),
+        WorkspaceError::BatchNotFound { batch_id } => json!({
+            "batch_id": batch_id,
+            "recovery": "claim_fresh_batch",
+        }),
         WorkspaceError::BatchEntryNotClaimed { batch_id, id } => {
-            json!({ "batch_id": batch_id, "id": id })
+            json!({
+                "batch_id": batch_id,
+                "id": id,
+                "recovery": "inspect_batch_from_offset_0",
+            })
         }
         WorkspaceError::DuplicateOutputPath { path } => json!({ "path": path }),
         WorkspaceError::InvalidLogicalPath { path, message } => {
@@ -242,7 +249,10 @@ fn workspace_core_error_details(error: &WorkspaceCoreError) -> Value {
         WorkspaceCoreError::DuplicateTranslationId { path, id } => {
             json!({ "path": json_path(path), "id": id })
         }
-        WorkspaceCoreError::BatchNotFound { batch_id } => json!({ "batch_id": batch_id }),
+        WorkspaceCoreError::BatchNotFound { batch_id } => json!({
+            "batch_id": batch_id,
+            "recovery": "claim_fresh_batch",
+        }),
         WorkspaceCoreError::CurrentDirectory { .. } => json!({}),
     }
 }

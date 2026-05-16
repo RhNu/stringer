@@ -79,23 +79,17 @@ pub struct WorkspaceBatchClaimRequest {
     pub limit: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorkspaceBatchClaimResponse {
-    pub batch_id: Option<String>,
-    pub entries: Vec<WorkspaceBatchClaimEntry>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceBatchScope {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct WorkspaceBatchClaimEntry {
-    pub id: String,
-    pub source: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translation: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub translation_meta: Option<Value>,
-    pub context: BTreeMap<String, String>,
-    pub hints: Vec<Value>,
-    pub diagnostics: Vec<Value>,
+pub struct WorkspaceBatchClaimResponse {
+    pub batch_id: Option<String>,
+    pub claimed_entries: usize,
+    pub scope: WorkspaceBatchScope,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,11 +212,20 @@ pub struct WorkspaceInspectBatchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
     pub batch_id: String,
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_batch_inspect_limit")]
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WorkspaceInspectBatchResponse {
     pub batch_id: String,
+    pub total: usize,
+    pub offset: usize,
+    pub limit: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
     pub entries: Vec<WorkspaceInspectEntryResponse>,
 }
 
@@ -505,6 +508,10 @@ pub struct KnowledgeTermsEditResponse {
 
 fn default_lookup_limit() -> usize {
     20
+}
+
+fn default_batch_inspect_limit() -> usize {
+    10
 }
 
 fn default_inspect_limit() -> usize {

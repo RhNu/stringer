@@ -6,6 +6,7 @@ pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
   stringer knowledge annotate
   stringer workspace batch count --json
   stringer workspace batch claim --limit 50
+  stringer workspace inspect batch --batch-id <BATCH_ID> --limit 10
   stringer workspace batch apply --input <PATCH_JSON>
   stringer knowledge validate
   stringer workspace finalize
@@ -44,7 +45,7 @@ pub(crate) const WORKSPACE_BATCH_LONG_ABOUT: &str =
 pub(crate) const WORKSPACE_BATCH_COUNT_LONG_ABOUT: &str =
     r#"Count total, empty, memory-prefilled, translated, claimed, and diagnostic rows."#;
 
-pub(crate) const WORKSPACE_BATCH_CLAIM_LONG_ABOUT: &str = r#"Claim eligible untranslated or memory-prefilled rows and print source, context, hints, and diagnostics as JSON."#;
+pub(crate) const WORKSPACE_BATCH_CLAIM_LONG_ABOUT: &str = r#"Claim eligible untranslated or memory-prefilled rows and print a compact batch summary. Read claimed entries with workspace inspect batch."#;
 
 pub(crate) const WORKSPACE_BATCH_APPLY_LONG_ABOUT: &str =
     r#"Apply translations for ids owned by a claimed batch."#;

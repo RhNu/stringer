@@ -169,11 +169,17 @@ async fn inspect_batch_returns_claimed_remaining_entries_without_applying() {
     let batch = inspect_workspace_batch(InspectWorkspaceBatchOptions {
         workspace: utf8(&fixture.translations),
         batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 1,
     })
     .unwrap();
 
     assert_eq!(batch.batch_id, batch_id);
-    assert_eq!(batch.entries.len(), 2);
+    assert_eq!(batch.total, 2);
+    assert_eq!(batch.offset, 0);
+    assert_eq!(batch.limit, 1);
+    assert_eq!(batch.next_offset, None);
+    assert_eq!(batch.entries.len(), 1);
     assert_eq!(
         batch.entries[0].claimed_by.as_deref(),
         Some(batch.batch_id.as_str())

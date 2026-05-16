@@ -46,6 +46,33 @@ fn workspace_inspect_commands_parse_agent_read_flags() {
         "stringer",
         "workspace",
         "inspect",
+        "batch",
+        "--workspace",
+        "translations",
+        "--batch-id",
+        "b123-4",
+        "--limit",
+        "10",
+        "--offset",
+        "20",
+    ]);
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Inspect { command } = command else {
+        panic!("expected workspace inspect command");
+    };
+    let WorkspaceInspectCommand::Batch(command) = command else {
+        panic!("expected inspect batch command");
+    };
+    assert_eq!(command.batch_id, "b123-4");
+    assert_eq!(command.limit, 10);
+    assert_eq!(command.offset, 20);
+
+    let cli = Cli::parse_from([
+        "stringer",
+        "workspace",
+        "inspect",
         "diagnostics",
         "--workspace",
         "translations",

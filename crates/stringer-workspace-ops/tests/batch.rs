@@ -1,7 +1,7 @@
 use stringer_workspace_ops::{
     ApplyBatchPatchEntry, ApplyBatchPatchOptions, ClaimBatchOptions, CountBatchOptions,
-    ReleaseBatchOptions, WorkspaceOpsError, apply_batch_patch, claim_batch, count_batch,
-    release_batch,
+    InspectWorkspaceBatchOptions, ReleaseBatchOptions, WorkspaceOpsError, apply_batch_patch,
+    claim_batch, count_batch, inspect_workspace_batch, release_batch,
 };
 
 mod support;
@@ -31,10 +31,22 @@ fn batch_count_claim_apply_and_release_manage_claimed_entries() {
     })
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
-    assert_eq!(claim.entries.len(), 2);
-    assert_eq!(claim.entries[0].source, "Iron Sword");
-    assert_eq!(claim.entries[1].translation.as_deref(), Some("钢剑"));
-    assert_eq!(claim.entries[1].diagnostics.len(), 1);
+    assert_eq!(claim.claimed_entries, 2);
+    assert_eq!(claim.scope.file.as_deref(), Some(ENTRY_FILE));
+
+    let batch_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 1,
+    })
+    .unwrap();
+    assert_eq!(batch_page.total, 2);
+    assert_eq!(batch_page.offset, 0);
+    assert_eq!(batch_page.limit, 1);
+    assert_eq!(batch_page.next_offset, None);
+    assert_eq!(batch_page.entries.len(), 1);
+    assert_eq!(batch_page.entries[0].source, "Iron Sword");
 
     let count = count_batch(CountBatchOptions {
         workspace: utf8(fixture.workspace()),
@@ -72,6 +84,90 @@ fn batch_count_claim_apply_and_release_manage_claimed_entries() {
             .join(format!("{batch_id}.json"))
             .exists()
     );
+}
+
+#[test]
+fn batch_inspect_omits_next_offset_because_apply_mutates_remaining_entries() {
+    let fixture = workspace_with_rows("batch-mutable-page", rows());
+
+    let claim = claim_batch(ClaimBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        file: Some(ENTRY_FILE.to_string()),
+        limit: 2,
+    })
+    .unwrap();
+    let batch_id = claim.batch_id.expect("batch id");
+
+    let first_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 1,
+    })
+    .unwrap();
+    assert_eq!(first_page.entries.len(), 1);
+    assert_eq!(first_page.next_offset, None);
+
+    apply_batch_patch(ApplyBatchPatchOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: batch_id.clone(),
+        entries: vec![ApplyBatchPatchEntry {
+            id: first_page.entries[0].id.clone(),
+            translation: Some("熟铁剑".to_string()),
+        }],
+    })
+    .unwrap();
+
+    let remaining_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id,
+        offset: 0,
+        limit: 1,
+    })
+    .unwrap();
+    assert_eq!(remaining_page.total, 1);
+    assert_eq!(remaining_page.entries.len(), 1);
+}
+
+#[test]
+fn consecutive_claims_create_distinct_non_overlapping_batches() {
+    let fixture = workspace_with_rows("batch-unique", rows());
+
+    let first = claim_batch(ClaimBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        file: Some(ENTRY_FILE.to_string()),
+        limit: 1,
+    })
+    .unwrap();
+    let first_id = first.batch_id.expect("first batch id");
+    let second = claim_batch(ClaimBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        file: Some(ENTRY_FILE.to_string()),
+        limit: 1,
+    })
+    .unwrap();
+    let second_id = second.batch_id.expect("second batch id");
+
+    assert_ne!(first_id, second_id);
+    assert_eq!(first.claimed_entries, 1);
+    assert_eq!(second.claimed_entries, 1);
+
+    let first_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: first_id,
+        offset: 0,
+        limit: 10,
+    })
+    .unwrap();
+    let second_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: second_id,
+        offset: 0,
+        limit: 10,
+    })
+    .unwrap();
+
+    assert_ne!(first_page.entries[0].id, second_page.entries[0].id);
 }
 
 #[test]

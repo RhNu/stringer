@@ -286,6 +286,279 @@ async fn mcp_workspace_open_returns_structured_content_through_tool_call() {
 }
 
 #[tokio::test]
+async fn mcp_workspace_batch_claim_inspect_and_apply_use_compact_claims() {
+    let root = TempRoot::new("mcp-batch-root");
+    let workspace = TempRoot::new("mcp-batch-workspace");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n");
+
+    let (client, server_handle) = connect().await;
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
+                "source_root": path_string(root.path()),
+                "workspace": path_string(workspace.path()),
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+
+    let claim = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_claim").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "limit": 2
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(claim["claimed_entries"], 2);
+    assert!(claim.get("entries").is_none());
+    let batch_id = claim["batch_id"].as_str().unwrap();
+
+    let page = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_inspect_batch").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "offset": 0,
+                "limit": 1
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(page["total"], 2);
+    assert!(page.get("next_offset").is_none());
+    assert!(matches!(
+        page["entries"][0]["source"].as_str(),
+        Some("Iron Sword" | "Steel Sword")
+    ));
+    let entry_id = page["entries"][0]["id"].as_str().unwrap();
+
+    let applied = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_apply").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "entries": [{ "id": entry_id, "translation": "熟铁剑" }]
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(applied["applied_entries"], 1);
+    assert_eq!(applied["remaining_entries"], 1);
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_workspace_batch_apply_errors_explain_stale_remaining_batch_ids() {
+    let root = TempRoot::new("mcp-batch-stale-id-root");
+    let workspace = TempRoot::new("mcp-batch-stale-id-workspace");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n");
+
+    let (client, server_handle) = connect().await;
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
+                "source_root": path_string(root.path()),
+                "workspace": path_string(workspace.path()),
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+
+    let claim = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_claim").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "limit": 2
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let batch_id = claim["batch_id"].as_str().unwrap();
+    let page = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_inspect_batch").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "offset": 0,
+                "limit": 1
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let entry_id = page["entries"][0]["id"].as_str().unwrap();
+
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_apply").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "entries": [{ "id": entry_id, "translation": "熟铁剑" }]
+            }))),
+        )
+        .await
+        .unwrap();
+    let error = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_apply").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "entries": [{ "id": entry_id, "translation": "熟铁剑" }]
+            }))),
+        )
+        .await
+        .unwrap_err();
+    let rmcp::ServiceError::McpError(error) = error else {
+        panic!("expected MCP error, got {error:?}");
+    };
+    let data: Value = error.data.unwrap();
+
+    assert_eq!(data["code"], "workspace.batch_entry_not_claimed");
+    assert!(
+        data["message"]
+            .as_str()
+            .unwrap()
+            .contains("re-read the batch from offset 0")
+    );
+    assert_eq!(data["details"]["batch_id"], batch_id);
+    assert_eq!(data["details"]["id"], entry_id);
+    assert_eq!(data["details"]["recovery"], "inspect_batch_from_offset_0");
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_workspace_batch_apply_errors_explain_completed_batch_ids() {
+    let root = TempRoot::new("mcp-batch-completed-root");
+    let workspace = TempRoot::new("mcp-batch-completed-workspace");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n");
+
+    let (client, server_handle) = connect().await;
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
+                "source_root": path_string(root.path()),
+                "workspace": path_string(workspace.path()),
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+
+    let claim = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_claim").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "limit": 1
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let batch_id = claim["batch_id"].as_str().unwrap();
+    let page = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_inspect_batch").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let entry_id = page["entries"][0]["id"].as_str().unwrap();
+
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_apply").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "entries": [{ "id": entry_id, "translation": "熟铁剑" }]
+            }))),
+        )
+        .await
+        .unwrap();
+    let error = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_apply").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "entries": [{ "id": entry_id, "translation": "熟铁剑" }]
+            }))),
+        )
+        .await
+        .unwrap_err();
+    let rmcp::ServiceError::McpError(error) = error else {
+        panic!("expected MCP error, got {error:?}");
+    };
+    let data: Value = error.data.unwrap();
+
+    assert_eq!(data["code"], "workspace.batch_not_found");
+    assert!(
+        data["message"]
+            .as_str()
+            .unwrap()
+            .contains("claim a fresh batch")
+    );
+    assert_eq!(data["details"]["batch_id"], batch_id);
+    assert_eq!(data["details"]["recovery"], "claim_fresh_batch");
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
 async fn mcp_errors_include_app_code_message_and_details() {
     let (client, server_handle) = connect().await;
     let error = client

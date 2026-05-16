@@ -1,7 +1,7 @@
 pub use stringer_workspace_ops::{
     ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
-    BatchCount, ClaimBatchOptions, ClaimedBatch, ClaimedBatchEntry, CountBatchOptions,
-    ReleaseBatchOptions, ReleaseBatchSummary,
+    BatchCount, ClaimBatchOptions, ClaimedBatch, CountBatchOptions, ReleaseBatchOptions,
+    ReleaseBatchSummary,
 };
 
 use crate::WorkspaceError;

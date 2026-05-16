@@ -15,6 +15,8 @@ pub enum WorkspaceOpsError {
     #[error("batch patch entry `{id}` is missing translation")]
     MissingBatchPatchTranslation { id: String },
 
-    #[error("translation id `{id}` is not claimed by batch `{batch_id}`")]
+    #[error(
+        "translation id `{id}` is not claimed by batch `{batch_id}`; it is not in the remaining batch entries; re-read the batch from offset 0 before retrying"
+    )]
     BatchEntryNotClaimed { batch_id: String, id: String },
 }

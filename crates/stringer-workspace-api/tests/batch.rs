@@ -1,7 +1,8 @@
 use stringer_workspace_api::{
     ApplyBatchPatchEntry, ApplyBatchPatchOptions, ClaimBatchOptions, CountBatchOptions,
-    ExportTranslationsOptions, ReleaseBatchOptions, apply_batch_patch, claim_batch, count_batch,
-    export_translations, release_batch,
+    ExportTranslationsOptions, InspectWorkspaceBatchOptions, ReleaseBatchOptions,
+    apply_batch_patch, claim_batch, count_batch, export_translations, inspect_workspace_batch,
+    release_batch,
 };
 
 #[allow(dead_code)]
@@ -56,23 +57,32 @@ async fn batch_count_claim_apply_and_release_manage_claimed_entries() {
     })
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
-    assert_eq!(claim.entries.len(), 2);
-    assert_eq!(claim.entries[0].source, "Iron Sword");
-    assert_eq!(claim.entries[1].translation.as_deref(), Some("钢剑"));
-    assert_eq!(
-        claim.entries[1]
-            .translation_meta
-            .as_ref()
-            .and_then(|meta| meta.origin.as_deref()),
-        Some("memory")
-    );
-    assert_eq!(claim.entries[1].diagnostics.len(), 1);
+    assert_eq!(claim.claimed_entries, 2);
+    assert_eq!(claim.scope.file.as_deref(), Some(file));
     assert!(
         translations
             .join("batches")
             .join(format!("{batch_id}.json"))
             .exists()
     );
+    let page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(&translations),
+        batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 2,
+    })
+    .unwrap();
+    assert_eq!(page.total, 2);
+    assert_eq!(page.entries[0].source, "Iron Sword");
+    assert_eq!(page.entries[1].translation.as_deref(), Some("钢剑"));
+    assert_eq!(
+        page.entries[1]
+            .translation_meta
+            .as_ref()
+            .and_then(|meta| meta.origin.as_deref()),
+        Some("memory")
+    );
+    assert_eq!(page.entries[1].diagnostics.len(), 1);
 
     let count = count_batch(CountBatchOptions {
         workspace: utf8(&translations),
@@ -243,7 +253,7 @@ async fn batch_file_filters_accept_windows_path_separators() {
         limit: 1,
     })
     .unwrap();
-    assert_eq!(claim.entries.len(), 1);
+    assert_eq!(claim.claimed_entries, 1);
 }
 
 #[tokio::test]
@@ -271,7 +281,14 @@ async fn batch_apply_rejects_entries_not_claimed_by_batch() {
     })
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
-    let claimed_id = claim.entries[0].id.as_str();
+    let page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(&translations),
+        batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 1,
+    })
+    .unwrap();
+    let claimed_id = page.entries[0].id.as_str();
     let unclaimed_id = if claimed_id.ends_with("$Title") {
         "scaleform:Interface/Translations/MyMod_English.txt:$Desc"
     } else {
@@ -314,7 +331,14 @@ async fn batch_apply_rejects_duplicate_ids_and_missing_translation() {
     })
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
-    let id = claim.entries[0].id.clone();
+    let page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+        workspace: utf8(&translations),
+        batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 1,
+    })
+    .unwrap();
+    let id = page.entries[0].id.clone();
 
     let duplicate = apply_batch_patch(ApplyBatchPatchOptions {
         workspace: utf8(&translations),

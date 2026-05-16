@@ -22,7 +22,7 @@ description: Use when an agent needs to operate Stringer MCP tools for Bethesda 
 3. Inspect files, remaining work, and diagnostics with `workspace_inspect_*` and `workspace_batch_count`; do not read raw workspace files.
 4. Organize terminology before formal translation: use `hints`, diagnostics, and `knowledge_lookup` to identify repeated or risky terms, then update workspace terminology with `knowledge_term_upsert` or `knowledge_term_delete`.
 5. Re-run `knowledge_annotate` after terminology changes so later batches carry the updated hints.
-6. Start formal batch translation with `workspace_batch_claim`, translate from tool-returned entries, and apply through `workspace_batch_apply`.
+6. Start formal batch translation with `workspace_batch_claim`, read claimed entries with `workspace_inspect_batch`, and apply through `workspace_batch_apply`.
 7. Validate with `knowledge_validate`, review diagnostics with inspect tools, and repeat focused fixes if needed.
 8. Finalize with `workspace_finalize` only after validation and diagnostic review.
 

@@ -7,10 +7,10 @@ use stringer_app::{
     InspectEntryStatusInput, KnowledgeTermInput, KnowledgeTermStatusInput,
     KnowledgeTermUpsertRequest, SettingsInput, StringerApp, WorkspaceBatchApplyEntry,
     WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest,
-    WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
-    WorkspaceOpenRequest, adapt_import, knowledge_term_upsert, workspace_batch_apply,
-    workspace_batch_claim, workspace_batch_count, workspace_finalize,
-    workspace_inspect_diagnostics, workspace_inspect_entries,
+    WorkspaceFinalizeRequest, WorkspaceInspectBatchRequest, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectEntriesRequest, WorkspaceOpenRequest, adapt_import, knowledge_term_upsert,
+    workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_finalize,
+    workspace_inspect_batch, workspace_inspect_diagnostics, workspace_inspect_entries,
 };
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceCoreError};
 
@@ -53,8 +53,18 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     })
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
-    let entry_id = claim.entries[0].id.clone();
-    assert_eq!(claim.entries[0].source, "Iron Sword");
+    assert_eq!(claim.claimed_entries, 1);
+
+    let page = workspace_inspect_batch(WorkspaceInspectBatchRequest {
+        workspace: Some(path_string(workspace.path())),
+        batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 10,
+    })
+    .unwrap();
+    let entry_id = page.entries[0].id.clone();
+    assert_eq!(page.total, 1);
+    assert_eq!(page.entries[0].source, "Iron Sword");
 
     let summary = workspace_batch_apply(WorkspaceBatchApplyRequest {
         workspace: Some(path_string(workspace.path())),

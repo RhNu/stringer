@@ -80,6 +80,8 @@ pub enum WorkspaceCoreError {
     #[error("duplicate translation id `{id}` in `{path}`")]
     DuplicateTranslationId { path: Utf8PathBuf, id: String },
 
-    #[error("batch `{batch_id}` was not found")]
+    #[error(
+        "batch `{batch_id}` was not found; it may already be fully applied, released, or cleared; claim a fresh batch before applying translations"
+    )]
     BatchNotFound { batch_id: String },
 }

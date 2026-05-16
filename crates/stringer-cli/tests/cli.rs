@@ -343,7 +343,27 @@ fn workspace_batch_claim_emits_json_and_apply_reads_stdin() {
     assert!(claim.status.success());
     let claim_json: Value = serde_json::from_slice(&claim.stdout).unwrap();
     let batch_id = claim_json["batch_id"].as_str().unwrap();
-    let entry_id = claim_json["entries"][0]["id"].as_str().unwrap();
+    assert_eq!(claim_json["claimed_entries"], 1);
+    assert!(claim_json.get("entries").is_none());
+
+    let inspected = stringer_command()
+        .args([
+            "workspace",
+            "inspect",
+            "batch",
+            "--workspace",
+            translations.as_str(),
+            "--batch-id",
+            batch_id,
+            "--limit",
+            "1",
+        ])
+        .output()
+        .unwrap();
+    assert!(inspected.status.success());
+    let inspected_json: Value = serde_json::from_slice(&inspected.stdout).unwrap();
+    assert_eq!(inspected_json["total"], 1);
+    let entry_id = inspected_json["entries"][0]["id"].as_str().unwrap();
 
     let patch = serde_json::json!({
         "batch_id": batch_id,

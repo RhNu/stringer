@@ -202,6 +202,10 @@ pub struct WorkspaceInspectBatchCommand {
     pub workspace: Utf8PathBuf,
     #[arg(long, value_name = "BATCH_ID")]
     pub batch_id: String,
+    #[arg(long, default_value_t = 10, value_name = "N")]
+    pub limit: usize,
+    #[arg(long, default_value_t = 0, value_name = "N")]
+    pub offset: usize,
 }
 
 #[derive(Debug, Parser)]
@@ -404,6 +408,8 @@ fn run_workspace_inspect(
             let inspected = workspace_inspect_batch(WorkspaceInspectBatchRequest {
                 workspace: Some(command.workspace.to_string()),
                 batch_id: command.batch_id,
+                offset: command.offset,
+                limit: command.limit,
             })?;
             status.finish();
             print_json(&inspected)
