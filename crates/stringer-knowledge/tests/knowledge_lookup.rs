@@ -214,6 +214,9 @@ fn lookup_options(root: &std::path::Path, text: &str) -> LookupKnowledgeOptions 
 
 fn settings_with_global(global_knowledge_root: Option<std::path::PathBuf>) -> WorkspaceSettings {
     let mut settings = settings();
-    settings.global_knowledge_root = global_knowledge_root.as_deref().map(utf8);
+    settings.global_knowledge_root = Some(match global_knowledge_root {
+        Some(path) => utf8(&path),
+        None => camino::Utf8PathBuf::from("__stringer_test_no_global_knowledge__"),
+    });
     settings
 }

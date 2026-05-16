@@ -1,8 +1,9 @@
 use rusqlite::Connection;
 use stringer_knowledge::{
     BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope, KnowledgeTermDeleteOptions,
-    LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions, LookupKnowledgeSource,
-    build_knowledge_index, delete_knowledge_term, lookup_knowledge,
+    LoadKnowledgeLayersOptions, LookupKnowledgeField, LookupKnowledgeMode, LookupKnowledgeOptions,
+    LookupKnowledgeSource, build_knowledge_index, delete_knowledge_term, load_knowledge_layers,
+    lookup_knowledge,
 };
 use stringer_pipeline::PipelineEntryKind;
 use stringer_workspace_core::WorkspaceSettings;
@@ -38,6 +39,33 @@ fn explicit_rebuild_splits_global_and_workspace_indexes() {
     assert_eq!(global_files, vec![path_string(&global_memory)]);
     let workspace_files = indexed_source_files(&root.path().join("knowledge/index.sqlite"));
     assert_eq!(workspace_files, vec![path_string(&workspace_term)]);
+}
+
+#[test]
+fn build_index_counts_duplicate_memory_ids_across_layers() {
+    let root = TempRoot::new("knowledge-index-memory-duplicates");
+    let global = root.path().join("global-knowledge");
+    write_memory(
+        &global.join("memory/base.jsonl"),
+        "tm:1",
+        "Iron Sword",
+        "全局铁剑",
+    );
+    write_memory(
+        &root.path().join("knowledge/memory/workspace.jsonl"),
+        "tm:1",
+        "Steel Sword",
+        "钢剑",
+    );
+
+    let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
+        workspace: utf8(root.path()),
+        settings: settings_with_global(Some(global)),
+        scope: KnowledgeIndexBuildScope::All,
+    })
+    .unwrap();
+
+    assert_eq!(summary.memory, 2);
 }
 
 #[test]
@@ -80,6 +108,69 @@ fn lookup_auto_creates_global_index_without_copying_global_rows_to_workspace_ind
         indexed_source_files(&root.path().join("knowledge/index.sqlite")),
         vec![path_string(&workspace_term)]
     );
+}
+
+#[test]
+fn lookup_with_empty_workspace_knowledge_uses_global_index_only() {
+    let root = TempRoot::new("knowledge-layered-index-global-only");
+    let global = root.path().join("global-knowledge");
+    let global_memory = global.join("memory/base.jsonl");
+    write_memory(&global_memory, "tm:iron", "Iron Sword", "全局铁剑");
+
+    let lookup = lookup_knowledge(LookupKnowledgeOptions {
+        workspace: utf8(root.path()),
+        settings: settings_with_global(Some(global.clone())),
+        text: "Iron Sword".to_string(),
+        kind: PipelineEntryKind::Plugin,
+        context: Vec::new(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
+    })
+    .unwrap();
+
+    assert!(lookup.index_used);
+    assert_eq!(lookup.results[0].target, "全局铁剑");
+    assert!(global.join("index.sqlite").exists());
+    assert!(!root.path().join("knowledge/index.sqlite").exists());
+}
+
+#[test]
+fn lookup_with_empty_workspace_knowledge_files_uses_global_index_only() {
+    let root = TempRoot::new("knowledge-layered-index-empty-workspace-files");
+    let global = root.path().join("global-knowledge");
+    let global_memory = global.join("memory/base.jsonl");
+    write_memory(&global_memory, "tm:iron", "Iron Sword", "全局铁剑");
+    write_text(
+        &root.path().join("knowledge/terms/empty.toml"),
+        "# no workspace terms\n",
+    );
+    write_text(
+        &root.path().join("knowledge/rules/empty.toml"),
+        "# no workspace rules\n",
+    );
+    write_text(&root.path().join("knowledge/memory/empty.jsonl"), "\n");
+
+    let lookup = lookup_knowledge(LookupKnowledgeOptions {
+        workspace: utf8(root.path()),
+        settings: settings_with_global(Some(global.clone())),
+        text: "Iron Sword".to_string(),
+        kind: PipelineEntryKind::Plugin,
+        context: Vec::new(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
+    })
+    .unwrap();
+
+    assert!(lookup.index_used);
+    assert_eq!(lookup.results[0].target, "全局铁剑");
+    assert!(global.join("index.sqlite").exists());
+    assert!(!root.path().join("knowledge/index.sqlite").exists());
 }
 
 #[test]
@@ -142,6 +233,93 @@ fn lookup_reports_cross_layer_override_from_split_indexes() {
 
     assert_eq!(hidden_global.total_matches, 0);
     assert!(hidden_global.results.is_empty());
+}
+
+#[test]
+fn load_knowledge_layers_suppresses_overridden_global_memory() {
+    let root = TempRoot::new("knowledge-layered-load-memory-override");
+    let global = root.path().join("global-knowledge");
+    write_memory(
+        &global.join("memory/base.jsonl"),
+        "tm:iron",
+        "Iron Sword",
+        "全局铁剑",
+    );
+    write_memory(
+        &root.path().join("knowledge/memory/workspace.jsonl"),
+        "tm:iron",
+        "Iron Sword",
+        "工作区铁剑",
+    );
+
+    let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
+        workspace: utf8(root.path()),
+        settings: settings_with_global(Some(global)),
+        prefer_index: false,
+    })
+    .unwrap();
+
+    assert_eq!(loaded.knowledge.memory().len(), 1);
+    assert_eq!(loaded.knowledge.memory()[0].layer(), "workspace");
+    assert_eq!(loaded.knowledge.memory()[0].target(), "工作区铁剑");
+    assert_eq!(
+        loaded
+            .knowledge
+            .merge_diagnostics()
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code() == "knowledge.override" && diagnostic.rule_id() == Some("tm:iron")
+            })
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn lookup_suppresses_overridden_global_memory_from_split_indexes() {
+    let root = TempRoot::new("knowledge-layered-index-memory-override");
+    let global = root.path().join("global-knowledge");
+    write_memory(
+        &global.join("memory/base.jsonl"),
+        "tm:iron",
+        "Iron Sword",
+        "全局铁剑",
+    );
+    write_memory(
+        &root.path().join("knowledge/memory/workspace.jsonl"),
+        "tm:iron",
+        "Iron Sword",
+        "工作区铁剑",
+    );
+
+    let lookup = lookup_knowledge(LookupKnowledgeOptions {
+        workspace: utf8(root.path()),
+        settings: settings_with_global(Some(global)),
+        text: "Iron Sword".to_string(),
+        kind: PipelineEntryKind::Plugin,
+        context: Vec::new(),
+        mode: LookupKnowledgeMode::Contains,
+        source: LookupKnowledgeSource::All,
+        field: LookupKnowledgeField::Both,
+        limit: 20,
+        case_sensitive: false,
+    })
+    .unwrap();
+
+    assert_eq!(lookup.total_matches, 1);
+    assert_eq!(lookup.results[0].kind, "memory");
+    assert_eq!(lookup.results[0].layer, "workspace");
+    assert_eq!(lookup.results[0].target, "工作区铁剑");
+    assert_eq!(
+        lookup
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.code() == "knowledge.override" && diagnostic.rule_id() == Some("tm:iron")
+            })
+            .count(),
+        1
+    );
 }
 
 #[test]

@@ -11,7 +11,7 @@ pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
   stringer workspace finalize
 
 Workspace layout: workspace.json, batches/, entries/**/*.jsonl.
-Knowledge: knowledge/{terms,memory,rules}; derived index: knowledge/index.sqlite.
+Knowledge layers: user global knowledge, then workspace knowledge/{terms,memory,rules}; workspace ids override global ids. Derived indexes stay per layer.
 See README.md and skills/stringer-workflows for agent workflows."#;
 
 pub(crate) const SETTINGS_LONG_HELP: &str =
@@ -98,7 +98,7 @@ Defaults: --source all --field both --limit 20."#;
 pub(crate) const INDEX_LONG_ABOUT: &str = r#"Maintain the derived knowledge SQLite index."#;
 
 pub(crate) const INDEX_REBUILD_LONG_ABOUT: &str =
-    r#"Rebuild <workspace>/knowledge/index.sqlite from knowledge files."#;
+    r#"Rebuild global and workspace knowledge SQLite indexes from knowledge files."#;
 
 pub(crate) const INDEX_REBUILD_AFTER_LONG_HELP: &str = r#"Example:
   stringer knowledge index rebuild"#;

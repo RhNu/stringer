@@ -273,6 +273,43 @@ async fn annotate_translations_can_skip_memory_fill() {
 }
 
 #[tokio::test]
+async fn annotate_uses_indexed_workspace_memory_for_auto_fill() {
+    let root = TempRoot::new("annotate-indexed-workspace-memory");
+    let source_root = root.path().join("source");
+    write_text(
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tStringer Test Iron Source\n",
+    );
+    let translations = root.path().join("translations");
+    write_text(
+        &translations.join("knowledge/memory/workspace.jsonl"),
+        "{\"id\":\"tm:iron\",\"source\":\"Stringer Test Iron Source\",\"target\":\"工作区铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
+    );
+    export_translations(ExportTranslationsOptions {
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
+        settings: settings(),
+        force: false,
+    })
+    .await
+    .unwrap();
+
+    let summary = annotate_translations(AnnotateTranslationsOptions {
+        workspace: utf8(&translations),
+        skip_memory_fill: false,
+    })
+    .unwrap();
+
+    assert_eq!(summary.auto_filled, 1);
+    assert!(summary.index_used);
+    assert!(summary.knowledge_diagnostics.is_empty());
+    assert!(translations.join("knowledge/index.sqlite").exists());
+    let rows = entry_rows(&translations, "scaleform", None);
+    assert_eq!(rows[0]["translation"], "工作区铁源");
+    assert_eq!(rows[0]["hints"][0]["layer"], "workspace");
+}
+
+#[tokio::test]
 async fn validate_translations_recomputes_diagnostics_from_current_knowledge() {
     let root = TempRoot::new("validate-package");
     let source_root = root.path().join("source");
@@ -361,6 +398,49 @@ async fn validate_translations_reports_missing_translation() {
     let rows = entry_rows(&translations, "scaleform", None);
     assert_eq!(rows[0]["diagnostics"][0]["code"], "translation.empty");
     assert!(rows[0]["diagnostics"][0].get("entry_id").is_none());
+}
+
+#[tokio::test]
+async fn validate_uses_indexed_rejected_memory_for_conflict_diagnostics() {
+    let root = TempRoot::new("validate-indexed-rejected-memory");
+    let source_root = root.path().join("source");
+    write_text(
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tStringer Test Iron Source\n",
+    );
+    let translations = root.path().join("translations");
+    write_text(
+        &translations.join("knowledge/memory/workspace.jsonl"),
+        "{\"id\":\"tm:bad\",\"source\":\"Stringer Test Iron Source\",\"target\":\"错误铁源\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"rejected\"}\n",
+    );
+    export_translations(ExportTranslationsOptions {
+        source_root: utf8(&source_root),
+        workspace: utf8(&translations),
+        settings: settings(),
+        force: false,
+    })
+    .await
+    .unwrap();
+    write_entry_rows(
+        &translations,
+        "scaleform",
+        "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Stringer Test Iron Source\",\"translation\":\"错误铁源\"}\n",
+    );
+    let summary = validate_translations(ValidateTranslationsOptions {
+        workspace: utf8(&translations),
+    })
+    .unwrap();
+    assert!(summary.index_used);
+    let rows = entry_rows(&translations, "scaleform", None);
+    assert!(
+        rows[0]["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|diagnostic| {
+                diagnostic["code"] == "memory.conflict" && diagnostic["rule_id"] == "tm:bad"
+            })
+    );
 }
 
 #[tokio::test]
@@ -572,20 +652,20 @@ fn lookup_refreshes_changed_knowledge_index_without_stale_diagnostic() {
 }
 
 #[tokio::test]
-async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diagnostic() {
-    let root = TempRoot::new("annotate-missing-index");
+async fn annotate_auto_refreshes_missing_index_without_stale_diagnostic() {
+    let root = TempRoot::new("annotate-auto-refresh-index");
     let source_root = root.path().join("source");
     write_text(
         &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
         "$Title\tIron Sword\n",
     );
+    let translations = root.path().join("translations");
     write_term(
-        &root.path().join("knowledge/terms/workspace.toml"),
+        &translations.join("knowledge/terms/workspace.toml"),
         "skyrim.weapon.iron_sword",
         "Iron Sword",
         "铁剑",
     );
-    let translations = root.path().join("translations");
     export_translations(ExportTranslationsOptions {
         source_root: utf8(&source_root),
         workspace: utf8(&translations),
@@ -602,12 +682,14 @@ async fn annotate_reports_missing_index_as_knowledge_diagnostic_without_row_diag
     .unwrap();
 
     assert_eq!(summary.diagnostics, 0);
+    assert!(summary.index_used);
     assert!(
         summary
             .knowledge_diagnostics
             .iter()
-            .any(|diagnostic| diagnostic.code() == "knowledge.index_stale")
+            .all(|diagnostic| diagnostic.code() != "knowledge.index_stale")
     );
+    assert!(translations.join("knowledge/index.sqlite").exists());
 }
 
 #[test]
@@ -638,29 +720,6 @@ fn lookup_rebuilds_corrupt_index_without_stale_diagnostic() {
     assert!(lookup.index_used);
     assert!(lookup.diagnostics.is_empty());
     assert_eq!(lookup.results[0].target, "铁剑");
-}
-
-#[test]
-fn build_index_preserves_duplicate_memory_ids_across_layers() {
-    let root = TempRoot::new("knowledge-index-memory-duplicates");
-    let global = root.path().join("global-knowledge");
-    write_text(
-        &global.join("memory/base.jsonl"),
-        "{\"id\":\"tm:1\",\"source\":\"Iron Sword\",\"target\":\"全局铁剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
-    );
-    write_text(
-        &root.path().join("knowledge/memory/workspace.jsonl"),
-        "{\"id\":\"tm:1\",\"source\":\"Steel Sword\",\"target\":\"钢剑\",\"source_locale\":\"en\",\"target_locale\":\"zh-Hans\",\"quality\":\"confirmed\"}\n",
-    );
-
-    let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-        workspace: utf8(root.path()),
-        settings: settings_with_global(Some(global)),
-        scope: KnowledgeIndexBuildScope::All,
-    })
-    .unwrap();
-
-    assert_eq!(summary.memory, 2);
 }
 
 #[test]
@@ -753,7 +812,10 @@ fn row_by_id<'a>(rows: &'a [Value], id: &str) -> &'a Value {
 
 fn settings_with_global(global_knowledge_root: Option<std::path::PathBuf>) -> WorkspaceSettings {
     let mut settings = settings();
-    settings.global_knowledge_root = global_knowledge_root.as_deref().map(utf8);
+    settings.global_knowledge_root = Some(match global_knowledge_root {
+        Some(path) => utf8(&path),
+        None => camino::Utf8PathBuf::from("__stringer_test_no_global_knowledge__"),
+    });
     settings
 }
 

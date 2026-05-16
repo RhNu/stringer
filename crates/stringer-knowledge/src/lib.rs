@@ -4,6 +4,7 @@ mod error;
 mod index;
 mod layers;
 mod lookup;
+mod session;
 mod terms;
 mod translations;
 

@@ -46,6 +46,6 @@ MCP results are structured JSON. Prefer them over parsing CLI text when both are
 
 ## Workspace Files
 
-`workspace open` writes `workspace.json`, `batches/`, and `entries/**/*.jsonl`. Workspace knowledge lives under `knowledge/`, and derived indexes live at `knowledge/index.sqlite`.
+`workspace open` writes `workspace.json`, `batches/`, and `entries/**/*.jsonl`. Workspace knowledge lives under `knowledge/`, global user knowledge lives beside the user config, and each layer has its own derived `index.sqlite`. Workspace knowledge ids override global ids.
 
 Agents should normally use inspect tools for read-only review and batch tools for edits. If direct JSONL inspection is needed as a fallback, read `source`, `context`, `hints`, and `diagnostics`; write only `translation`.

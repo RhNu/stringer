@@ -96,6 +96,18 @@ impl KnowledgeLayer {
         }
         Ok(())
     }
+
+    pub fn push_term(&mut self, term: Term) {
+        self.terms.push(term);
+    }
+
+    pub fn push_memory(&mut self, entry: TranslationMemoryEntry) {
+        self.memory.push(entry);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.terms.is_empty() && self.memory.is_empty() && self.rules.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -117,6 +129,7 @@ impl KnowledgeBase {
         let mut rules = Vec::<ReplacementRule>::new();
         let mut rule_indexes = BTreeMap::<String, usize>::new();
         let mut memory = Vec::new();
+        let mut memory_override_keys = BTreeSet::<(String, String, String)>::new();
         let mut merge_diagnostics = Vec::new();
 
         for layer in layers {
@@ -150,7 +163,12 @@ impl KnowledgeBase {
                     rules.push(rule);
                 }
             }
-            memory.extend(layer.memory);
+            merge_memory_layer(
+                &mut memory,
+                layer.memory,
+                &mut merge_diagnostics,
+                &mut memory_override_keys,
+            );
         }
         for rule in &rules {
             if rule.mode() == RuleMode::Regex
@@ -189,6 +207,34 @@ impl KnowledgeBase {
     }
 }
 
+fn merge_memory_layer(
+    memory: &mut Vec<TranslationMemoryEntry>,
+    layer_memory: Vec<TranslationMemoryEntry>,
+    merge_diagnostics: &mut Vec<PipelineDiagnostic>,
+    memory_override_keys: &mut BTreeSet<(String, String, String)>,
+) {
+    let mut overridden_items = BTreeSet::<(String, String)>::new();
+    for item in &layer_memory {
+        let id = item.id().to_string();
+        let new_layer = item.layer().to_string();
+        for old_layer in memory
+            .iter()
+            .filter(|old| old.id() == id && old.layer() != new_layer)
+            .map(|old| old.layer().to_string())
+            .collect::<BTreeSet<_>>()
+        {
+            if memory_override_keys.insert((id.clone(), old_layer.clone(), new_layer.clone())) {
+                merge_diagnostics.push(override_diagnostic("memory", &id, &old_layer, &new_layer));
+            }
+            overridden_items.insert((id.clone(), old_layer));
+        }
+    }
+    memory.retain(|item| {
+        !overridden_items.contains(&(item.id().to_string(), item.layer().to_string()))
+    });
+    memory.extend(layer_memory);
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Term {
     id: String,
@@ -203,7 +249,36 @@ pub struct Term {
     layer: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct TermInput {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub aliases: Vec<String>,
+    pub case_sensitive: bool,
+    pub status: TermStatus,
+    pub scope: BTreeMap<String, Vec<String>>,
+    pub tags: Vec<String>,
+    pub note: Option<String>,
+    pub layer: String,
+}
+
 impl Term {
+    pub fn new(input: TermInput) -> Self {
+        Self {
+            id: input.id,
+            source: input.source,
+            target: input.target,
+            aliases: input.aliases,
+            case_sensitive: input.case_sensitive,
+            status: input.status,
+            scope: Scope::from_values(input.scope),
+            tags: input.tags,
+            note: input.note,
+            layer: input.layer,
+        }
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -279,6 +354,15 @@ impl TermStatus {
             Self::Forbidden => "forbidden",
         }
     }
+
+    pub fn from_name(value: &str) -> Option<Self> {
+        match value {
+            "preferred" => Some(Self::Preferred),
+            "allowed" => Some(Self::Allowed),
+            "forbidden" => Some(Self::Forbidden),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -302,7 +386,35 @@ pub struct TranslationMemoryEntry {
     layer: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct TranslationMemoryEntryInput {
+    pub id: String,
+    pub source: String,
+    pub target: String,
+    pub source_locale: String,
+    pub target_locale: String,
+    pub context: BTreeMap<String, String>,
+    pub quality: MemoryQuality,
+    pub layer: String,
+}
+
 impl TranslationMemoryEntry {
+    pub fn new(input: TranslationMemoryEntryInput) -> Self {
+        Self {
+            id: input.id,
+            source: input.source,
+            target: input.target,
+            source_locale: input.source_locale,
+            target_locale: input.target_locale,
+            context: input.context,
+            origin: serde_json::Value::Null,
+            quality: input.quality,
+            created_at: None,
+            updated_at: None,
+            layer: input.layer,
+        }
+    }
+
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -374,6 +486,16 @@ impl MemoryQuality {
 
     pub fn can_suggest(self) -> bool {
         !matches!(self, Self::Rejected)
+    }
+
+    pub fn from_name(value: &str) -> Option<Self> {
+        match value {
+            "confirmed" => Some(Self::Confirmed),
+            "imported" => Some(Self::Imported),
+            "machine" => Some(Self::Machine),
+            "rejected" => Some(Self::Rejected),
+            _ => None,
+        }
     }
 }
 
@@ -556,6 +678,10 @@ struct Scope {
 }
 
 impl Scope {
+    fn from_values(values: BTreeMap<String, Vec<String>>) -> Self {
+        Self { values }
+    }
+
     fn matches(&self, entry: &PipelineEntry) -> bool {
         self.values.iter().all(|(key, expected)| {
             entry

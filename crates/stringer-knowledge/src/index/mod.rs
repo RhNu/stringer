@@ -4,16 +4,20 @@ use std::time::UNIX_EPOCH;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter, types::Value};
-use stringer_pipeline::{
-    KnowledgeBase, MemoryQuality, PipelineDiagnostic, PipelineDiagnosticSeverity,
-};
+use stringer_pipeline::{KnowledgeBase, PipelineDiagnostic, PipelineDiagnosticSeverity};
 
 use crate::KnowledgeError;
 use crate::translations::KnowledgeIndexSummary;
 use stringer_workspace_core::fsutil::{replace_file, temp_path};
 use stringer_workspace_core::{WorkspaceCoreError, WorkspaceSettings, game_release_name, unix_ms};
 
-pub(crate) const KNOWLEDGE_INDEX_SCHEMA_VERSION: &str = "3";
+mod entry;
+
+pub(crate) use entry::{
+    EntryKnowledgeQuery, IndexedEntryKnowledge, read_entry_candidate_knowledge,
+};
+
+pub(crate) const KNOWLEDGE_INDEX_SCHEMA_VERSION: &str = "4";
 const INDEX_COMPLETE_KEY: &str = "index_complete";
 const KNOWLEDGE_ID_MATCH_CHUNK: usize = 250;
 
@@ -334,6 +338,14 @@ pub(crate) fn normalize_lookup_text(value: &str) -> String {
         .to_lowercase()
 }
 
+pub(crate) fn normalize_loose_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 pub(crate) fn file_kind_name(kind: KnowledgeFileKind) -> &'static str {
     match kind {
         KnowledgeFileKind::Terms => "terms",
@@ -364,6 +376,7 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Knowled
                 source TEXT NOT NULL,
                 target TEXT NOT NULL,
                 source_norm TEXT NOT NULL,
+                source_loose TEXT NOT NULL,
                 target_norm TEXT NOT NULL,
                 alias_norm TEXT NOT NULL,
                 source_locale TEXT,
@@ -399,6 +412,7 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Knowled
             );
             CREATE INDEX idx_items_kind_locale ON items(item_kind, source_locale, target_locale);
             CREATE INDEX idx_items_source_norm ON items(source_norm);
+            CREATE INDEX idx_items_source_loose ON items(source_loose);
             CREATE INDEX idx_items_target_norm ON items(target_norm);
             CREATE INDEX idx_aliases_alias_norm ON aliases(alias_norm);
             CREATE INDEX idx_scope_item_key ON item_scope(item_rowid, key);
@@ -524,9 +538,6 @@ fn write_items(
         }
     }
     for item in knowledge.memory() {
-        if item.quality() == MemoryQuality::Rejected {
-            continue;
-        }
         let rowid = insert_item(
             connection,
             path,
@@ -577,9 +588,9 @@ fn insert_item(
     connection
         .execute(
             concat!(
-                "INSERT INTO items(item_kind, id, layer, source, target, source_norm, target_norm, ",
+                "INSERT INTO items(item_kind, id, layer, source, target, source_norm, source_loose, target_norm, ",
                 "alias_norm, source_locale, target_locale, quality, status, case_sensitive, source_len, file_id) ",
-                "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"
+                "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)"
             ),
             params![
                 item.item_kind,
@@ -588,6 +599,7 @@ fn insert_item(
                 item.source,
                 item.target,
                 normalize_lookup_text(item.source),
+                normalize_loose_text(item.source),
                 normalize_lookup_text(item.target),
                 item.alias_norm,
                 item.source_locale,
@@ -630,6 +642,9 @@ fn write_knowledge_ids(
     }
     for rule in knowledge.rules() {
         insert_knowledge_id(connection, path, "rule", rule.id(), rule.layer())?;
+    }
+    for item in knowledge.memory() {
+        insert_knowledge_id(connection, path, "memory", item.id(), item.layer())?;
     }
     Ok(())
 }

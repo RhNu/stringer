@@ -8,7 +8,7 @@ mod processors;
 pub use error::PipelineError;
 pub use knowledge::{
     KnowledgeBase, KnowledgeLayer, MemoryQuality, ReplacementRule, RuleMode, RuleStage, Term,
-    TermStatus, TranslationMemoryEntry,
+    TermInput, TermStatus, TranslationMemoryEntry, TranslationMemoryEntryInput,
 };
 pub use model::{
     PipelineAnnotation, PipelineDiagnostic, PipelineDiagnosticSeverity, PipelineEntry,

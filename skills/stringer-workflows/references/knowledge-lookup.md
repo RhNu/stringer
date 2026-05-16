@@ -8,7 +8,7 @@ Rebuild after changing workspace knowledge or importing memory:
 stringer knowledge index rebuild --workspace <WORKSPACE>
 ```
 
-`annotate`, `validate`, and `lookup` prefer a fresh index and fall back to files when needed.
+Knowledge is layered as global first, then workspace. Workspace term, rule, and memory ids override matching global ids. `annotate`, `validate`, and `lookup` automatically refresh missing or stale layer indexes before using them.
 
 ## Edit Workspace Terms
 
@@ -26,7 +26,7 @@ Delete a term:
 stringer knowledge term delete --workspace <WORKSPACE> --id "term:iron_sword" --json
 ```
 
-Use `--file knowledge/terms/<NAME>.toml` to target a specific workspace term file. Use `--rebuild-index` after an edit when subsequent lookup or annotation must use the SQLite index immediately.
+Use `--file knowledge/terms/<NAME>.toml` to target a specific workspace term file. Use `--rebuild-index` after an edit when you want the workspace layer index rebuilt immediately instead of on the next lookup, annotate, or validate run.
 
 Supported status values are `preferred`, `allowed`, and `forbidden`. Supported scope keys are `game`, `source_locale`, `target_locale`, `kind`, `record_type`, and `asset_path`; CLI `--scope-json` values must be string arrays.
 
