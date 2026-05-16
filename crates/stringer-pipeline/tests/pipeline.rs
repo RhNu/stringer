@@ -20,7 +20,7 @@ fn plugin_entry(source_text: &str) -> PipelineEntry {
 
 fn pex_entry(source_text: &str) -> PipelineEntry {
     PipelineEntry::new(
-        "pex:Scripts/Example.pex:Example::Run:0:fixed-1:1",
+        "pex:Scripts/Example.pex:Run:0:f1",
         PipelineEntryKind::Pex,
         source_text,
         "en",

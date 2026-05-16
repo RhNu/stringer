@@ -353,7 +353,7 @@ fn plugin_entry_id(
 ) -> String {
     let suffix = string_id
         .map(|id| id.to_string())
-        .unwrap_or_else(|| format!("embedded-{entry_index}"));
+        .unwrap_or_else(|| format!("e{entry_index}"));
     format!(
         "plugin:{path}:{}:{:08X}:{}:{suffix}",
         entry.record_type(),

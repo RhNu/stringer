@@ -419,6 +419,10 @@ async fn edits_non_localized_embedded_strings_through_high_level_api() {
     )
     .await
     .unwrap();
+    assert_eq!(
+        localization.entries()[0].id(),
+        "plugin:Data/MyMod.esp:WEAP:00000800:FULL:e0"
+    );
     localization.entries_mut()[0].set_text("Steel Sword");
     let output = write_localization(
         localization,

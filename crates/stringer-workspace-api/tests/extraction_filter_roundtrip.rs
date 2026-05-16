@@ -38,7 +38,7 @@ enabled = false
     write_entry_rows(
         &export_path,
         "pex",
-        r#"{"id":"pex:Scripts/Example.pex:Example::Run:0:fixed-1:6","translation":"内部标识"}"#,
+        r#"{"id":"pex:Scripts/Example.pex:Run:0:f1","translation":"内部标识"}"#,
     );
     let output = root.path().join("override");
 

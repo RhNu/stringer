@@ -94,6 +94,10 @@ fn extracts_literals_but_skips_call_and_property_symbol_positions() {
         .map(|entry| entry.text())
         .collect::<Vec<_>>();
     assert_eq!(texts, ["Hello world", "Quest updated"]);
+    assert_eq!(
+        bundle.string_entries()[1].id(),
+        "pex:Data/Scripts/Example.pex:Run:1:v0"
+    );
     let StringEntrySource::Pex(PexStringMetadata {
         object,
         state,

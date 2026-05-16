@@ -424,9 +424,9 @@ fn extract_value(
         input.function_input.object_name,
         input.function_input.state_name,
         input.function_input.function_name,
+        input.function_input.function_kind,
         input.instruction_index,
         input.operand,
-        string_id,
     );
     let entry_index = entries.len();
     let concat = input.concat_group.map(|group_index| {
@@ -609,25 +609,62 @@ fn pex_entry_id(
     object: &str,
     state: &str,
     function: &str,
+    function_kind: PexFunctionKind,
     instruction_index: usize,
     operand: PexOperandPath,
-    string_id: PexStringId,
 ) -> String {
-    let operand = match operand {
-        PexOperandPath::Fixed(index) => format!("fixed-{index}"),
-        PexOperandPath::Variadic(index) => format!("variadic-{index}"),
-    };
-    format!(
-        "pex:{path}:{object}:{state}:{function}:{instruction_index}:{operand}:{}",
-        string_id.index()
-    )
+    let scope = pex_scope_label(path, object, state, function, function_kind);
+    let operand = pex_operand_id(operand);
+    format!("pex:{path}:{scope}:{instruction_index}:{operand}")
+}
+
+fn pex_scope_label(
+    path: &str,
+    object: &str,
+    state: &str,
+    function: &str,
+    function_kind: PexFunctionKind,
+) -> String {
+    let script_stem = path_stem(path);
+    let mut segments = Vec::new();
+    if !object.is_empty() && !object.eq_ignore_ascii_case(script_stem) {
+        segments.push(object.to_string());
+    }
+    if !state.is_empty() {
+        segments.push(state.to_string());
+    }
+    segments.push(match function_kind {
+        PexFunctionKind::Normal => function.to_string(),
+        PexFunctionKind::Getter => format!("{function}.get"),
+        PexFunctionKind::Setter => format!("{function}.set"),
+    });
+    segments.join("/")
+}
+
+fn pex_operand_id(operand: PexOperandPath) -> String {
+    match operand {
+        PexOperandPath::Fixed(index) => format!("f{index}"),
+        PexOperandPath::Variadic(index) => format!("v{index}"),
+    }
+}
+
+fn path_stem(path: &str) -> &str {
+    let file_name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    file_name
+        .rsplit_once('.')
+        .map(|(stem, _)| stem)
+        .unwrap_or(file_name)
 }
 
 fn concat_group_id(input: &ExtractFunctionInput<'_>, group_index: usize) -> String {
-    format!(
-        "pex-concat:{}:{}:{}:{}:{group_index}",
-        input.path, input.object_name, input.state_name, input.function_name
-    )
+    let scope = pex_scope_label(
+        input.path,
+        input.object_name,
+        input.state_name,
+        input.function_name,
+        input.function_kind,
+    );
+    format!("pex-concat:{}:{}:{group_index}", input.path, scope)
 }
 
 fn instruction_operand_mut<'a>(
