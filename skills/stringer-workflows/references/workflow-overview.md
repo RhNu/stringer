@@ -1,54 +1,26 @@
 # Workflow Overview
 
-## CLI Flow
+## Tool Flow
 
-Run commands with full settings when possible:
+Use Stringer MCP tools directly. They return structured JSON, so consume their fields instead of reading raw workspace files or unstructured text output.
 
-```powershell
-stringer workspace open --source-root <SOURCE_ROOT> --workspace <WORKSPACE> --game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
-stringer knowledge annotate --workspace <WORKSPACE>
-stringer workspace batch count --workspace <WORKSPACE> --json
-stringer workspace inspect diagnostics --workspace <WORKSPACE> --severity warning
-stringer workspace batch claim --workspace <WORKSPACE> --limit 50
-stringer workspace batch apply --workspace <WORKSPACE> --input <PATCH_JSON>
-stringer knowledge validate --workspace <WORKSPACE>
-stringer workspace finalize --workspace <WORKSPACE> --output <OUTPUT_DIR>
-```
+1. `workspace_open`: create or refresh the workspace from a read-only source root. Pass explicit `settings` when known.
+2. `knowledge_annotate`: write terminology, memory, and diagnostic hints into workspace rows.
+3. `workspace_inspect_files`, `workspace_batch_count`, and `workspace_inspect_diagnostics`: understand scope, remaining work, and risks without raw-file reads.
+4. Terminology pass before formal translation: use `knowledge_lookup` for recurring or ambiguous source terms, then `knowledge_term_upsert` or `knowledge_term_delete` to normalize workspace terminology.
+5. `knowledge_annotate`: run again after terminology changes so later claims include updated hints.
+6. `workspace_batch_claim`: claim a bounded set of entries for translation.
+7. `workspace_batch_apply`: apply translations for that exact claimed batch.
+8. `knowledge_validate`: recompute diagnostics.
+9. `workspace_inspect_diagnostics`: review any remaining warnings or errors with entry context.
+10. `workspace_finalize`: write translated assets to a fresh output directory only after validation.
 
-When the agent is already running in the workspace directory, omit `--workspace`; it defaults to `.`.
-
-## MCP Tool Map
-
-Use MCP tools when the host exposes the Stringer server:
-
-| CLI command                     | MCP tool                          |
-| ------------------------------- | --------------------------------- |
-| `workspace open`                | `workspace_open`                  |
-| `workspace finalize`            | `workspace_finalize`              |
-| `workspace upgrade`             | no MCP tool; CLI placeholder only |
-| `workspace batch count`         | `workspace_batch_count`           |
-| `workspace batch claim`         | `workspace_batch_claim`           |
-| `workspace batch apply`         | `workspace_batch_apply`           |
-| `workspace batch release`       | `workspace_batch_release`         |
-| `workspace inspect files`       | `workspace_inspect_files`         |
-| `workspace inspect entries`     | `workspace_inspect_entries`       |
-| `workspace inspect entry`       | `workspace_inspect_entry`         |
-| `workspace inspect batch`       | `workspace_inspect_batch`         |
-| `workspace inspect diagnostics` | `workspace_inspect_diagnostics`   |
-| `adapt import`                  | `adapt_import`                    |
-| `knowledge annotate`            | `knowledge_annotate`              |
-| `knowledge validate`            | `knowledge_validate`              |
-| `knowledge lookup`              | `knowledge_lookup`                |
-| `knowledge index rebuild`       | `knowledge_index_rebuild`         |
-| `knowledge term upsert`         | `knowledge_term_upsert`           |
-| `knowledge term delete`         | `knowledge_term_delete`           |
-
-MCP results are structured JSON. Prefer them over parsing CLI text when both are available.
+When the MCP host is already operating from the workspace directory, the optional `workspace` argument can be omitted. Otherwise pass it explicitly.
 
 ## Workspace Files
 
-`workspace open` writes `workspace.json`, `batches/`, and `entries/**/*.jsonl`. Legacy `manifest.json` workspaces are not read by v4 commands; `workspace upgrade` currently reports that migration is not implemented, so recreate legacy workspaces with `workspace open`.
+`workspace_open` writes `workspace.json`, `batches/`, and `entries/**/*.jsonl`. Treat those as tool-managed storage. Agents should use inspect and batch tools instead of direct file reads or edits.
 
-Workspace knowledge lives under `knowledge/`, global user knowledge lives beside the user config, and each layer has its own derived `index.sqlite`. Workspace knowledge ids override global ids. Lookup, annotate, and validate refresh missing, stale, or corrupt indexes automatically; use `knowledge index rebuild` when you want to refresh both layers explicitly.
+Workspace knowledge lives under `knowledge/`, global user knowledge lives beside the user config, and each layer has its own derived `index.sqlite`. Workspace knowledge ids override global ids. Lookup, annotate, and validate refresh missing, stale, or corrupt indexes automatically; use `knowledge_index_rebuild` when you want to refresh both layers explicitly.
 
-Agents should normally use inspect tools for read-only review and batch tools for edits. If direct JSONL inspection is needed as a fallback, read `source`, `context`, `hints`, and `diagnostics`; write only `translation`.
+Legacy `manifest.json` workspaces are not read by the current workspace format. Recreate legacy workspaces with `workspace_open`.

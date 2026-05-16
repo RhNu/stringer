@@ -2,11 +2,7 @@
 
 ## Before Review
 
-Run validation:
-
-```powershell
-stringer knowledge validate --workspace <WORKSPACE>
-```
+Run `knowledge_validate` before review.
 
 Validation rewrites diagnostics. Do not edit diagnostics by hand.
 
@@ -21,14 +17,10 @@ Common diagnostics:
 - `translation.empty`: translation is missing.
 - `memory.conflict`: translation conflicts with memory evidence.
 
-Review the entry, its context, hints, and lookup evidence before changing a translation. Some diagnostics can be acceptable if the context justifies the wording; note the reason in the final report.
+Review entries with `workspace_inspect_diagnostics`, `workspace_inspect_entry`, or `workspace_inspect_batch`. Use `knowledge_lookup` for terminology or memory evidence before changing a translation. Some diagnostics can be acceptable if the context justifies the wording; note the reason in the final report.
 
 ## Finalize
 
-Finalize only after validation and review:
+Finalize only after validation and review with `workspace_finalize`.
 
-```powershell
-stringer workspace finalize --workspace <WORKSPACE> --output <OUTPUT_DIR>
-```
-
-Use a fresh output directory outside the source root. When the agent is already running in the workspace directory, omit `--workspace`; finalize defaults to `./output`.
+Use a fresh output directory outside the source root. When the MCP host is already operating from the workspace directory, the optional `workspace` argument can be omitted; otherwise pass it explicitly.

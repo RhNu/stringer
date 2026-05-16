@@ -1,37 +1,47 @@
 ---
 name: stringer-workflows
-description: Use when agent needs to operate Stringer CLI or MCP server for Bethesda mod localization, including opening translation workspaces, translating claimed batches, splitting work across agents, using terminology or translation memory, editing workspace terminology, reviewing diagnostics, validating workspaces, finalizing outputs, or mapping Stringer CLI commands to MCP tools.
+description: Use when an agent needs to operate Stringer MCP tools for Bethesda mod localization, including opening translation workspaces, annotating knowledge, preparing terminology, translating claimed batches, splitting work across agents, reviewing diagnostics, validating workspaces, or finalizing outputs.
 ---
 
 # Stringer Workflows
 
 ## Core Rules
 
-- Prefer Stringer inspect, batch, and MCP tools. Use inspect tools for read-only review, batch tools for edits, and direct JSONL editing only as a fallback.
+- Use Stringer MCP tools for workspace operations. Do not read `workspace.json`, `entries/**/*.jsonl`, `batches/*.json`, or knowledge TOML directly unless the user explicitly asks for raw-file debugging.
+- Use inspect tools for read-only review, batch tools for translation edits, and knowledge tools for terminology, memory, annotation, validation, and index work.
 - Preserve `id`, `source`, `context`, `hints`, and `diagnostics`. Write translations through `translation` only.
-- Use `knowledge lookup` for uncertain names, terminology, repeated phrases, or diagnostic review.
-- Use `knowledge term upsert/delete` or MCP `knowledge_term_upsert/delete` for workspace terminology edits; do not hand-edit term TOML unless the command/tool is unavailable.
-- Run `knowledge validate` before `workspace finalize`.
+- Use `knowledge_lookup` for uncertain names, terminology, repeated phrases, or diagnostic review.
+- Use `knowledge_term_upsert` and `knowledge_term_delete` for workspace terminology edits; do not hand-edit term TOML.
+- Run `knowledge_validate` before `workspace_finalize`.
 - Treat diagnostics as review inputs. Resolve real risks; do not delete diagnostics manually.
 
 ## Default Workflow
 
-1. Open or receive a workspace.
-2. Annotate it with global and workspace knowledge.
-3. Inspect files, remaining work, and diagnostics without reading raw JSONL.
-4. Claim a batch, translate with evidence from hints and lookup, then apply the batch.
-5. Validate the workspace and review diagnostics.
-6. Finalize to an output directory only after validation.
+1. Open or receive a workspace with `workspace_open` or an existing workspace path.
+2. Annotate it with global and workspace knowledge using `knowledge_annotate`.
+3. Inspect files, remaining work, and diagnostics with `workspace_inspect_*` and `workspace_batch_count`; do not read raw workspace files.
+4. Organize terminology before formal translation: use `hints`, diagnostics, and `knowledge_lookup` to identify repeated or risky terms, then update workspace terminology with `knowledge_term_upsert` or `knowledge_term_delete`.
+5. Re-run `knowledge_annotate` after terminology changes so later batches carry the updated hints.
+6. Start formal batch translation with `workspace_batch_claim`, translate from tool-returned entries, and apply through `workspace_batch_apply`.
+7. Validate with `knowledge_validate`, review diagnostics with inspect tools, and repeat focused fixes if needed.
+8. Finalize with `workspace_finalize` only after validation and diagnostic review.
 
-Use explicit game, asset language, and locale settings whenever a command accepts them:
+If `stringer.toml` does not contain explicit settings, use explicit game, asset language, and locale settings in `workspace_open.settings` whenever they are known:
 
-```powershell
---game-release SkyrimSe --asset-language English --source-locale en --target-locale zh-Hans
+```json
+{
+  "settings": {
+    "game_release": "SkyrimSe",
+    "asset_language": "English",
+    "source_locale": "en",
+    "target_locale": "zh-Hans"
+  }
+}
 ```
 
 ## Reference Loading
 
-- For command order and MCP parity, read `references/workflow-overview.md`.
+- For MCP tool order and workspace lifecycle, read `references/workflow-overview.md`.
 - For translating claimed work, read `references/translation-batches.md`.
 - For dividing work across multiple agents, read `references/subagent-splitting.md`.
 - For review, validation, and finalize decisions, read `references/review-validation.md`.
