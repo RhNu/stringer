@@ -19,5 +19,6 @@ pub use workspace::{
     WorkspaceBatchReleaseCommand, WorkspaceCommand, WorkspaceFinalizeCommand,
     WorkspaceInspectBatchCommand, WorkspaceInspectCommand, WorkspaceInspectDiagnosticsCommand,
     WorkspaceInspectEntriesCommand, WorkspaceInspectEntryCommand, WorkspaceInspectFilesCommand,
-    WorkspaceOpenCommand, WorkspaceUpgradeCommand,
+    WorkspaceNormalizeCommand, WorkspaceNormalizeEncodingArg, WorkspaceOpenCommand,
+    WorkspaceUpgradeCommand,
 };

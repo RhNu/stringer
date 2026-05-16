@@ -6,10 +6,11 @@ use stringer_app::{
     WorkspaceBatchCountRequest, WorkspaceBatchReleaseRequest, WorkspaceFinalizeRequest,
     WorkspaceInspectBatchRequest, WorkspaceInspectDiagnosticsRequest,
     WorkspaceInspectEntriesRequest, WorkspaceInspectEntryRequest, WorkspaceInspectFilesRequest,
+    WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest, WorkspaceNormalizeResponse,
     WorkspaceOpenRequest, workspace_batch_apply, workspace_batch_claim, workspace_batch_count,
     workspace_batch_release, workspace_finalize, workspace_inspect_batch,
     workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
-    workspace_inspect_files, workspace_open, workspace_upgrade_unsupported,
+    workspace_inspect_files, workspace_normalize, workspace_open, workspace_upgrade_unsupported,
 };
 
 use crate::app::{CliError, print_json, read_input};
@@ -30,6 +31,8 @@ pub enum WorkspaceCommand {
         after_long_help = WORKSPACE_FINALIZE_AFTER_LONG_HELP
     )]
     Finalize(WorkspaceFinalizeCommand),
+    #[command(about = "Normalize existing translations with xTranslator Search/Replace rules")]
+    Normalize(WorkspaceNormalizeCommand),
     #[command(
         about = "Count, claim, apply, and release agent translation batches",
         long_about = WORKSPACE_BATCH_LONG_ABOUT,
@@ -128,6 +131,37 @@ pub struct WorkspaceFinalizeCommand {
         long_help = "Output directory outside the source root; defaults to <workspace>/output."
     )]
     pub output: Option<Utf8PathBuf>,
+}
+
+#[derive(Debug, Parser)]
+pub struct WorkspaceNormalizeCommand {
+    #[arg(
+        long,
+        default_value = ".",
+        value_name = "WORKSPACE",
+        help = "Translation workspace directory"
+    )]
+    pub workspace: Utf8PathBuf,
+    #[arg(
+        long,
+        value_name = "RULES_TXT",
+        help = "xTranslator batch Search/Replace rules file"
+    )]
+    pub rules: Utf8PathBuf,
+    #[arg(
+        long,
+        value_name = "ENTRY_FILE",
+        help = "Optional workspace entry file listed in workspace.json"
+    )]
+    pub file: Option<String>,
+    #[arg(long, help = "Write normalized translations back to the workspace")]
+    pub apply: bool,
+    #[arg(long, default_value = "auto", value_name = "ENCODING")]
+    pub encoding: WorkspaceNormalizeEncodingArg,
+    #[arg(long, default_value_t = 50, value_name = "N")]
+    pub limit: usize,
+    #[arg(long, help = "Emit structured JSON")]
+    pub json: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -241,6 +275,15 @@ pub enum InspectDiagnosticSeverityArg {
     Error,
     Warning,
     Info,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum WorkspaceNormalizeEncodingArg {
+    #[default]
+    Auto,
+    #[value(name = "utf-8")]
+    Utf8,
+    Cp936,
 }
 
 #[derive(Debug, Parser)]
@@ -362,12 +405,34 @@ pub async fn run_workspace(command: WorkspaceCommand, feedback: &Feedback) -> Re
             );
             Ok(())
         }
+        WorkspaceCommand::Normalize(command) => run_workspace_normalize(command, feedback),
         WorkspaceCommand::Batch { command } => run_workspace_batch(command, feedback),
         WorkspaceCommand::Inspect { command } => run_workspace_inspect(command, feedback),
         WorkspaceCommand::Upgrade(command) => {
             Err(workspace_upgrade_unsupported(command.workspace.to_string()).into())
         }
     }
+}
+
+fn run_workspace_normalize(
+    command: WorkspaceNormalizeCommand,
+    feedback: &Feedback,
+) -> Result<(), CliError> {
+    let status = feedback.command("workspace normalize");
+    let summary = workspace_normalize(WorkspaceNormalizeRequest {
+        workspace: Some(command.workspace.to_string()),
+        rules: command.rules.to_string(),
+        file: command.file,
+        apply: command.apply,
+        encoding: command.encoding.into(),
+        limit: command.limit,
+    })?;
+    status.finish();
+    if command.json {
+        return print_json(&summary);
+    }
+    print_normalize_summary(&summary, command.apply);
+    Ok(())
 }
 
 fn run_workspace_inspect(
@@ -505,6 +570,27 @@ fn run_workspace_batch(
     }
 }
 
+fn print_normalize_summary(summary: &WorkspaceNormalizeResponse, apply: bool) {
+    let action = if apply { "applied" } else { "dry-run" };
+    println!(
+        "{action} normalization: scanned {} translated entries, changed {}, replacements {}, skipped {} claimed and {} placeholder-risk entries",
+        summary.scanned_entries,
+        summary.changed_entries,
+        summary.total_replacements,
+        summary.skipped_claimed,
+        summary.skipped_placeholder_risk
+    );
+    if !summary.warnings.is_empty() {
+        println!("rule warnings: {}", summary.warnings.len());
+    }
+    if !apply {
+        println!("rerun with --apply to write these changes");
+    }
+    println!(
+        "run `stringer knowledge validate` after applying normalization to refresh diagnostics"
+    );
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct WorkspaceBatchApplyPatchInput {
     batch_id: String,
@@ -561,6 +647,16 @@ impl From<InspectDiagnosticSeverityArg> for InspectDiagnosticSeverityInput {
     }
 }
 
+impl From<WorkspaceNormalizeEncodingArg> for WorkspaceNormalizeEncodingInput {
+    fn from(value: WorkspaceNormalizeEncodingArg) -> Self {
+        match value {
+            WorkspaceNormalizeEncodingArg::Auto => Self::Auto,
+            WorkspaceNormalizeEncodingArg::Utf8 => Self::Utf8,
+            WorkspaceNormalizeEncodingArg::Cp936 => Self::Cp936,
+        }
+    }
+}
+
 impl std::fmt::Display for InspectEntryStatusArg {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
@@ -582,6 +678,16 @@ impl std::fmt::Display for InspectDiagnosticSeverityArg {
             Self::Error => "error",
             Self::Warning => "warning",
             Self::Info => "info",
+        })
+    }
+}
+
+impl std::fmt::Display for WorkspaceNormalizeEncodingArg {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Auto => "auto",
+            Self::Utf8 => "utf-8",
+            Self::Cp936 => "cp936",
         })
     }
 }

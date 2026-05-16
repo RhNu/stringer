@@ -7,7 +7,8 @@ use rmcp::{
 };
 use serde_json::{Value, json};
 use stringer_mcp::{
-    KnowledgeLookupParams, StringerMcp, WorkspaceFinalizeParams, WorkspaceOpenParams,
+    KnowledgeLookupParams, StringerMcp, WorkspaceFinalizeParams, WorkspaceNormalizeParams,
+    WorkspaceOpenParams,
 };
 
 #[tokio::test]
@@ -38,6 +39,7 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
             "workspace_inspect_entries",
             "workspace_inspect_entry",
             "workspace_inspect_files",
+            "workspace_normalize",
             "workspace_open",
         ]
     );
@@ -111,6 +113,17 @@ fn mcp_params_reject_removed_workspace_path_fields() {
         lookup_project
             .to_string()
             .contains("unknown field `project_root`")
+    );
+
+    let normalize_old_path = serde_json::from_value::<WorkspaceNormalizeParams>(json!({
+        "workspace": "translations",
+        "rule_path": "rules.txt"
+    }))
+    .unwrap_err();
+    assert!(
+        normalize_old_path
+            .to_string()
+            .contains("unknown field `rule_path`")
     );
 }
 
@@ -188,6 +201,70 @@ async fn mcp_workspace_inspect_entries_and_diagnostics_return_structured_content
         diagnostics["diagnostics"][0]["diagnostic"]["code"],
         "memory.conflict"
     );
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_workspace_normalize_applies_rules_and_returns_summary() {
+    let root = TempRoot::new("mcp-normalize-root");
+    let workspace = TempRoot::new("mcp-normalize-workspace");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tSteel Sword\n");
+
+    let (client, server_handle) = connect().await;
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
+                "source_root": path_string(root.path()),
+                "workspace": path_string(workspace.path()),
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+    let workspace_json: Value =
+        serde_json::from_str(&fs::read_to_string(workspace.path().join("workspace.json")).unwrap())
+            .unwrap();
+    let entry_path = workspace
+        .path()
+        .join(workspace_json["files"][0]["path"].as_str().unwrap());
+    write_text(
+        &entry_path,
+        "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Steel Sword\",\"translation\":\"钢剑\"}\n",
+    );
+    let rules = workspace.path().join("rules.txt");
+    write_text(&rules, "StartRule\nSearch=钢剑\nReplace=熟铁剑\nEndRule\n");
+
+    let normalized = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_normalize").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "rules": path_string(&rules),
+                "apply": true,
+                "encoding": "utf-8",
+                "limit": 10
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(normalized["scanned_entries"], 1);
+    assert_eq!(normalized["changed_entries"], 1);
+    assert_eq!(normalized["changes"][0]["before"], "钢剑");
+    assert_eq!(normalized["changes"][0]["after"], "熟铁剑");
 
     client.cancel().await.unwrap();
     server_handle.await.unwrap();

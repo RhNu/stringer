@@ -133,6 +133,68 @@ pub struct WorkspaceBatchReleaseResponse {
     pub released_entries: usize,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkspaceNormalizeEncodingInput {
+    #[default]
+    Auto,
+    #[serde(rename = "utf-8")]
+    Utf8,
+    Cp936,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceNormalizeRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    pub rules: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default)]
+    pub apply: bool,
+    #[serde(default)]
+    pub encoding: WorkspaceNormalizeEncodingInput,
+    #[serde(default = "default_normalize_limit")]
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceNormalizeResponse {
+    pub scanned_entries: usize,
+    pub changed_entries: usize,
+    pub total_replacements: usize,
+    pub skipped_claimed: usize,
+    pub skipped_placeholder_risk: usize,
+    pub warnings: Vec<WorkspaceNormalizeWarningResponse>,
+    pub changes: Vec<WorkspaceNormalizeChangeResponse>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceNormalizeWarningResponse {
+    pub code: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replace: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceNormalizeChangeResponse {
+    pub file: String,
+    pub id: String,
+    pub source: String,
+    pub before: String,
+    pub after: String,
+    pub replacements: usize,
+    pub rule_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub skipped_placeholder_risk: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkspaceInspectFilesRequest {
@@ -516,10 +578,18 @@ fn default_lookup_limit() -> usize {
     20
 }
 
+fn default_normalize_limit() -> usize {
+    50
+}
+
 fn default_batch_inspect_limit() -> usize {
     10
 }
 
 fn default_inspect_limit() -> usize {
     50
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }

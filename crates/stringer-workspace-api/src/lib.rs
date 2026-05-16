@@ -3,6 +3,7 @@
 mod batch;
 mod error;
 mod inspect;
+mod normalize;
 mod operations;
 mod paths;
 
@@ -20,6 +21,10 @@ pub use inspect::{
     WorkspaceInspectEntry, WorkspaceInspectFiles, inspect_workspace_batch,
     inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
     inspect_workspace_files,
+};
+pub use normalize::{
+    NormalizeRuleEncoding, NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary,
+    WorkspaceNormalizeChange, normalize_workspace,
 };
 pub use operations::{
     ExportSummary, ExportTranslationsOptions, ImportSummary, ImportTranslationsOptions,

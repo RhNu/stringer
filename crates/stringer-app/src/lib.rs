@@ -23,6 +23,6 @@ pub use stringer_knowledge::{KnowledgeOperation, KnowledgeProgressEvent, Knowled
 pub use workspace::{
     workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_batch_release,
     workspace_finalize, workspace_inspect_batch, workspace_inspect_diagnostics,
-    workspace_inspect_entries, workspace_inspect_entry, workspace_inspect_files, workspace_open,
-    workspace_upgrade_unsupported,
+    workspace_inspect_entries, workspace_inspect_entry, workspace_inspect_files,
+    workspace_normalize, workspace_open, workspace_upgrade_unsupported,
 };

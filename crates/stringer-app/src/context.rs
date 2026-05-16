@@ -13,8 +13,8 @@ use crate::dto::{
     WorkspaceInspectBatchResponse, WorkspaceInspectDiagnosticsRequest,
     WorkspaceInspectDiagnosticsResponse, WorkspaceInspectEntriesRequest,
     WorkspaceInspectEntriesResponse, WorkspaceInspectEntryRequest, WorkspaceInspectEntryResponse,
-    WorkspaceInspectFilesRequest, WorkspaceInspectFilesResponse, WorkspaceOpenRequest,
-    WorkspaceOpenResponse,
+    WorkspaceInspectFilesRequest, WorkspaceInspectFilesResponse, WorkspaceNormalizeRequest,
+    WorkspaceNormalizeResponse, WorkspaceOpenRequest, WorkspaceOpenResponse,
 };
 use crate::error::AppError;
 use crate::knowledge::{
@@ -26,7 +26,7 @@ use crate::workspace::{
     workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_batch_release,
     workspace_finalize, workspace_inspect_batch, workspace_inspect_diagnostics,
     workspace_inspect_entries, workspace_inspect_entry, workspace_inspect_files,
-    workspace_open_with_global_config_source,
+    workspace_normalize, workspace_open_with_global_config_source,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,6 +87,13 @@ impl StringerApp {
         request: WorkspaceBatchReleaseRequest,
     ) -> Result<WorkspaceBatchReleaseResponse, AppError> {
         workspace_batch_release(request)
+    }
+
+    pub fn workspace_normalize(
+        &self,
+        request: WorkspaceNormalizeRequest,
+    ) -> Result<WorkspaceNormalizeResponse, AppError> {
+        workspace_normalize(request)
     }
 
     pub fn workspace_inspect_files(

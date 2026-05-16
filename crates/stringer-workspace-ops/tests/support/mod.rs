@@ -70,6 +70,7 @@ pub fn write_batch(workspace: &Path, batch_id: &str, entry_ids: &[&str]) {
     );
 }
 
+#[allow(dead_code)]
 pub fn rows() -> &'static str {
     concat!(
         "{\"id\":\"scaleform:MyMod:$Title\",\"source\":\"Iron Sword\"}\n",
@@ -92,9 +93,16 @@ pub fn utf8(path: &Path) -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(path.to_path_buf()).unwrap()
 }
 
-fn write_text(path: &Path, text: &str) {
+#[allow(dead_code)]
+pub fn write_text(path: &Path, text: &str) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, text).unwrap();
+}
+
+#[allow(dead_code)]
+pub fn write_bytes(path: &Path, bytes: &[u8]) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, bytes).unwrap();
 }
 
 pub struct TempRoot {

@@ -7,6 +7,7 @@ use serde_json::Value;
 use stringer_cli::{
     AdaptCommand, AdaptFormatArg, Cli, Command, KnowledgeCommand, KnowledgeIndexCommand,
     KnowledgeLookupFieldArg, KnowledgeLookupSourceArg, WorkspaceBatchCommand, WorkspaceCommand,
+    WorkspaceNormalizeEncodingArg,
 };
 
 #[test]
@@ -64,6 +65,44 @@ fn workspace_finalize_command_defaults_workspace_source_override_and_output() {
     assert_eq!(command.workspace.as_str(), ".");
     assert_eq!(command.source_root.as_deref(), Some("input".into()));
     assert_eq!(command.output.as_deref(), Some("override".into()));
+}
+
+#[test]
+fn workspace_normalize_command_parses_rules_apply_encoding_limit_and_json() {
+    let cli = Cli::parse_from([
+        "stringer",
+        "workspace",
+        "normalize",
+        "--workspace",
+        "translations",
+        "--rules",
+        "rules.txt",
+        "--file",
+        "entries/scaleform/MyMod.jsonl",
+        "--apply",
+        "--encoding",
+        "cp936",
+        "--limit",
+        "5",
+        "--json",
+    ]);
+
+    let Command::Workspace { command } = cli.command else {
+        panic!("expected workspace command");
+    };
+    let WorkspaceCommand::Normalize(command) = command else {
+        panic!("expected workspace normalize command");
+    };
+    assert_eq!(command.workspace.as_str(), "translations");
+    assert_eq!(command.rules.as_str(), "rules.txt");
+    assert_eq!(
+        command.file.as_deref(),
+        Some("entries/scaleform/MyMod.jsonl")
+    );
+    assert!(command.apply);
+    assert_eq!(command.encoding, WorkspaceNormalizeEncodingArg::Cp936);
+    assert_eq!(command.limit, 5);
+    assert!(command.json);
 }
 
 #[test]

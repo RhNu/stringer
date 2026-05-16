@@ -1448,6 +1448,7 @@ name = "stringer-workspace-ops"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "encoding_rs",
  "serde",
  "serde_json",
  "stringer-pipeline",

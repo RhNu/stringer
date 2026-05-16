@@ -88,6 +88,8 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
             "workspace.missing_batch_patch_translation"
         }
         WorkspaceError::BatchEntryNotClaimed { .. } => "workspace.batch_entry_not_claimed",
+        WorkspaceError::NormalizeRuleDecode { .. } => "workspace.normalize_rule_decode",
+        WorkspaceError::NormalizeRuleParse { .. } => "workspace.normalize_rule_parse",
         WorkspaceError::DuplicateOutputPath { .. } => "workspace.duplicate_output_path",
         WorkspaceError::InvalidLogicalPath { .. } => "workspace.invalid_logical_path",
         WorkspaceError::InvalidOutputRoot { .. } => "workspace.invalid_output_root",
@@ -139,6 +141,14 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
                 "recovery": "inspect_batch_from_offset_0",
             })
         }
+        WorkspaceError::NormalizeRuleDecode { path, encoding } => {
+            json!({ "path": json_path(path), "encoding": encoding })
+        }
+        WorkspaceError::NormalizeRuleParse {
+            path,
+            line,
+            message,
+        } => json!({ "path": json_path(path), "line": line, "message": message }),
         WorkspaceError::DuplicateOutputPath { path } => json!({ "path": path }),
         WorkspaceError::InvalidLogicalPath { path, message } => {
             json!({ "path": path, "message": message })

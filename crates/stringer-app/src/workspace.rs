@@ -3,12 +3,13 @@ use stringer_workspace_api::{
     CountBatchOptions, ExportTranslationsOptions, ImportTranslationsOptions,
     InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceBatchOptions,
     InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
-    InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, ReleaseBatchOptions,
+    InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, NormalizeRuleEncoding,
+    NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary, ReleaseBatchOptions,
     ReleaseBatchSummary, WorkspaceError, WorkspaceInspectBatch, WorkspaceInspectDiagnostic,
-    WorkspaceInspectEntry, WorkspaceInspectFiles, apply_batch_patch, count_batch,
-    export_translations, import_translations, inspect_workspace_batch,
+    WorkspaceInspectEntry, WorkspaceInspectFiles, WorkspaceNormalizeChange, apply_batch_patch,
+    count_batch, export_translations, import_translations, inspect_workspace_batch,
     inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
-    inspect_workspace_files, release_batch,
+    inspect_workspace_files, normalize_workspace as normalize_workspace_api, release_batch,
 };
 use stringer_workspace_core::GlobalConfigSource;
 
@@ -22,7 +23,9 @@ use crate::dto::{
     WorkspaceInspectDiagnosticsResponse, WorkspaceInspectEntriesRequest,
     WorkspaceInspectEntriesResponse, WorkspaceInspectEntryRequest, WorkspaceInspectEntryResponse,
     WorkspaceInspectFileResponse, WorkspaceInspectFilesRequest, WorkspaceInspectFilesResponse,
-    WorkspaceOpenRequest, WorkspaceOpenResponse,
+    WorkspaceNormalizeChangeResponse, WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest,
+    WorkspaceNormalizeResponse, WorkspaceNormalizeWarningResponse, WorkspaceOpenRequest,
+    WorkspaceOpenResponse,
 };
 use crate::error::{AppError, serialize_value};
 use crate::paths::{default_output_path, path, workspace_or_current};
@@ -121,6 +124,21 @@ pub fn workspace_batch_release(
         ReleaseBatchOptions {
             workspace: workspace_or_current(request.workspace)?,
             batch_id: request.batch_id,
+        },
+    )?))
+}
+
+pub fn workspace_normalize(
+    request: WorkspaceNormalizeRequest,
+) -> Result<WorkspaceNormalizeResponse, AppError> {
+    Ok(normalize_response(normalize_workspace_api(
+        NormalizeWorkspaceOptions {
+            workspace: workspace_or_current(request.workspace)?,
+            rules: path(request.rules),
+            file: request.file,
+            apply: request.apply,
+            encoding: request.encoding.into(),
+            limit: request.limit,
         },
     )?))
 }
@@ -230,6 +248,49 @@ fn release_batch_response(summary: ReleaseBatchSummary) -> WorkspaceBatchRelease
     }
 }
 
+fn normalize_response(summary: NormalizeWorkspaceSummary) -> WorkspaceNormalizeResponse {
+    WorkspaceNormalizeResponse {
+        scanned_entries: summary.scanned_entries,
+        changed_entries: summary.changed_entries,
+        total_replacements: summary.total_replacements,
+        skipped_claimed: summary.skipped_claimed,
+        skipped_placeholder_risk: summary.skipped_placeholder_risk,
+        warnings: summary
+            .warnings
+            .into_iter()
+            .map(normalize_warning_response)
+            .collect(),
+        changes: summary
+            .changes
+            .into_iter()
+            .map(normalize_change_response)
+            .collect(),
+    }
+}
+
+fn normalize_warning_response(warning: NormalizeWarning) -> WorkspaceNormalizeWarningResponse {
+    WorkspaceNormalizeWarningResponse {
+        code: warning.code,
+        message: warning.message,
+        line: warning.line,
+        search: warning.search,
+        replace: warning.replace,
+    }
+}
+
+fn normalize_change_response(change: WorkspaceNormalizeChange) -> WorkspaceNormalizeChangeResponse {
+    WorkspaceNormalizeChangeResponse {
+        file: change.file,
+        id: change.id,
+        source: change.source,
+        before: change.before,
+        after: change.after,
+        replacements: change.replacements,
+        rule_ids: change.rule_ids,
+        skipped_placeholder_risk: change.skipped_placeholder_risk,
+    }
+}
+
 fn inspect_files_response(
     inspected: WorkspaceInspectFiles,
 ) -> Result<WorkspaceInspectFilesResponse, AppError> {
@@ -325,6 +386,16 @@ impl From<InspectDiagnosticSeverityInput> for InspectDiagnosticSeverity {
             InspectDiagnosticSeverityInput::Error => Self::Error,
             InspectDiagnosticSeverityInput::Warning => Self::Warning,
             InspectDiagnosticSeverityInput::Info => Self::Info,
+        }
+    }
+}
+
+impl From<WorkspaceNormalizeEncodingInput> for NormalizeRuleEncoding {
+    fn from(value: WorkspaceNormalizeEncodingInput) -> Self {
+        match value {
+            WorkspaceNormalizeEncodingInput::Auto => Self::Auto,
+            WorkspaceNormalizeEncodingInput::Utf8 => Self::Utf8,
+            WorkspaceNormalizeEncodingInput::Cp936 => Self::Cp936,
         }
     }
 }

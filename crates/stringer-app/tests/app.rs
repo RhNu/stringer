@@ -8,9 +8,10 @@ use stringer_app::{
     KnowledgeTermUpsertRequest, SettingsInput, StringerApp, WorkspaceBatchApplyEntry,
     WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest,
     WorkspaceFinalizeRequest, WorkspaceInspectBatchRequest, WorkspaceInspectDiagnosticsRequest,
-    WorkspaceInspectEntriesRequest, WorkspaceOpenRequest, adapt_import, knowledge_term_upsert,
-    workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_finalize,
-    workspace_inspect_batch, workspace_inspect_diagnostics, workspace_inspect_entries,
+    WorkspaceInspectEntriesRequest, WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest,
+    WorkspaceOpenRequest, adapt_import, knowledge_term_upsert, workspace_batch_apply,
+    workspace_batch_claim, workspace_batch_count, workspace_finalize, workspace_inspect_batch,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_normalize,
 };
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceCoreError};
 
@@ -157,6 +158,56 @@ async fn app_workspace_batch_apply_can_mark_entry_skipped() {
         skipped.entries[0].translation_meta.as_ref().unwrap()["skip_reason"],
         "not_translatable"
     );
+}
+
+#[tokio::test]
+async fn app_workspace_normalize_returns_structured_summary_and_can_apply() {
+    let root = TempRoot::new("workspace-normalize-root");
+    let workspace = TempRoot::new("workspace-normalize-output");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tSteel Sword\n");
+
+    test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: settings(),
+        })
+        .await
+        .unwrap();
+    let entry_file = entry_file_path(workspace.path());
+    write_text(
+        &entry_file,
+        "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Steel Sword\",\"translation\":\"钢剑\",\"translation_meta\":{\"origin\":\"agent\"}}\n",
+    );
+    let rules = workspace.path().join("rules.txt");
+    write_text(&rules, "StartRule\nSearch=钢剑\nReplace=熟铁剑\nEndRule\n");
+
+    let summary = workspace_normalize(WorkspaceNormalizeRequest {
+        workspace: Some(path_string(workspace.path())),
+        rules: path_string(&rules),
+        file: None,
+        apply: true,
+        encoding: WorkspaceNormalizeEncodingInput::Utf8,
+        limit: 10,
+    })
+    .unwrap();
+
+    assert_eq!(summary.scanned_entries, 1);
+    assert_eq!(summary.changed_entries, 1);
+    assert_eq!(summary.total_replacements, 1);
+    assert_eq!(summary.changes[0].before, "钢剑");
+    assert_eq!(summary.changes[0].after, "熟铁剑");
+
+    let row: Value = serde_json::from_str(fs::read_to_string(entry_file).unwrap().trim()).unwrap();
+    assert_eq!(row["translation"], "熟铁剑");
+    assert_eq!(row["translation_meta"]["origin"], "agent");
 }
 
 #[tokio::test]

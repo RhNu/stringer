@@ -18,7 +18,7 @@ use stringer_app::{
     knowledge_term_delete, knowledge_term_upsert, knowledge_validate, workspace_batch_apply,
     workspace_batch_claim, workspace_batch_count, workspace_batch_release, workspace_finalize,
     workspace_inspect_batch, workspace_inspect_diagnostics, workspace_inspect_entries,
-    workspace_inspect_entry, workspace_inspect_files, workspace_open,
+    workspace_inspect_entry, workspace_inspect_files, workspace_normalize, workspace_open,
 };
 
 pub use schema::*;
@@ -104,6 +104,19 @@ impl StringerMcp {
         Parameters(request): Parameters<WorkspaceBatchReleaseParams>,
     ) -> Result<Json<WorkspaceBatchReleaseResult>, ErrorData> {
         app_json(workspace_batch_release(app_request(request)?))
+    }
+
+    #[tool(
+        name = "workspace_normalize",
+        description = "Normalize existing translations with xTranslator Search/Replace rules.",
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceNormalizeParams>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceNormalizeResult>()
+    )]
+    pub async fn workspace_normalize(
+        &self,
+        Parameters(request): Parameters<WorkspaceNormalizeParams>,
+    ) -> Result<Json<WorkspaceNormalizeResult>, ErrorData> {
+        app_json(workspace_normalize(app_request(request)?))
     }
 
     #[tool(

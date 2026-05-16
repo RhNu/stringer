@@ -3,6 +3,7 @@
 mod batch;
 mod error;
 mod inspect;
+mod normalize;
 
 pub use batch::{
     ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
@@ -18,4 +19,8 @@ pub use inspect::{
     WorkspaceInspectEntry, WorkspaceInspectFiles, inspect_workspace_batch,
     inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
     inspect_workspace_files,
+};
+pub use normalize::{
+    NormalizeRuleEncoding, NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary,
+    WorkspaceNormalizeChange, normalize_workspace,
 };

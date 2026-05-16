@@ -101,6 +101,19 @@ pub enum WorkspaceError {
     )]
     BatchEntryNotClaimed { batch_id: String, id: String },
 
+    #[error("failed to decode normalization rules `{path}` as {encoding}")]
+    NormalizeRuleDecode {
+        path: Utf8PathBuf,
+        encoding: &'static str,
+    },
+
+    #[error("failed to parse normalization rules `{path}` line {line}: {message}")]
+    NormalizeRuleParse {
+        path: Utf8PathBuf,
+        line: usize,
+        message: String,
+    },
+
     #[error("duplicate output logical path `{path}`")]
     DuplicateOutputPath { path: String },
 
@@ -176,6 +189,18 @@ impl From<WorkspaceOpsError> for WorkspaceError {
             WorkspaceOpsError::BatchEntryNotClaimed { batch_id, id } => {
                 Self::BatchEntryNotClaimed { batch_id, id }
             }
+            WorkspaceOpsError::NormalizeRuleDecode { path, encoding } => {
+                Self::NormalizeRuleDecode { path, encoding }
+            }
+            WorkspaceOpsError::NormalizeRuleParse {
+                path,
+                line,
+                message,
+            } => Self::NormalizeRuleParse {
+                path,
+                line,
+                message,
+            },
         }
     }
 }
