@@ -6,18 +6,16 @@ use crate::dto::{
     KnowledgeIndexRebuildRequest, KnowledgeIndexRebuildResponse, KnowledgeLookupRequest,
     KnowledgeLookupResponse, KnowledgeOperationResponse, KnowledgeTermDeleteRequest,
     KnowledgeTermEditResponse, KnowledgeTermUpsertRequest, KnowledgeTermsEditResponse,
-    KnowledgeValidateRequest, WorkspaceBatchApplyRequest, WorkspaceBatchApplyResponse,
-    WorkspaceBatchClaimRequest, WorkspaceBatchClaimResponse, WorkspaceBatchCountRequest,
-    WorkspaceBatchCountResponse, WorkspaceBatchDetailRequest, WorkspaceBatchDetailResponse,
-    WorkspaceBatchExportRequest, WorkspaceBatchExportResponse, WorkspaceBatchReadRequest,
-    WorkspaceBatchReadResponse, WorkspaceBatchReleaseRequest, WorkspaceBatchReleaseResponse,
-    WorkspaceBatchSubmitRequest, WorkspaceBatchSubmitResponse, WorkspaceFinalizeRequest,
-    WorkspaceFinalizeResponse, WorkspaceInspectBatchRequest, WorkspaceInspectBatchResponse,
-    WorkspaceInspectDiagnosticsRequest, WorkspaceInspectDiagnosticsResponse,
-    WorkspaceInspectEntriesRequest, WorkspaceInspectEntriesResponse, WorkspaceInspectEntryRequest,
-    WorkspaceInspectEntryResponse, WorkspaceInspectFilesRequest, WorkspaceInspectFilesResponse,
-    WorkspaceNormalizeRequest, WorkspaceNormalizeResponse, WorkspaceOpenRequest,
-    WorkspaceOpenResponse,
+    KnowledgeValidateRequest, WorkspaceBatchClaimRequest, WorkspaceBatchClaimResponse,
+    WorkspaceBatchCountRequest, WorkspaceBatchCountResponse, WorkspaceBatchDetailRequest,
+    WorkspaceBatchDetailResponse, WorkspaceBatchExportRequest, WorkspaceBatchExportResponse,
+    WorkspaceBatchReadRequest, WorkspaceBatchReadResponse, WorkspaceBatchReleaseRequest,
+    WorkspaceBatchReleaseResponse, WorkspaceBatchSubmitRequest, WorkspaceBatchSubmitResponse,
+    WorkspaceFinalizeRequest, WorkspaceFinalizeResponse, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectDiagnosticsResponse, WorkspaceInspectEntriesRequest,
+    WorkspaceInspectEntriesResponse, WorkspaceInspectEntryRequest, WorkspaceInspectEntryResponse,
+    WorkspaceInspectFilesRequest, WorkspaceInspectFilesResponse, WorkspaceNormalizeRequest,
+    WorkspaceNormalizeResponse, WorkspaceOpenRequest, WorkspaceOpenResponse,
 };
 use crate::error::AppError;
 use crate::knowledge::{
@@ -26,11 +24,10 @@ use crate::knowledge::{
     knowledge_term_delete, knowledge_term_upsert, knowledge_validate_with_global_config_source,
 };
 use crate::workspace::{
-    workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_batch_detail,
-    workspace_batch_export, workspace_batch_read, workspace_batch_release, workspace_batch_submit,
-    workspace_finalize, workspace_inspect_batch, workspace_inspect_diagnostics,
-    workspace_inspect_entries, workspace_inspect_entry, workspace_inspect_files,
-    workspace_normalize, workspace_open_with_global_config_source,
+    workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
+    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
+    workspace_inspect_files, workspace_normalize, workspace_open_with_global_config_source,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,13 +74,6 @@ impl StringerApp {
         request: WorkspaceBatchClaimRequest,
     ) -> Result<WorkspaceBatchClaimResponse, AppError> {
         workspace_batch_claim(request)
-    }
-
-    pub fn workspace_batch_apply(
-        &self,
-        request: WorkspaceBatchApplyRequest,
-    ) -> Result<WorkspaceBatchApplyResponse, AppError> {
-        workspace_batch_apply(request)
     }
 
     pub fn workspace_batch_release(
@@ -147,13 +137,6 @@ impl StringerApp {
         request: WorkspaceInspectEntryRequest,
     ) -> Result<WorkspaceInspectEntryResponse, AppError> {
         workspace_inspect_entry(request)
-    }
-
-    pub fn workspace_inspect_batch(
-        &self,
-        request: WorkspaceInspectBatchRequest,
-    ) -> Result<WorkspaceInspectBatchResponse, AppError> {
-        workspace_inspect_batch(request)
     }
 
     pub fn workspace_inspect_diagnostics(

@@ -8,8 +8,8 @@ mod package;
 mod settings;
 
 pub use batch_claims::{
-    BatchEntry, BatchFile, BatchScope, batch_entry_ids, claimed_entry_batches, claimed_entry_ids,
-    read_batch_file, validate_batch_id,
+    BatchEntry, BatchFile, BatchScope, claimed_entry_batches, claimed_entry_ids, read_batch_file,
+    validate_batch_id,
 };
 pub use error::WorkspaceCoreError;
 pub use lock::{WorkspaceLock, unix_ms};

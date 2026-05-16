@@ -21,9 +21,8 @@ pub use knowledge::{
 };
 pub use stringer_knowledge::{KnowledgeOperation, KnowledgeProgressEvent, KnowledgeProgressPhase};
 pub use workspace::{
-    workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_batch_detail,
-    workspace_batch_export, workspace_batch_read, workspace_batch_release, workspace_batch_submit,
-    workspace_finalize, workspace_inspect_batch, workspace_inspect_diagnostics,
-    workspace_inspect_entries, workspace_inspect_entry, workspace_inspect_files,
-    workspace_normalize, workspace_open, workspace_upgrade_unsupported,
+    workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
+    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
+    workspace_inspect_files, workspace_normalize, workspace_open, workspace_upgrade_unsupported,
 };

@@ -8,23 +8,20 @@ mod operations;
 mod paths;
 
 pub use batch::{
-    ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
     BatchCount, BatchDetail, BatchDetailEntry, BatchExportFormat, BatchExportOptions,
     BatchExportSummary, BatchRead, BatchReadEntry, BatchSubmitAction, BatchSubmitEntry,
     BatchSubmitEntryResult, BatchSubmitOptions, BatchSubmitStatus, BatchSubmitSummary,
     ClaimBatchOptions, ClaimedBatch, CountBatchOptions, ReadBatchDetailOptions, ReadBatchOptions,
-    ReleaseBatchOptions, ReleaseBatchSummary, apply_batch_patch, claim_batch, count_batch,
-    export_batch_patch, read_batch, read_batch_detail, release_batch, submit_batch,
+    ReleaseBatchOptions, ReleaseBatchSummary, claim_batch, count_batch, export_batch_submission,
+    read_batch, read_batch_detail, release_batch, submit_batch,
 };
 pub use error::WorkspaceError;
 pub use inspect::{
-    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceBatchOptions,
-    InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
-    InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, WorkspaceInspectBatch,
+    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceDiagnosticsOptions,
+    InspectWorkspaceEntriesOptions, InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions,
     WorkspaceInspectDiagnostic, WorkspaceInspectDiagnostics, WorkspaceInspectEntries,
-    WorkspaceInspectEntry, WorkspaceInspectFiles, inspect_workspace_batch,
-    inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
-    inspect_workspace_files,
+    WorkspaceInspectEntry, WorkspaceInspectFiles, inspect_workspace_diagnostics,
+    inspect_workspace_entries, inspect_workspace_entry, inspect_workspace_files,
 };
 pub use normalize::{
     NormalizeRuleEncoding, NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary,

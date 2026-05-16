@@ -1,15 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use stringer_workspace_core::fsutil::{replace_file, temp_path};
 use stringer_workspace_core::{
-    BatchEntry, BatchFile, BatchScope, TranslationMeta, TranslationRecord, WorkspaceLock,
-    claimed_entry_ids, read_batch_file, read_translation_package_records, unix_ms,
-    validate_batch_id, write_translation_package_records,
+    BatchEntry, BatchFile, BatchScope, TranslationRecord, WorkspaceLock, claimed_entry_ids,
+    read_batch_file, read_translation_package_records, unix_ms, validate_batch_id,
 };
 
 use crate::WorkspaceOpsError;
@@ -50,35 +49,6 @@ pub struct ClaimedBatch {
     pub claimed_entries: usize,
     pub remaining_claimable: usize,
     pub scope: BatchScope,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct ApplyBatchPatchInput {
-    pub batch_id: String,
-    pub entries: Vec<ApplyBatchPatchEntry>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct ApplyBatchPatchEntry {
-    pub id: String,
-    pub translation: Option<String>,
-    #[serde(default)]
-    pub skip: bool,
-    #[serde(default)]
-    pub skip_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ApplyBatchPatchOptions {
-    pub workspace: Utf8PathBuf,
-    pub batch_id: String,
-    pub entries: Vec<ApplyBatchPatchEntry>,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
-pub struct ApplyBatchPatchSummary {
-    pub applied_entries: usize,
-    pub remaining_entries: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -190,87 +160,6 @@ pub fn claim_batch(options: ClaimBatchOptions) -> Result<ClaimedBatch, Workspace
         claimed_entries,
         remaining_claimable: count_claimable_unclaimed(&package, file.as_deref(), &claimed_after)?,
         scope,
-    })
-}
-
-pub fn apply_batch_patch(
-    options: ApplyBatchPatchOptions,
-) -> Result<ApplyBatchPatchSummary, WorkspaceOpsError> {
-    let _lock = WorkspaceLock::acquire(&options.workspace)?;
-    let mut batch = read_batch_file(&options.workspace, &options.batch_id)?;
-    let batch_ids = batch.remaining_ids();
-    let mut seen = BTreeSet::new();
-    for entry in &options.entries {
-        if !seen.insert(entry.id.clone()) {
-            return Err(WorkspaceOpsError::DuplicateBatchPatchId {
-                id: entry.id.clone(),
-            });
-        }
-        if entry.translation.is_none() && !entry.skip {
-            return Err(WorkspaceOpsError::MissingBatchPatchTranslation {
-                id: entry.id.clone(),
-            });
-        }
-        if !batch_ids.contains(&entry.id) {
-            return Err(WorkspaceOpsError::BatchEntryNotClaimed {
-                batch_id: options.batch_id.clone(),
-                id: entry.id.clone(),
-            });
-        }
-    }
-
-    let mut package = read_translation_package_records(&options.workspace)?;
-    let mut records = BTreeMap::<String, &mut TranslationRecord>::new();
-    for file in &mut package.files {
-        for record in &mut file.records {
-            records.insert(record.id.clone(), record);
-        }
-    }
-    for entry in &options.entries {
-        let Some(record) = records.get_mut(&entry.id) else {
-            return Err(WorkspaceOpsError::UnknownTranslationId {
-                id: entry.id.clone(),
-            });
-        };
-        if entry.skip {
-            record.translation = None;
-            record.translation_meta = Some(TranslationMeta {
-                origin: Some("skipped".to_string()),
-                updated_at_unix_ms: Some(unix_ms()),
-                skip_reason: entry.skip_reason.clone(),
-            });
-        } else {
-            record.translation = entry.translation.clone();
-            record.translation_meta = Some(TranslationMeta {
-                origin: Some("agent".to_string()),
-                updated_at_unix_ms: Some(unix_ms()),
-                skip_reason: None,
-            });
-        }
-    }
-    let applied = options.entries.len();
-    let applied_ids = options
-        .entries
-        .iter()
-        .map(|entry| entry.id.as_str())
-        .collect::<BTreeSet<_>>();
-    let mut keyed_entries = batch.keyed_entries();
-    keyed_entries.retain(|entry| !applied_ids.contains(entry.id.as_str()));
-    batch.entries = keyed_entries;
-    batch.entry_ids.clear();
-    batch.batch_format_version = Some(2);
-    batch.revision = Some(batch.revision().saturating_add(1));
-    let remaining = batch.entries.len();
-
-    write_translation_package_records(&options.workspace, &package)?;
-    if batch.entries.is_empty() {
-        remove_batch_file(&options.workspace, &options.batch_id)?;
-    } else {
-        write_batch_file(&options.workspace, &batch)?;
-    }
-    Ok(ApplyBatchPatchSummary {
-        applied_entries: applied,
-        remaining_entries: remaining,
     })
 }
 

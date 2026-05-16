@@ -10,6 +10,7 @@ use tracing::info;
 use crate::dto::{AdaptImportRequest, AdaptImportResponse, AdaptImportSummary};
 use crate::error::AppError;
 use crate::paths::{default_adapt_memory_path, path};
+use crate::settings::adapt_format;
 
 pub async fn adapt_import(request: AdaptImportRequest) -> Result<AdaptImportResponse, AppError> {
     adapt_import_with_global_config_source(request, &GlobalConfigSource::Production).await
@@ -34,7 +35,7 @@ pub(crate) async fn adapt_import_with_global_config_source(
             source_locale: request.source_locale,
             target_locale: request.target_locale,
             game,
-            format: request.format.into(),
+            format: adapt_format(request.format),
         },
     )?;
     let (summary, action, output) = if let Some(output) = request.out {

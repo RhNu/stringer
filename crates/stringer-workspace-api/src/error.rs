@@ -86,20 +86,9 @@ pub enum WorkspaceError {
     UnknownTranslationId { id: String },
 
     #[error(
-        "batch `{batch_id}` was not found; it may already be fully applied, released, or cleared; claim a fresh batch before applying translations"
+        "batch `{batch_id}` was not found; it may already be completed, released, or cleared; claim a fresh batch before submitting translations"
     )]
     BatchNotFound { batch_id: String },
-
-    #[error("duplicate batch patch id `{id}`")]
-    DuplicateBatchPatchId { id: String },
-
-    #[error("batch patch entry `{id}` is missing translation or skip=true")]
-    MissingBatchPatchTranslation { id: String },
-
-    #[error(
-        "translation id `{id}` is not claimed by batch `{batch_id}`; it is not in the remaining batch entries; re-read the batch from offset 0 before retrying"
-    )]
-    BatchEntryNotClaimed { batch_id: String, id: String },
 
     #[error(
         "batch `{batch_id}` revision conflict: expected {expected}, current {current}; re-read the batch before retrying"
@@ -194,13 +183,6 @@ impl From<WorkspaceOpsError> for WorkspaceError {
         match source {
             WorkspaceOpsError::Core(source) => source.into(),
             WorkspaceOpsError::UnknownTranslationId { id } => Self::UnknownTranslationId { id },
-            WorkspaceOpsError::DuplicateBatchPatchId { id } => Self::DuplicateBatchPatchId { id },
-            WorkspaceOpsError::MissingBatchPatchTranslation { id } => {
-                Self::MissingBatchPatchTranslation { id }
-            }
-            WorkspaceOpsError::BatchEntryNotClaimed { batch_id, id } => {
-                Self::BatchEntryNotClaimed { batch_id, id }
-            }
             WorkspaceOpsError::BatchRevisionConflict {
                 batch_id,
                 expected,

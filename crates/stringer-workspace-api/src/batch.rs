@@ -1,5 +1,4 @@
 pub use stringer_workspace_ops::{
-    ApplyBatchPatchEntry, ApplyBatchPatchInput, ApplyBatchPatchOptions, ApplyBatchPatchSummary,
     BatchCount, BatchDetail, BatchDetailEntry, BatchExportFormat, BatchExportOptions,
     BatchExportSummary, BatchRead, BatchReadEntry, BatchSubmitAction, BatchSubmitEntry,
     BatchSubmitEntryResult, BatchSubmitOptions, BatchSubmitStatus, BatchSubmitSummary,
@@ -17,12 +16,6 @@ pub fn claim_batch(options: ClaimBatchOptions) -> Result<ClaimedBatch, Workspace
     stringer_workspace_ops::claim_batch(options).map_err(Into::into)
 }
 
-pub fn apply_batch_patch(
-    options: ApplyBatchPatchOptions,
-) -> Result<ApplyBatchPatchSummary, WorkspaceError> {
-    stringer_workspace_ops::apply_batch_patch(options).map_err(Into::into)
-}
-
 pub fn read_batch(options: ReadBatchOptions) -> Result<BatchRead, WorkspaceError> {
     stringer_workspace_ops::read_batch(options).map_err(Into::into)
 }
@@ -35,10 +28,10 @@ pub fn submit_batch(options: BatchSubmitOptions) -> Result<BatchSubmitSummary, W
     stringer_workspace_ops::submit_batch(options).map_err(Into::into)
 }
 
-pub fn export_batch_patch(
+pub fn export_batch_submission(
     options: BatchExportOptions,
 ) -> Result<BatchExportSummary, WorkspaceError> {
-    stringer_workspace_ops::export_batch_patch(options).map_err(Into::into)
+    stringer_workspace_ops::export_batch_submission(options).map_err(Into::into)
 }
 
 pub fn release_batch(options: ReleaseBatchOptions) -> Result<ReleaseBatchSummary, WorkspaceError> {

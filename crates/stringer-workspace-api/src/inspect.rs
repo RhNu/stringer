@@ -1,7 +1,6 @@
 pub use stringer_workspace_ops::{
-    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceBatchOptions,
-    InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
-    InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, WorkspaceInspectBatch,
+    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceDiagnosticsOptions,
+    InspectWorkspaceEntriesOptions, InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions,
     WorkspaceInspectDiagnostic, WorkspaceInspectDiagnostics, WorkspaceInspectEntries,
     WorkspaceInspectEntry, WorkspaceInspectFiles,
 };
@@ -24,12 +23,6 @@ pub fn inspect_workspace_entry(
     options: InspectWorkspaceEntryOptions,
 ) -> Result<WorkspaceInspectEntry, WorkspaceError> {
     stringer_workspace_ops::inspect_workspace_entry(options).map_err(Into::into)
-}
-
-pub fn inspect_workspace_batch(
-    options: InspectWorkspaceBatchOptions,
-) -> Result<WorkspaceInspectBatch, WorkspaceError> {
-    stringer_workspace_ops::inspect_workspace_batch(options).map_err(Into::into)
 }
 
 pub fn inspect_workspace_diagnostics(

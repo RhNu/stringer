@@ -11,6 +11,31 @@ use stringer_mcp::{
     WorkspaceOpenParams,
 };
 
+#[test]
+fn mcp_workspace_open_params_share_interface_contract_type() {
+    let request = stringer_interface::WorkspaceOpenRequest {
+        source_root: "input".to_string(),
+        workspace: Some("translations".to_string()),
+        force: true,
+        settings: stringer_interface::SettingsInput {
+            game_release: Some("SkyrimSe".to_string()),
+            asset_language: Some("English".to_string()),
+            source_locale: Some("en".to_string()),
+            target_locale: Some("zh-Hans".to_string()),
+        },
+    };
+
+    let params: WorkspaceOpenParams = request;
+
+    assert_eq!(params.workspace.as_deref(), Some("translations"));
+    assert_workspace_open_interface(params.clone());
+    assert_workspace_open_app(params);
+}
+
+fn assert_workspace_open_interface(_: stringer_interface::WorkspaceOpenRequest) {}
+
+fn assert_workspace_open_app(_: stringer_app::WorkspaceOpenRequest) {}
+
 #[tokio::test]
 async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
     let (client, server_handle) = connect().await;

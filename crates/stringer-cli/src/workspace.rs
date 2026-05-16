@@ -17,7 +17,7 @@ use stringer_app::{
 use crate::app::{CliError, print_json};
 use crate::feedback::Feedback;
 use crate::help::*;
-use crate::workspace_batch_input::read_batch_submit_patch;
+use crate::workspace_batch_input::read_batch_submit_input;
 
 #[derive(Debug, Subcommand)]
 pub enum WorkspaceCommand {
@@ -36,7 +36,7 @@ pub enum WorkspaceCommand {
     #[command(about = "Normalize existing translations with xTranslator Search/Replace rules")]
     Normalize(WorkspaceNormalizeCommand),
     #[command(
-        about = "Count, claim, apply, and release agent translation batches",
+        about = "Count, claim, submit, and release agent translation batches",
         long_about = WORKSPACE_BATCH_LONG_ABOUT,
         arg_required_else_help = true
     )]
@@ -194,7 +194,7 @@ pub enum WorkspaceBatchCommand {
     )]
     Submit(WorkspaceBatchSubmitCommand),
     #[command(
-        about = "Export an editable batch patch file",
+        about = "Export an editable batch submission file",
         long_about = WORKSPACE_BATCH_EXPORT_LONG_ABOUT
     )]
     Export(WorkspaceBatchExportCommand),
@@ -365,8 +365,8 @@ pub struct WorkspaceBatchSubmitCommand {
     pub workspace: Utf8PathBuf,
     #[arg(
         long,
-        value_name = "PATCH_JSON_OR_CSV",
-        help = "Patch JSON/CSV file path, or - to read JSON from stdin"
+        value_name = "SUBMISSION_JSON_OR_CSV",
+        help = "Submission JSON/CSV file path, or - to read JSON from stdin"
     )]
     pub input: Utf8PathBuf,
 }
@@ -590,12 +590,12 @@ fn run_workspace_batch(
         }
         WorkspaceBatchCommand::Submit(command) => {
             let status = feedback.command("workspace batch submit");
-            let patch = read_batch_submit_patch(&command.input)?;
+            let submission = read_batch_submit_input(&command.input)?;
             let summary = workspace_batch_submit(WorkspaceBatchSubmitRequest {
                 workspace: Some(command.workspace.to_string()),
-                batch_id: patch.batch_id,
-                revision: patch.revision,
-                entries: patch
+                batch_id: submission.batch_id,
+                revision: submission.revision,
+                entries: submission
                     .entries
                     .into_iter()
                     .map(|entry| WorkspaceBatchSubmitEntry {

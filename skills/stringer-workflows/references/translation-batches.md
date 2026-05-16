@@ -56,7 +56,7 @@ For each entry:
 
 ## Submit
 
-Submit one patch for the claimed batch through `workspace_batch_submit`:
+Submit one request for the claimed batch through `workspace_batch_submit`:
 
 ```json
 {
@@ -84,4 +84,4 @@ Submit one patch for the claimed batch through `workspace_batch_submit`:
 
 The submit result reports `applied`, `ignored`, or `rejected` per key. If the batch revision is stale, re-read the batch and resubmit against the current revision. If stopping early, release the batch so remaining undecided entries can be claimed again.
 
-For long work or tool-output limits, use `workspace_batch_export` to create an editable JSON patch under `batch-work/<batch_id>/patch.json`, then submit that file through the CLI.
+For long work or tool-output limits, use `workspace_batch_export` to create an editable JSON submission file under `batch-work/<batch_id>/patch.json`, then submit that file through the CLI. The `patch.json` filename is retained for compatibility with existing exported batch files; `workspace_batch_submit` is the only supported mutation API.

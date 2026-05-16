@@ -4,8 +4,8 @@ use camino::Utf8PathBuf;
 use serde::Serialize;
 use stringer_pipeline::{PipelineAnnotation, PipelineDiagnostic, PipelineDiagnosticSeverity};
 use stringer_workspace_core::{
-    TranslationManifestFile, TranslationMeta, TranslationRecord, batch_entry_ids,
-    claimed_entry_batches, read_translation_manifest_files, read_translation_package_records,
+    TranslationManifestFile, TranslationMeta, TranslationRecord, claimed_entry_batches,
+    read_translation_manifest_files, read_translation_package_records,
     visit_translation_package_records_filtered,
 };
 
@@ -68,25 +68,6 @@ pub struct WorkspaceInspectEntry {
 pub struct InspectWorkspaceEntryOptions {
     pub workspace: Utf8PathBuf,
     pub id: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InspectWorkspaceBatchOptions {
-    pub workspace: Utf8PathBuf,
-    pub batch_id: String,
-    pub offset: usize,
-    pub limit: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct WorkspaceInspectBatch {
-    pub batch_id: String,
-    pub total: usize,
-    pub offset: usize,
-    pub limit: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_offset: Option<usize>,
-    pub entries: Vec<WorkspaceInspectEntry>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -172,39 +153,6 @@ pub fn inspect_workspace_entry(
         }
     }
     Err(WorkspaceOpsError::UnknownTranslationId { id: options.id })
-}
-
-pub fn inspect_workspace_batch(
-    options: InspectWorkspaceBatchOptions,
-) -> Result<WorkspaceInspectBatch, WorkspaceOpsError> {
-    let ids = batch_entry_ids(&options.workspace, &options.batch_id)?;
-    let package = read_translation_package_records(&options.workspace)?;
-    let mut records = BTreeMap::new();
-    for file in &package.files {
-        for record in &file.records {
-            records.insert(record.id.as_str(), (&file.manifest_file.path, record));
-        }
-    }
-    let total = ids.len();
-    let start = options.offset.min(total);
-    let end = start.saturating_add(options.limit).min(total);
-    let mut entries = Vec::new();
-    for id in ids.into_iter().skip(start).take(end.saturating_sub(start)) {
-        let Some((file, record)) = records.get(id.as_str()) else {
-            return Err(WorkspaceOpsError::UnknownTranslationId { id });
-        };
-        entries.push(inspect_entry(file, record, Some(options.batch_id.clone())));
-    }
-    Ok(WorkspaceInspectBatch {
-        batch_id: options.batch_id,
-        total,
-        offset: start,
-        limit: options.limit,
-        // Applying entries mutates the batch file, so callers must re-read
-        // mutable batches from offset 0 after each apply.
-        next_offset: None,
-        entries,
-    })
 }
 
 pub fn inspect_workspace_diagnostics(

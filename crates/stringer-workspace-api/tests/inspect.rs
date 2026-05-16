@@ -1,9 +1,9 @@
 use stringer_workspace_api::{
     ClaimBatchOptions, ExportTranslationsOptions, InspectDiagnosticSeverity, InspectEntryStatus,
-    InspectWorkspaceBatchOptions, InspectWorkspaceDiagnosticsOptions,
-    InspectWorkspaceEntriesOptions, InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions,
-    claim_batch, export_translations, inspect_workspace_batch, inspect_workspace_diagnostics,
-    inspect_workspace_entries, inspect_workspace_entry, inspect_workspace_files,
+    InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
+    InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, claim_batch, export_translations,
+    inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
+    inspect_workspace_files,
 };
 
 #[allow(dead_code)]
@@ -153,44 +153,6 @@ async fn inspect_entry_returns_single_record_by_id() {
     assert_eq!(entry.source, "Steel Sword");
     assert_eq!(entry.translation.as_deref(), Some("钢剑"));
     assert_eq!(entry.diagnostics[0].code(), "memory.conflict");
-}
-
-#[tokio::test]
-async fn inspect_batch_returns_claimed_remaining_entries_without_applying() {
-    let fixture = fixture_workspace("inspect-batch").await;
-    let claim = claim_batch(ClaimBatchOptions {
-        workspace: utf8(&fixture.translations),
-        file: Some(ENTRY_FILE.to_string()),
-        limit: 2,
-    })
-    .unwrap();
-    let batch_id = claim.batch_id.expect("batch id");
-
-    let batch = inspect_workspace_batch(InspectWorkspaceBatchOptions {
-        workspace: utf8(&fixture.translations),
-        batch_id: batch_id.clone(),
-        offset: 0,
-        limit: 1,
-    })
-    .unwrap();
-
-    assert_eq!(batch.batch_id, batch_id);
-    assert_eq!(batch.total, 2);
-    assert_eq!(batch.offset, 0);
-    assert_eq!(batch.limit, 1);
-    assert_eq!(batch.next_offset, None);
-    assert_eq!(batch.entries.len(), 1);
-    assert_eq!(
-        batch.entries[0].claimed_by.as_deref(),
-        Some(batch.batch_id.as_str())
-    );
-    let rows = entry_rows(&fixture.translations, "scaleform", None);
-    let title = rows
-        .iter()
-        .find(|row| row["source"] == "Iron Sword")
-        .unwrap();
-    assert!(title.get("translation").is_none());
-    assert!(title.get("translation_meta").is_none());
 }
 
 #[tokio::test]

@@ -83,11 +83,6 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::DuplicateTranslationId { .. } => "workspace.duplicate_translation_id",
         WorkspaceError::UnknownTranslationId { .. } => "workspace.unknown_translation_id",
         WorkspaceError::BatchNotFound { .. } => "workspace.batch_not_found",
-        WorkspaceError::DuplicateBatchPatchId { .. } => "workspace.duplicate_batch_patch_id",
-        WorkspaceError::MissingBatchPatchTranslation { .. } => {
-            "workspace.missing_batch_patch_translation"
-        }
-        WorkspaceError::BatchEntryNotClaimed { .. } => "workspace.batch_entry_not_claimed",
         WorkspaceError::BatchRevisionConflict { .. } => "workspace.batch_revision_conflict",
         WorkspaceError::BatchDetailKeysRequired { .. } => "workspace.batch_detail_keys_required",
         WorkspaceError::NormalizeRuleDecode { .. } => "workspace.normalize_rule_decode",
@@ -129,20 +124,11 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         WorkspaceError::DuplicateTranslationId { path, id } => {
             json!({ "path": json_path(path), "id": id })
         }
-        WorkspaceError::UnknownTranslationId { id }
-        | WorkspaceError::DuplicateBatchPatchId { id }
-        | WorkspaceError::MissingBatchPatchTranslation { id } => json!({ "id": id }),
+        WorkspaceError::UnknownTranslationId { id } => json!({ "id": id }),
         WorkspaceError::BatchNotFound { batch_id } => json!({
             "batch_id": batch_id,
             "recovery": "claim_fresh_batch",
         }),
-        WorkspaceError::BatchEntryNotClaimed { batch_id, id } => {
-            json!({
-                "batch_id": batch_id,
-                "id": id,
-                "recovery": "inspect_batch_from_offset_0",
-            })
-        }
         WorkspaceError::BatchRevisionConflict {
             batch_id,
             expected,

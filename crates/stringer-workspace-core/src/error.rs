@@ -84,7 +84,7 @@ pub enum WorkspaceCoreError {
     DuplicateTranslationId { path: Utf8PathBuf, id: String },
 
     #[error(
-        "batch `{batch_id}` was not found; it may already be fully applied, released, or cleared; claim a fresh batch before applying translations"
+        "batch `{batch_id}` was not found; it may already be completed, released, or cleared; claim a fresh batch before submitting translations"
     )]
     BatchNotFound { batch_id: String },
 }

@@ -5,6 +5,7 @@ members = [
     "crates/stringer-app",
     "crates/stringer-cli",
     "crates/stringer-extraction-filter",
+    "crates/stringer-interface",
     "crates/stringer-knowledge",
     "crates/stringer-mcp",
     "crates/stringer-pex",

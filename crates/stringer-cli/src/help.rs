@@ -53,10 +53,9 @@ pub(crate) const WORKSPACE_BATCH_DETAIL_LONG_ABOUT: &str =
     r#"Read full context, hints, diagnostics, and metadata for one or more claimed batch keys."#;
 
 pub(crate) const WORKSPACE_BATCH_SUBMIT_LONG_ABOUT: &str =
-    r#"Submit translate, skip, or pending actions for batch-local keys from a JSON or CSV patch."#;
+    r#"Submit translate, skip, or pending actions for batch-local keys from JSON or CSV."#;
 
-pub(crate) const WORKSPACE_BATCH_EXPORT_LONG_ABOUT: &str =
-    r#"Export a claimed batch to an editable JSON or CSV patch file under batch-work by default."#;
+pub(crate) const WORKSPACE_BATCH_EXPORT_LONG_ABOUT: &str = r#"Export a claimed batch to an editable JSON or CSV submission file under batch-work by default."#;
 
 pub(crate) const WORKSPACE_BATCH_RELEASE_LONG_ABOUT: &str =
     r#"Release a claimed batch so its remaining entries can be claimed again."#;

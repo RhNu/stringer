@@ -1284,6 +1284,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stringer-adapt",
+ "stringer-interface",
  "stringer-knowledge",
  "stringer-pipeline",
  "stringer-workspace-api",
@@ -1332,6 +1333,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "stringer-interface"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "stringer-knowledge"
 version = "0.1.0"
 dependencies = [
@@ -1364,6 +1374,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stringer-app",
+ "stringer-interface",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -4,14 +4,14 @@ use stringer_app::WorkspaceBatchSubmitActionInput;
 use crate::app::{CliError, read_input};
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct WorkspaceBatchSubmitPatchInput {
+pub(crate) struct WorkspaceBatchSubmitInput {
     pub(crate) batch_id: String,
     pub(crate) revision: u64,
-    pub(crate) entries: Vec<WorkspaceBatchSubmitPatchEntry>,
+    pub(crate) entries: Vec<WorkspaceBatchSubmitEntryInput>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct WorkspaceBatchSubmitPatchEntry {
+pub(crate) struct WorkspaceBatchSubmitEntryInput {
     pub(crate) key: String,
     pub(crate) action: WorkspaceBatchSubmitActionInput,
     #[serde(default)]
@@ -20,9 +20,9 @@ pub(crate) struct WorkspaceBatchSubmitPatchEntry {
     pub(crate) skip_reason: Option<String>,
 }
 
-pub(crate) fn read_batch_submit_patch(
+pub(crate) fn read_batch_submit_input(
     input: &Utf8PathBuf,
-) -> Result<WorkspaceBatchSubmitPatchInput, CliError> {
+) -> Result<WorkspaceBatchSubmitInput, CliError> {
     let text = read_input(input)?;
     if input.as_str() != "-" && input.extension() == Some("csv") {
         return parse_batch_submit_csv(input, &text);
@@ -36,12 +36,12 @@ pub(crate) fn read_batch_submit_patch(
 fn parse_batch_submit_csv(
     path: &Utf8PathBuf,
     text: &str,
-) -> Result<WorkspaceBatchSubmitPatchInput, CliError> {
+) -> Result<WorkspaceBatchSubmitInput, CliError> {
     let mut batch_id = None;
     let mut revision = None;
     let (metadata_line, csv_text) =
         split_first_line(text).ok_or_else(|| CliError::InvalidArguments {
-            message: format!("CSV patch `{path}` is empty"),
+            message: format!("CSV submission `{path}` is empty"),
         })?;
     if let Some(metadata) = metadata_line.strip_prefix("# stringer ") {
         for item in metadata.split_whitespace() {
@@ -59,7 +59,7 @@ fn parse_batch_submit_csv(
     let columns = reader
         .headers()
         .map_err(|source| CliError::InvalidArguments {
-            message: format!("failed to parse CSV patch `{path}` header: {source}"),
+            message: format!("failed to parse CSV submission `{path}` header: {source}"),
         })?
         .clone();
     let key_index = csv_column(&columns, "key")?;
@@ -69,7 +69,7 @@ fn parse_batch_submit_csv(
     let mut entries = Vec::new();
     for row in reader.records() {
         let row = row.map_err(|source| CliError::InvalidArguments {
-            message: format!("failed to parse CSV patch `{path}` row: {source}"),
+            message: format!("failed to parse CSV submission `{path}` row: {source}"),
         })?;
         let action = match csv_get(&row, action_index) {
             "translate" => WorkspaceBatchSubmitActionInput::Translate,
@@ -81,19 +81,19 @@ fn parse_batch_submit_csv(
                 });
             }
         };
-        entries.push(WorkspaceBatchSubmitPatchEntry {
+        entries.push(WorkspaceBatchSubmitEntryInput {
             key: csv_get(&row, key_index).to_string(),
             action,
             translation: non_empty(csv_get(&row, translation_index)),
             skip_reason: non_empty(csv_get(&row, skip_reason_index)),
         });
     }
-    Ok(WorkspaceBatchSubmitPatchInput {
+    Ok(WorkspaceBatchSubmitInput {
         batch_id: batch_id.ok_or_else(|| CliError::InvalidArguments {
-            message: format!("CSV patch `{path}` is missing batch_id metadata"),
+            message: format!("CSV submission `{path}` is missing batch_id metadata"),
         })?,
         revision: revision.ok_or_else(|| CliError::InvalidArguments {
-            message: format!("CSV patch `{path}` is missing revision metadata"),
+            message: format!("CSV submission `{path}` is missing revision metadata"),
         })?,
         entries,
     })
@@ -115,7 +115,7 @@ fn csv_column(columns: &csv::StringRecord, name: &str) -> Result<usize, CliError
         .iter()
         .position(|column| column == name)
         .ok_or_else(|| CliError::InvalidArguments {
-            message: format!("CSV patch is missing `{name}` column"),
+            message: format!("CSV submission is missing `{name}` column"),
         })
 }
 
@@ -132,14 +132,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn csv_patch_parser_accepts_quoted_multiline_fields() {
-        let patch = concat!(
+    fn csv_submission_parser_accepts_quoted_multiline_fields() {
+        let submission = concat!(
             "# stringer batch_id=b-test revision=7\n",
             "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",
             "e001,\"Iron\nSword\",,,memory.conflict,translate,\"熟\n铁剑\",\n",
         );
 
-        let parsed = parse_batch_submit_csv(&Utf8PathBuf::from("patch.csv"), patch).unwrap();
+        let parsed =
+            parse_batch_submit_csv(&Utf8PathBuf::from("submission.csv"), submission).unwrap();
 
         assert_eq!(parsed.batch_id, "b-test");
         assert_eq!(parsed.revision, 7);

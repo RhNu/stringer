@@ -83,13 +83,6 @@ pub fn claimed_entry_batches(
     Ok(claims)
 }
 
-pub fn batch_entry_ids(
-    workspace: &Utf8Path,
-    batch_id: &str,
-) -> Result<Vec<String>, WorkspaceCoreError> {
-    Ok(read_batch_file(workspace, batch_id)?.remaining_ids())
-}
-
 fn read_batch_files(workspace: &Utf8Path) -> Result<Vec<BatchFile>, WorkspaceCoreError> {
     let dir = workspace.join(BATCHES_DIR);
     if !dir.exists() {

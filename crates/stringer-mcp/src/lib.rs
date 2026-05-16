@@ -11,7 +11,7 @@ use rmcp::{
     tool, tool_router,
 };
 use schemars::{JsonSchema, generate::SchemaSettings, transform::Transform};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::Serialize;
 use serde_json::json;
 use stringer_app::{
     AppError, adapt_import, knowledge_annotate, knowledge_index_rebuild, knowledge_lookup,
@@ -39,7 +39,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceOpenParams>,
     ) -> Result<Json<WorkspaceOpenResult>, ErrorData> {
-        app_json(workspace_open(app_request(request)?).await)
+        app_json(workspace_open(request).await)
     }
 
     #[tool(
@@ -52,7 +52,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceFinalizeParams>,
     ) -> Result<Json<WorkspaceFinalizeResult>, ErrorData> {
-        app_json(workspace_finalize(app_request(request)?).await)
+        app_json(workspace_finalize(request).await)
     }
 
     #[tool(
@@ -65,7 +65,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceBatchCountParams>,
     ) -> Result<Json<WorkspaceBatchCountResult>, ErrorData> {
-        app_json(workspace_batch_count(app_request(request)?))
+        app_json(workspace_batch_count(request))
     }
 
     #[tool(
@@ -78,12 +78,12 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceBatchClaimParams>,
     ) -> Result<Json<WorkspaceBatchClaimResult>, ErrorData> {
-        app_json(workspace_batch_claim(app_request(request)?))
+        app_json(workspace_batch_claim(request))
     }
 
     #[tool(
         name = "workspace_batch_release",
-        description = "Release a claimed batch without applying translations.",
+        description = "Release a claimed batch without submitting translations.",
         input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReleaseParams>>(),
         output_schema = compatible_output_schema_for_type::<WorkspaceBatchReleaseResult>()
     )]
@@ -91,7 +91,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceBatchReleaseParams>,
     ) -> Result<Json<WorkspaceBatchReleaseResult>, ErrorData> {
-        app_json(workspace_batch_release(app_request(request)?))
+        app_json(workspace_batch_release(request))
     }
 
     #[tool(
@@ -104,7 +104,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceBatchReadParams>,
     ) -> Result<Json<WorkspaceBatchReadResult>, ErrorData> {
-        app_json(workspace_batch_read(app_request(request)?))
+        app_json(workspace_batch_read(request))
     }
 
     #[tool(
@@ -117,7 +117,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceBatchDetailParams>,
     ) -> Result<Json<WorkspaceBatchDetailResult>, ErrorData> {
-        app_json(workspace_batch_detail(app_request(request)?))
+        app_json(workspace_batch_detail(request))
     }
 
     #[tool(
@@ -130,12 +130,12 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceBatchSubmitParams>,
     ) -> Result<Json<WorkspaceBatchSubmitResult>, ErrorData> {
-        app_json(workspace_batch_submit(app_request(request)?))
+        app_json(workspace_batch_submit(request))
     }
 
     #[tool(
         name = "workspace_batch_export",
-        description = "Export a claimed batch to an editable JSON or CSV patch file.",
+        description = "Export a claimed batch to an editable JSON or CSV submission file.",
         input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchExportParams>>(),
         output_schema = compatible_output_schema_for_type::<WorkspaceBatchExportResult>()
     )]
@@ -143,7 +143,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceBatchExportParams>,
     ) -> Result<Json<WorkspaceBatchExportResult>, ErrorData> {
-        app_json(workspace_batch_export(app_request(request)?))
+        app_json(workspace_batch_export(request))
     }
 
     #[tool(
@@ -156,7 +156,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceNormalizeParams>,
     ) -> Result<Json<WorkspaceNormalizeResult>, ErrorData> {
-        app_json(workspace_normalize(app_request(request)?))
+        app_json(workspace_normalize(request))
     }
 
     #[tool(
@@ -169,7 +169,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceInspectFilesParams>,
     ) -> Result<Json<WorkspaceInspectFilesResult>, ErrorData> {
-        app_json(workspace_inspect_files(app_request(request)?))
+        app_json(workspace_inspect_files(request))
     }
 
     #[tool(
@@ -182,7 +182,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceInspectEntriesParams>,
     ) -> Result<Json<WorkspaceInspectEntriesResult>, ErrorData> {
-        app_json(workspace_inspect_entries(app_request(request)?))
+        app_json(workspace_inspect_entries(request))
     }
 
     #[tool(
@@ -195,7 +195,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceInspectEntryParams>,
     ) -> Result<Json<WorkspaceInspectEntry>, ErrorData> {
-        app_json(workspace_inspect_entry(app_request(request)?))
+        app_json(workspace_inspect_entry(request))
     }
 
     #[tool(
@@ -208,7 +208,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<WorkspaceInspectDiagnosticsParams>,
     ) -> Result<Json<WorkspaceInspectDiagnosticsResult>, ErrorData> {
-        app_json(workspace_inspect_diagnostics(app_request(request)?))
+        app_json(workspace_inspect_diagnostics(request))
     }
 
     #[tool(
@@ -221,7 +221,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<AdaptImportParams>,
     ) -> Result<Json<AdaptImportResult>, ErrorData> {
-        app_json(adapt_import(app_request(request)?).await)
+        app_json(adapt_import(request).await)
     }
 
     #[tool(
@@ -234,7 +234,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<KnowledgeAnnotateParams>,
     ) -> Result<Json<KnowledgeOperationResult>, ErrorData> {
-        app_json(knowledge_annotate(app_request(request)?))
+        app_json(knowledge_annotate(request))
     }
 
     #[tool(
@@ -247,7 +247,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<KnowledgeValidateParams>,
     ) -> Result<Json<KnowledgeOperationResult>, ErrorData> {
-        app_json(knowledge_validate(app_request(request)?))
+        app_json(knowledge_validate(request))
     }
 
     #[tool(
@@ -260,7 +260,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<KnowledgeLookupParams>,
     ) -> Result<Json<KnowledgeLookupResult>, ErrorData> {
-        app_json(knowledge_lookup(app_request(request)?))
+        app_json(knowledge_lookup(request))
     }
 
     #[tool(
@@ -273,7 +273,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<KnowledgeIndexRebuildParams>,
     ) -> Result<Json<KnowledgeIndexRebuildResult>, ErrorData> {
-        app_json(knowledge_index_rebuild(app_request(request)?))
+        app_json(knowledge_index_rebuild(request))
     }
 
     #[tool(
@@ -286,7 +286,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<KnowledgeTermUpsertParams>,
     ) -> Result<Json<KnowledgeTermsEditResult>, ErrorData> {
-        app_json(knowledge_term_upsert(app_request(request)?))
+        app_json(knowledge_term_upsert(request))
     }
 
     #[tool(
@@ -299,7 +299,7 @@ impl StringerMcp {
         &self,
         Parameters(request): Parameters<KnowledgeTermDeleteParams>,
     ) -> Result<Json<KnowledgeTermEditResult>, ErrorData> {
-        app_json(knowledge_term_delete(app_request(request)?))
+        app_json(knowledge_term_delete(request))
     }
 }
 
@@ -341,59 +341,11 @@ where
     }
 }
 
-fn app_request<T, U>(request: T) -> Result<U, ErrorData>
+fn app_json<T>(result: Result<T, AppError>) -> Result<Json<T>, ErrorData>
 where
-    T: Serialize,
-    U: DeserializeOwned,
+    T: Serialize + JsonSchema,
 {
-    let value = serde_json::to_value(request).map_err(|source| {
-        ErrorData::invalid_params(
-            "failed to serialize Stringer MCP request",
-            Some(json!({
-                "code": "mcp.serialize_request",
-                "message": source.to_string(),
-                "details": {},
-            })),
-        )
-    })?;
-    serde_json::from_value(value).map_err(|source| {
-        ErrorData::invalid_params(
-            "failed to map Stringer MCP request",
-            Some(json!({
-                "code": "mcp.map_request",
-                "message": source.to_string(),
-                "details": {},
-            })),
-        )
-    })
-}
-
-fn app_json<T, U>(result: Result<T, AppError>) -> Result<Json<U>, ErrorData>
-where
-    T: Serialize,
-    U: DeserializeOwned + Serialize + JsonSchema,
-{
-    let value = serde_json::to_value(result.map_err(app_error)?).map_err(|source| {
-        ErrorData::internal_error(
-            "failed to serialize Stringer MCP result",
-            Some(json!({
-                "code": "mcp.serialize_result",
-                "message": source.to_string(),
-                "details": {},
-            })),
-        )
-    })?;
-    let output = serde_json::from_value(value).map_err(|source| {
-        ErrorData::internal_error(
-            "failed to map Stringer MCP result",
-            Some(json!({
-                "code": "mcp.map_result",
-                "message": source.to_string(),
-                "details": {},
-            })),
-        )
-    })?;
-    Ok(Json(output))
+    Ok(Json(result.map_err(app_error)?))
 }
 
 fn app_error(error: AppError) -> ErrorData {

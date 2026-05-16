@@ -1,36 +1,34 @@
 use std::collections::BTreeMap;
 
 use stringer_workspace_api::{
-    ApplyBatchPatchEntry, ApplyBatchPatchOptions, BatchCount, BatchDetailEntry, BatchExportFormat,
-    BatchExportOptions, BatchExportSummary, BatchReadEntry, BatchSubmitAction, BatchSubmitEntry,
-    BatchSubmitEntryResult, BatchSubmitOptions, BatchSubmitStatus, ClaimBatchOptions, ClaimedBatch,
-    CountBatchOptions, ExportTranslationsOptions, ImportTranslationsOptions,
-    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceBatchOptions,
-    InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
+    BatchCount, BatchDetailEntry, BatchExportFormat, BatchExportOptions, BatchExportSummary,
+    BatchReadEntry, BatchSubmitAction, BatchSubmitEntry, BatchSubmitEntryResult,
+    BatchSubmitOptions, BatchSubmitStatus, ClaimBatchOptions, ClaimedBatch, CountBatchOptions,
+    ExportTranslationsOptions, ImportTranslationsOptions, InspectDiagnosticSeverity,
+    InspectEntryStatus, InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
     InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, NormalizeRuleEncoding,
     NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary, ReadBatchDetailOptions,
     ReadBatchOptions, ReleaseBatchOptions, ReleaseBatchSummary, WorkspaceError,
-    WorkspaceInspectBatch, WorkspaceInspectDiagnostic, WorkspaceInspectEntry,
-    WorkspaceInspectFiles, WorkspaceNormalizeChange, apply_batch_patch, count_batch,
-    export_batch_patch, export_translations, import_translations, inspect_workspace_batch,
-    inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
-    inspect_workspace_files, normalize_workspace as normalize_workspace_api, read_batch,
-    read_batch_detail, release_batch, submit_batch,
+    WorkspaceInspectDiagnostic, WorkspaceInspectEntry, WorkspaceInspectFiles,
+    WorkspaceNormalizeChange, count_batch, export_batch_submission, export_translations,
+    import_translations, inspect_workspace_diagnostics, inspect_workspace_entries,
+    inspect_workspace_entry, inspect_workspace_files,
+    normalize_workspace as normalize_workspace_api, read_batch, read_batch_detail, release_batch,
+    submit_batch,
 };
 use stringer_workspace_core::GlobalConfigSource;
 
 use crate::dto::{
-    InspectDiagnosticSeverityInput, InspectEntryStatusInput, WorkspaceBatchApplyRequest,
-    WorkspaceBatchApplyResponse, WorkspaceBatchClaimRequest, WorkspaceBatchClaimResponse,
-    WorkspaceBatchCountRequest, WorkspaceBatchCountResponse, WorkspaceBatchDetailEntryResponse,
-    WorkspaceBatchDetailRequest, WorkspaceBatchDetailResponse, WorkspaceBatchExportFormatInput,
-    WorkspaceBatchExportRequest, WorkspaceBatchExportResponse, WorkspaceBatchReadEntryResponse,
-    WorkspaceBatchReadRequest, WorkspaceBatchReadResponse, WorkspaceBatchReleaseRequest,
-    WorkspaceBatchReleaseResponse, WorkspaceBatchScope, WorkspaceBatchSubmitActionInput,
-    WorkspaceBatchSubmitEntry, WorkspaceBatchSubmitEntryResultResponse,
-    WorkspaceBatchSubmitRequest, WorkspaceBatchSubmitResponse, WorkspaceBatchSubmitStatusResponse,
-    WorkspaceFinalizeRequest, WorkspaceFinalizeResponse, WorkspaceInspectBatchRequest,
-    WorkspaceInspectBatchResponse, WorkspaceInspectDiagnosticResponse,
+    InspectDiagnosticSeverityInput, InspectEntryStatusInput, WorkspaceBatchClaimRequest,
+    WorkspaceBatchClaimResponse, WorkspaceBatchCountRequest, WorkspaceBatchCountResponse,
+    WorkspaceBatchDetailEntryResponse, WorkspaceBatchDetailRequest, WorkspaceBatchDetailResponse,
+    WorkspaceBatchExportFormatInput, WorkspaceBatchExportRequest, WorkspaceBatchExportResponse,
+    WorkspaceBatchReadEntryResponse, WorkspaceBatchReadRequest, WorkspaceBatchReadResponse,
+    WorkspaceBatchReleaseRequest, WorkspaceBatchReleaseResponse, WorkspaceBatchScope,
+    WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry,
+    WorkspaceBatchSubmitEntryResultResponse, WorkspaceBatchSubmitRequest,
+    WorkspaceBatchSubmitResponse, WorkspaceBatchSubmitStatusResponse, WorkspaceFinalizeRequest,
+    WorkspaceFinalizeResponse, WorkspaceInspectDiagnosticResponse,
     WorkspaceInspectDiagnosticsRequest, WorkspaceInspectDiagnosticsResponse,
     WorkspaceInspectEntriesRequest, WorkspaceInspectEntriesResponse, WorkspaceInspectEntryRequest,
     WorkspaceInspectEntryResponse, WorkspaceInspectEntrySummaryResponse,
@@ -104,29 +102,6 @@ pub fn workspace_batch_claim(
         file: request.file,
         limit: request.limit,
     })?)
-}
-
-pub fn workspace_batch_apply(
-    request: WorkspaceBatchApplyRequest,
-) -> Result<WorkspaceBatchApplyResponse, AppError> {
-    let summary = apply_batch_patch(ApplyBatchPatchOptions {
-        workspace: workspace_or_current(request.workspace)?,
-        batch_id: request.batch_id,
-        entries: request
-            .entries
-            .into_iter()
-            .map(|entry| ApplyBatchPatchEntry {
-                id: entry.id,
-                translation: entry.translation,
-                skip: entry.skip,
-                skip_reason: entry.skip_reason,
-            })
-            .collect(),
-    })?;
-    Ok(WorkspaceBatchApplyResponse {
-        applied_entries: summary.applied_entries,
-        remaining_entries: summary.remaining_entries,
-    })
 }
 
 pub fn workspace_batch_release(
@@ -216,11 +191,11 @@ pub fn workspace_batch_submit(
 pub fn workspace_batch_export(
     request: WorkspaceBatchExportRequest,
 ) -> Result<WorkspaceBatchExportResponse, AppError> {
-    let summary = export_batch_patch(BatchExportOptions {
+    let summary = export_batch_submission(BatchExportOptions {
         workspace: workspace_or_current(request.workspace)?,
         batch_id: request.batch_id,
         out: request.out.map(path),
-        format: request.format.into(),
+        format: batch_export_format(request.format),
     })?;
     Ok(batch_export_response(summary))
 }
@@ -234,7 +209,7 @@ pub fn workspace_normalize(
             rules: path(request.rules),
             file: request.file,
             apply: request.apply,
-            encoding: request.encoding.into(),
+            encoding: normalize_encoding(request.encoding),
             limit: request.limit,
         },
     )?))
@@ -254,7 +229,7 @@ pub fn workspace_inspect_entries(
     let inspected = inspect_workspace_entries(InspectWorkspaceEntriesOptions {
         workspace: workspace_or_current(request.workspace)?,
         file: request.file,
-        status: request.status.into(),
+        status: inspect_entry_status(request.status),
         limit: request.limit,
         offset: request.offset,
     })?;
@@ -277,24 +252,13 @@ pub fn workspace_inspect_entry(
     })?)
 }
 
-pub fn workspace_inspect_batch(
-    request: WorkspaceInspectBatchRequest,
-) -> Result<WorkspaceInspectBatchResponse, AppError> {
-    inspect_batch_response(inspect_workspace_batch(InspectWorkspaceBatchOptions {
-        workspace: workspace_or_current(request.workspace)?,
-        batch_id: request.batch_id,
-        offset: request.offset,
-        limit: request.limit,
-    })?)
-}
-
 pub fn workspace_inspect_diagnostics(
     request: WorkspaceInspectDiagnosticsRequest,
 ) -> Result<WorkspaceInspectDiagnosticsResponse, AppError> {
     let inspected = inspect_workspace_diagnostics(InspectWorkspaceDiagnosticsOptions {
         workspace: workspace_or_current(request.workspace)?,
         file: request.file,
-        severity: request.severity.into(),
+        severity: inspect_diagnostic_severity(request.severity),
         limit: request.limit,
         offset: request.offset,
     })?;
@@ -392,7 +356,7 @@ fn batch_detail_entry_response(
 fn batch_submit_entry(entry: WorkspaceBatchSubmitEntry) -> BatchSubmitEntry {
     BatchSubmitEntry {
         key: entry.key,
-        action: entry.action.into(),
+        action: batch_submit_action(entry.action),
         translation: entry.translation,
         skip_reason: entry.skip_reason,
     }
@@ -403,7 +367,7 @@ fn batch_submit_result_response(
 ) -> WorkspaceBatchSubmitEntryResultResponse {
     WorkspaceBatchSubmitEntryResultResponse {
         key: result.key,
-        status: result.status.into(),
+        status: batch_submit_status_response(result.status),
         message: result.message,
     }
 }
@@ -411,7 +375,7 @@ fn batch_submit_result_response(
 fn batch_export_response(summary: BatchExportSummary) -> WorkspaceBatchExportResponse {
     WorkspaceBatchExportResponse {
         path: summary.path,
-        format: summary.format.into(),
+        format: batch_export_format_response(summary.format),
         entries: summary.entries,
     }
 }
@@ -473,23 +437,6 @@ fn inspect_files_response(
                 group: file.group,
             })
             .collect(),
-    })
-}
-
-fn inspect_batch_response(
-    inspected: WorkspaceInspectBatch,
-) -> Result<WorkspaceInspectBatchResponse, AppError> {
-    Ok(WorkspaceInspectBatchResponse {
-        batch_id: inspected.batch_id,
-        total: inspected.total,
-        offset: inspected.offset,
-        limit: inspected.limit,
-        next_offset: inspected.next_offset,
-        entries: inspected
-            .entries
-            .into_iter()
-            .map(inspect_entry_response)
-            .collect::<Result<_, _>>()?,
     })
 }
 
@@ -590,75 +537,61 @@ fn label_from_keys(prefix: &str, context: &BTreeMap<String, String>, keys: &[&st
     }
 }
 
-impl From<InspectEntryStatusInput> for InspectEntryStatus {
-    fn from(value: InspectEntryStatusInput) -> Self {
-        match value {
-            InspectEntryStatusInput::All => Self::All,
-            InspectEntryStatusInput::Empty => Self::Empty,
-            InspectEntryStatusInput::Memory => Self::Memory,
-            InspectEntryStatusInput::Translated => Self::Translated,
-            InspectEntryStatusInput::Skipped => Self::Skipped,
-            InspectEntryStatusInput::Claimed => Self::Claimed,
-            InspectEntryStatusInput::Diagnostic => Self::Diagnostic,
-        }
+fn inspect_entry_status(value: InspectEntryStatusInput) -> InspectEntryStatus {
+    match value {
+        InspectEntryStatusInput::All => InspectEntryStatus::All,
+        InspectEntryStatusInput::Empty => InspectEntryStatus::Empty,
+        InspectEntryStatusInput::Memory => InspectEntryStatus::Memory,
+        InspectEntryStatusInput::Translated => InspectEntryStatus::Translated,
+        InspectEntryStatusInput::Skipped => InspectEntryStatus::Skipped,
+        InspectEntryStatusInput::Claimed => InspectEntryStatus::Claimed,
+        InspectEntryStatusInput::Diagnostic => InspectEntryStatus::Diagnostic,
     }
 }
 
-impl From<InspectDiagnosticSeverityInput> for InspectDiagnosticSeverity {
-    fn from(value: InspectDiagnosticSeverityInput) -> Self {
-        match value {
-            InspectDiagnosticSeverityInput::All => Self::All,
-            InspectDiagnosticSeverityInput::Error => Self::Error,
-            InspectDiagnosticSeverityInput::Warning => Self::Warning,
-            InspectDiagnosticSeverityInput::Info => Self::Info,
-        }
+fn inspect_diagnostic_severity(value: InspectDiagnosticSeverityInput) -> InspectDiagnosticSeverity {
+    match value {
+        InspectDiagnosticSeverityInput::All => InspectDiagnosticSeverity::All,
+        InspectDiagnosticSeverityInput::Error => InspectDiagnosticSeverity::Error,
+        InspectDiagnosticSeverityInput::Warning => InspectDiagnosticSeverity::Warning,
+        InspectDiagnosticSeverityInput::Info => InspectDiagnosticSeverity::Info,
     }
 }
 
-impl From<WorkspaceNormalizeEncodingInput> for NormalizeRuleEncoding {
-    fn from(value: WorkspaceNormalizeEncodingInput) -> Self {
-        match value {
-            WorkspaceNormalizeEncodingInput::Auto => Self::Auto,
-            WorkspaceNormalizeEncodingInput::Utf8 => Self::Utf8,
-            WorkspaceNormalizeEncodingInput::Cp936 => Self::Cp936,
-        }
+fn normalize_encoding(value: WorkspaceNormalizeEncodingInput) -> NormalizeRuleEncoding {
+    match value {
+        WorkspaceNormalizeEncodingInput::Auto => NormalizeRuleEncoding::Auto,
+        WorkspaceNormalizeEncodingInput::Utf8 => NormalizeRuleEncoding::Utf8,
+        WorkspaceNormalizeEncodingInput::Cp936 => NormalizeRuleEncoding::Cp936,
     }
 }
 
-impl From<WorkspaceBatchSubmitActionInput> for BatchSubmitAction {
-    fn from(value: WorkspaceBatchSubmitActionInput) -> Self {
-        match value {
-            WorkspaceBatchSubmitActionInput::Translate => Self::Translate,
-            WorkspaceBatchSubmitActionInput::Skip => Self::Skip,
-            WorkspaceBatchSubmitActionInput::Pending => Self::Pending,
-        }
+fn batch_submit_action(value: WorkspaceBatchSubmitActionInput) -> BatchSubmitAction {
+    match value {
+        WorkspaceBatchSubmitActionInput::Translate => BatchSubmitAction::Translate,
+        WorkspaceBatchSubmitActionInput::Skip => BatchSubmitAction::Skip,
+        WorkspaceBatchSubmitActionInput::Pending => BatchSubmitAction::Pending,
     }
 }
 
-impl From<BatchSubmitStatus> for WorkspaceBatchSubmitStatusResponse {
-    fn from(value: BatchSubmitStatus) -> Self {
-        match value {
-            BatchSubmitStatus::Applied => Self::Applied,
-            BatchSubmitStatus::Ignored => Self::Ignored,
-            BatchSubmitStatus::Rejected => Self::Rejected,
-        }
+fn batch_submit_status_response(value: BatchSubmitStatus) -> WorkspaceBatchSubmitStatusResponse {
+    match value {
+        BatchSubmitStatus::Applied => WorkspaceBatchSubmitStatusResponse::Applied,
+        BatchSubmitStatus::Ignored => WorkspaceBatchSubmitStatusResponse::Ignored,
+        BatchSubmitStatus::Rejected => WorkspaceBatchSubmitStatusResponse::Rejected,
     }
 }
 
-impl From<WorkspaceBatchExportFormatInput> for BatchExportFormat {
-    fn from(value: WorkspaceBatchExportFormatInput) -> Self {
-        match value {
-            WorkspaceBatchExportFormatInput::Json => Self::Json,
-            WorkspaceBatchExportFormatInput::Csv => Self::Csv,
-        }
+fn batch_export_format(value: WorkspaceBatchExportFormatInput) -> BatchExportFormat {
+    match value {
+        WorkspaceBatchExportFormatInput::Json => BatchExportFormat::Json,
+        WorkspaceBatchExportFormatInput::Csv => BatchExportFormat::Csv,
     }
 }
 
-impl From<BatchExportFormat> for WorkspaceBatchExportFormatInput {
-    fn from(value: BatchExportFormat) -> Self {
-        match value {
-            BatchExportFormat::Json => Self::Json,
-            BatchExportFormat::Csv => Self::Csv,
-        }
+fn batch_export_format_response(value: BatchExportFormat) -> WorkspaceBatchExportFormatInput {
+    match value {
+        BatchExportFormat::Json => WorkspaceBatchExportFormatInput::Json,
+        BatchExportFormat::Csv => WorkspaceBatchExportFormatInput::Csv,
     }
 }

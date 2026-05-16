@@ -73,7 +73,7 @@ cargo run -p stringer-cli -- workspace batch read `
   --offset 0
 ```
 
-`claim` 只负责认领，会输出紧凑 JSON，包含 `batch_id`、`revision`、`claimed_entries`、`remaining_claimable` 和认领 scope。用 `workspace batch read` 按页读取该 batch 的短行：`key`、原文、当前译文、简短上下文、hint 数量和 diagnostic code。需要完整 `context`、`hints`、`diagnostics` 或长 `id` 时，用 `workspace batch detail --key e001` 按需读取。Agent 翻译后用一次或多次 JSON patch 回写；提交时必须带当前 `revision`：
+`claim` 只负责认领，会输出紧凑 JSON，包含 `batch_id`、`revision`、`claimed_entries`、`remaining_claimable` 和认领 scope。用 `workspace batch read` 按页读取该 batch 的短行：`key`、原文、当前译文、简短上下文、hint 数量和 diagnostic code。需要完整 `context`、`hints`、`diagnostics` 或长 `id` 时，用 `workspace batch detail --key e001` 按需读取。Agent 翻译后用一次或多次 JSON submission 提交；提交时必须带当前 `revision`：
 
 ```json
 {"batch_id":"b1770000000000-1234","revision":1,"entries":[{"key":"e001","action":"translate","translation":"铁剑"}]}
@@ -88,10 +88,10 @@ cargo run -p stringer-cli -- workspace batch read `
 ```powershell
 cargo run -p stringer-cli -- workspace batch submit `
   --workspace path/to/translations `
-  --input path/to/patch.json
+  --input path/to/submission.json
 ```
 
-如果工具输出可能被截断，先导出可编辑 patch 文件，再分多轮修改并提交：
+如果工具输出可能被截断，先导出可编辑 submission 文件，再分多轮修改并提交：
 
 ```powershell
 cargo run -p stringer-cli -- workspace batch export `
@@ -382,7 +382,7 @@ cargo run -p stringer-cli -- knowledge term delete --help
 - `workspace open`：从只读 source root 扫描资产，打开翻译工作区。
 - `workspace finalize`：读取翻译工作区，把译文写到输出目录。
 - `workspace upgrade`：当前仅报告旧 `manifest.json` 工作区迁移未实现；需要重建旧工作区。
-- `workspace inspect`：只读查看 entry files、条目、batch 和 diagnostics，默认输出 JSON。
+- `workspace inspect`：只读查看 entry files、条目和 diagnostics，默认输出 JSON。
 - `adapt import`：把 EET、EET XML、EET JSON 或 xTranslator SST 转成翻译记忆 JSONL。
 - `knowledge annotate`：给翻译工作区写入术语、记忆和知识提示，默认自动填充高置信记忆；需要只写提示时加 `--skip-fill-memory`。
 - `knowledge validate`：重算诊断信息，检查术语、禁用译法、占位符、空译文等风险。
@@ -418,6 +418,7 @@ Agent workflow guidance lives in `skills/stringer-workflows/`. Use that Skill fo
 - `crates/stringer-app`：CLI 和 MCP 共用的应用服务层。
 - `crates/stringer-cli`：命令行薄入口。
 - `crates/stringer-core`：共享文件、语言、诊断和字符串条目模型。
+- `crates/stringer-interface`：CLI、app 和 MCP 共用的请求/响应 DTO 合约。
 - `crates/stringer-knowledge`：术语、翻译记忆、规则、lookup 和派生索引。
 - `crates/stringer-mcp`：本地 stdio MCP server，面向 Agent 暴露结构化 tools。
 - `crates/stringer-pex`：PEX 字符串读写。

@@ -5,8 +5,8 @@ use stringer_workspace_core::WorkspaceCoreError;
 use stringer_workspace_ops::{
     BatchExportFormat, BatchExportOptions, BatchSubmitAction, BatchSubmitEntry, BatchSubmitOptions,
     BatchSubmitStatus, ClaimBatchOptions, CountBatchOptions, ReadBatchDetailOptions,
-    ReadBatchOptions, WorkspaceOpsError, claim_batch, count_batch, export_batch_patch, read_batch,
-    read_batch_detail, submit_batch,
+    ReadBatchOptions, WorkspaceOpsError, claim_batch, count_batch, export_batch_submission,
+    read_batch, read_batch_detail, submit_batch,
 };
 
 mod support;
@@ -134,7 +134,7 @@ fn batch_claim_read_detail_and_submit_use_stable_keys_and_revisions() {
 }
 
 #[test]
-fn batch_submit_rejects_stale_revision_before_applying_entries() {
+fn batch_submit_rejects_stale_revision_before_submitting_entries() {
     let fixture = workspace_with_rows("packet-stale-revision", rows());
     let claim = claim_batch(ClaimBatchOptions {
         workspace: utf8(fixture.workspace()),
@@ -323,7 +323,7 @@ fn batch_submit_rejects_bad_entries_without_blocking_valid_entries() {
 }
 
 #[test]
-fn batch_export_json_and_csv_patch_files_can_be_submitted() {
+fn batch_export_json_and_csv_submission_files_can_be_submitted() {
     let fixture = workspace_with_rows("packet-export", rows());
     let claim = claim_batch(ClaimBatchOptions {
         workspace: utf8(fixture.workspace()),
@@ -333,7 +333,7 @@ fn batch_export_json_and_csv_patch_files_can_be_submitted() {
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
 
-    let exported = export_batch_patch(BatchExportOptions {
+    let exported = export_batch_submission(BatchExportOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: batch_id.clone(),
         out: None,
@@ -363,7 +363,7 @@ fn batch_export_json_and_csv_patch_files_can_be_submitted() {
     .unwrap();
     assert_eq!(summary.applied_entries, 1);
 
-    let exported_csv = export_batch_patch(BatchExportOptions {
+    let exported_csv = export_batch_submission(BatchExportOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: batch_id.clone(),
         out: None,

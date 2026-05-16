@@ -99,7 +99,7 @@ impl BatchSubmitOptions {
                 source,
             }
         })?;
-        let patch: BatchSubmitPatch = serde_json::from_str(&text).map_err(|source| {
+        let submission: BatchSubmitInput = serde_json::from_str(&text).map_err(|source| {
             stringer_workspace_core::WorkspaceCoreError::Json {
                 path: path.clone(),
                 source,
@@ -107,15 +107,15 @@ impl BatchSubmitOptions {
         })?;
         Ok(Self {
             workspace,
-            batch_id: patch.batch_id,
-            revision: patch.revision,
-            entries: patch.entries,
+            batch_id: submission.batch_id,
+            revision: submission.revision,
+            entries: submission.entries,
         })
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-struct BatchSubmitPatch {
+struct BatchSubmitInput {
     batch_id: String,
     revision: u64,
     entries: Vec<BatchSubmitEntry>,
@@ -399,7 +399,7 @@ pub fn submit_batch(options: BatchSubmitOptions) -> Result<BatchSubmitSummary, W
     })
 }
 
-pub fn export_batch_patch(
+pub fn export_batch_submission(
     options: BatchExportOptions,
 ) -> Result<BatchExportSummary, WorkspaceOpsError> {
     let batch = read_batch_file(&options.workspace, &options.batch_id)?;
@@ -416,8 +416,8 @@ pub fn export_batch_patch(
             .join(format!("patch.{extension}"))
     });
     match options.format {
-        BatchExportFormat::Json => write_json_patch(&path, &batch, &entries)?,
-        BatchExportFormat::Csv => write_csv_patch(&path, &batch, &entries)?,
+        BatchExportFormat::Json => write_json_submission(&path, &batch, &entries)?,
+        BatchExportFormat::Csv => write_csv_submission(&path, &batch, &entries)?,
     }
     Ok(BatchExportSummary {
         path: path.as_str().replace('\\', "/"),
@@ -596,17 +596,17 @@ fn mark_result_rejected(results: &mut [BatchSubmitEntryResult], key: &str, messa
     }
 }
 
-fn write_json_patch(
+fn write_json_submission(
     path: &Utf8Path,
     batch: &BatchFile,
     entries: &[HydratedBatchEntry],
 ) -> Result<(), WorkspaceOpsError> {
-    let patch = serde_json::json!({
+    let submission = serde_json::json!({
         "batch_id": &batch.batch_id,
         "revision": batch.revision(),
         "entries": entries.iter().map(export_entry).collect::<Vec<_>>(),
     });
-    write_json_atomic(path, &patch)
+    write_json_atomic(path, &submission)
 }
 
 fn export_entry(entry: &HydratedBatchEntry) -> serde_json::Value {
@@ -623,7 +623,7 @@ fn export_entry(entry: &HydratedBatchEntry) -> serde_json::Value {
     })
 }
 
-fn write_csv_patch(
+fn write_csv_submission(
     path: &Utf8Path,
     batch: &BatchFile,
     entries: &[HydratedBatchEntry],

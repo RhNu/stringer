@@ -23,67 +23,59 @@ pub(crate) fn load_settings_for_workspace(
     Ok(load_workspace_settings(LoadWorkspaceSettingsOptions {
         global_config_source: global_config_source.clone(),
         workspace_config_path: workspace_config_path(workspace),
-        overrides: settings.overrides()?,
+        overrides: settings_overrides(settings)?,
     })?)
 }
 
-impl SettingsInput {
-    fn overrides(self) -> Result<WorkspaceSettingsOverrides, WorkspaceError> {
-        Ok(WorkspaceSettingsOverrides {
-            game_release: self
-                .game_release
-                .as_deref()
-                .map(parse_game_release_name)
-                .transpose()?,
-            asset_language: self
-                .asset_language
-                .as_deref()
-                .map(parse_language_name)
-                .transpose()?,
-            source_locale: self.source_locale,
-            target_locale: self.target_locale,
-        })
+fn settings_overrides(
+    settings: SettingsInput,
+) -> Result<WorkspaceSettingsOverrides, WorkspaceError> {
+    Ok(WorkspaceSettingsOverrides {
+        game_release: settings
+            .game_release
+            .as_deref()
+            .map(parse_game_release_name)
+            .transpose()?,
+        asset_language: settings
+            .asset_language
+            .as_deref()
+            .map(parse_language_name)
+            .transpose()?,
+        source_locale: settings.source_locale,
+        target_locale: settings.target_locale,
+    })
+}
+
+pub(crate) fn adapt_format(value: AdaptFormatInput) -> AdaptFormat {
+    match value {
+        AdaptFormatInput::Eet => AdaptFormat::EetBinary,
+        AdaptFormatInput::EetXml => AdaptFormat::EetXml,
+        AdaptFormatInput::EetJson => AdaptFormat::EetJson,
+        AdaptFormatInput::XtSst => AdaptFormat::XtSst,
     }
 }
 
-impl From<AdaptFormatInput> for AdaptFormat {
-    fn from(value: AdaptFormatInput) -> Self {
-        match value {
-            AdaptFormatInput::Eet => Self::EetBinary,
-            AdaptFormatInput::EetXml => Self::EetXml,
-            AdaptFormatInput::EetJson => Self::EetJson,
-            AdaptFormatInput::XtSst => Self::XtSst,
-        }
+pub(crate) fn knowledge_kind(value: KnowledgeKindInput) -> PipelineEntryKind {
+    match value {
+        KnowledgeKindInput::Plugin => PipelineEntryKind::Plugin,
+        KnowledgeKindInput::Strings => PipelineEntryKind::Strings,
+        KnowledgeKindInput::Scaleform => PipelineEntryKind::Scaleform,
+        KnowledgeKindInput::Pex => PipelineEntryKind::Pex,
     }
 }
 
-impl From<KnowledgeKindInput> for PipelineEntryKind {
-    fn from(value: KnowledgeKindInput) -> Self {
-        match value {
-            KnowledgeKindInput::Plugin => Self::Plugin,
-            KnowledgeKindInput::Strings => Self::Strings,
-            KnowledgeKindInput::Scaleform => Self::Scaleform,
-            KnowledgeKindInput::Pex => Self::Pex,
-        }
+pub(crate) fn lookup_source(value: KnowledgeLookupSourceInput) -> LookupKnowledgeSource {
+    match value {
+        KnowledgeLookupSourceInput::All => LookupKnowledgeSource::All,
+        KnowledgeLookupSourceInput::Memory => LookupKnowledgeSource::Memory,
+        KnowledgeLookupSourceInput::Terms => LookupKnowledgeSource::Terms,
     }
 }
 
-impl From<KnowledgeLookupSourceInput> for LookupKnowledgeSource {
-    fn from(value: KnowledgeLookupSourceInput) -> Self {
-        match value {
-            KnowledgeLookupSourceInput::All => Self::All,
-            KnowledgeLookupSourceInput::Memory => Self::Memory,
-            KnowledgeLookupSourceInput::Terms => Self::Terms,
-        }
-    }
-}
-
-impl From<KnowledgeLookupFieldInput> for LookupKnowledgeField {
-    fn from(value: KnowledgeLookupFieldInput) -> Self {
-        match value {
-            KnowledgeLookupFieldInput::Both => Self::Both,
-            KnowledgeLookupFieldInput::Source => Self::Source,
-            KnowledgeLookupFieldInput::Target => Self::Target,
-        }
+pub(crate) fn lookup_field(value: KnowledgeLookupFieldInput) -> LookupKnowledgeField {
+    match value {
+        KnowledgeLookupFieldInput::Both => LookupKnowledgeField::Both,
+        KnowledgeLookupFieldInput::Source => LookupKnowledgeField::Source,
+        KnowledgeLookupFieldInput::Target => LookupKnowledgeField::Target,
     }
 }

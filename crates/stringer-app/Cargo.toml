@@ -10,6 +10,7 @@ camino.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 stringer-adapt = { path = "../stringer-adapt" }
+stringer-interface = { path = "../stringer-interface" }
 stringer-knowledge = { path = "../stringer-knowledge" }
 stringer-pipeline = { path = "../stringer-pipeline" }
 stringer-workspace-api = { path = "../stringer-workspace-api" }

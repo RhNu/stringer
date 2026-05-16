@@ -20,6 +20,7 @@ use crate::dto::{
 };
 use crate::error::{AppError, serialize_value};
 use crate::paths::{initialized_workspace_or_current, path, workspace_or_current};
+use crate::settings::{knowledge_kind, lookup_field, lookup_source};
 
 pub fn knowledge_annotate(
     request: KnowledgeAnnotateRequest,
@@ -129,11 +130,11 @@ pub(crate) fn knowledge_lookup_with_global_config_source(
         settings,
         global_config_source: global_config_source.clone(),
         text: request.text,
-        kind: request.kind.into(),
+        kind: knowledge_kind(request.kind),
         context: lookup_context(request.record_type, request.subrecord),
         mode: lookup_mode(request.regex),
-        source: request.source.into(),
-        field: request.field.into(),
+        source: lookup_source(request.source),
+        field: lookup_field(request.field),
         limit: request.limit,
         case_sensitive: request.case_sensitive,
     })?;
@@ -302,7 +303,7 @@ fn workspace_term_input(term: crate::dto::KnowledgeTermInput) -> WorkspaceTermIn
         target: term.target,
         aliases: term.aliases,
         case_sensitive: term.case_sensitive,
-        status: term.status.into(),
+        status: knowledge_term_status(term.status),
         scope: term.scope,
         tags: term.tags,
         note: term.note,
@@ -320,13 +321,11 @@ fn knowledge_operation_response(summary: KnowledgeSummary) -> KnowledgeOperation
     }
 }
 
-impl From<KnowledgeTermStatusInput> for KnowledgeTermStatus {
-    fn from(value: KnowledgeTermStatusInput) -> Self {
-        match value {
-            KnowledgeTermStatusInput::Preferred => Self::Preferred,
-            KnowledgeTermStatusInput::Allowed => Self::Allowed,
-            KnowledgeTermStatusInput::Forbidden => Self::Forbidden,
-        }
+fn knowledge_term_status(value: KnowledgeTermStatusInput) -> KnowledgeTermStatus {
+    match value {
+        KnowledgeTermStatusInput::Preferred => KnowledgeTermStatus::Preferred,
+        KnowledgeTermStatusInput::Allowed => KnowledgeTermStatus::Allowed,
+        KnowledgeTermStatusInput::Forbidden => KnowledgeTermStatus::Forbidden,
     }
 }
 

@@ -1,7 +1,6 @@
 use stringer_workspace_ops::{
-    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceBatchOptions,
-    InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
-    InspectWorkspaceFilesOptions, inspect_workspace_batch, inspect_workspace_diagnostics,
+    InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceDiagnosticsOptions,
+    InspectWorkspaceEntriesOptions, InspectWorkspaceFilesOptions, inspect_workspace_diagnostics,
     inspect_workspace_entries, inspect_workspace_files,
 };
 
@@ -57,30 +56,8 @@ fn inspect_entries_filters_statuses_and_claims() {
 }
 
 #[test]
-fn inspect_batch_and_diagnostics_read_hand_written_batch_fixtures() {
-    let fixture = workspace_with_rows("inspect-batch", rows());
-    write_batch(
-        fixture.workspace(),
-        "b-review",
-        &["scaleform:MyMod:$Title", "scaleform:MyMod:$Desc"],
-    );
-
-    let batch = inspect_workspace_batch(InspectWorkspaceBatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: "b-review".to_string(),
-        offset: 1,
-        limit: 1,
-    })
-    .unwrap();
-    assert_eq!(batch.batch_id, "b-review");
-    assert_eq!(batch.total, 2);
-    assert_eq!(batch.offset, 1);
-    assert_eq!(batch.limit, 1);
-    assert_eq!(batch.next_offset, None);
-    assert_eq!(batch.entries.len(), 1);
-    assert_eq!(batch.entries[0].source, "Steel Sword");
-    assert_eq!(batch.entries[0].claimed_by.as_deref(), Some("b-review"));
-
+fn inspect_diagnostics_read_hand_written_workspace_rows() {
+    let fixture = workspace_with_rows("inspect-diagnostics", rows());
     let diagnostics = inspect_workspace_diagnostics(InspectWorkspaceDiagnosticsOptions {
         workspace: utf8(fixture.workspace()),
         file: Some(ENTRY_FILE.to_string()),

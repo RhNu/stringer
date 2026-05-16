@@ -1,7 +1,7 @@
 use stringer_workspace_ops::{
-    ApplyBatchPatchEntry, ApplyBatchPatchOptions, ClaimBatchOptions, CountBatchOptions,
-    InspectWorkspaceBatchOptions, ReleaseBatchOptions, WorkspaceOpsError, apply_batch_patch,
-    claim_batch, count_batch, inspect_workspace_batch, release_batch,
+    BatchSubmitAction, BatchSubmitEntry, BatchSubmitOptions, ClaimBatchOptions, CountBatchOptions,
+    ReadBatchOptions, ReleaseBatchOptions, claim_batch, count_batch, read_batch, release_batch,
+    submit_batch,
 };
 
 mod support;
@@ -9,7 +9,7 @@ mod support;
 use support::*;
 
 #[test]
-fn batch_count_claim_apply_and_release_manage_claimed_entries() {
+fn batch_count_claim_submit_and_release_manage_claimed_entries() {
     let fixture = workspace_with_rows("batch-flow", rows());
 
     let count = count_batch(CountBatchOptions {
@@ -33,21 +33,23 @@ fn batch_count_claim_apply_and_release_manage_claimed_entries() {
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
     assert_eq!(claim.claimed_entries, 2);
+    assert_eq!(claim.revision, Some(1));
     assert_eq!(claim.scope.file.as_deref(), Some(ENTRY_FILE));
 
-    let batch_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+    let page = read_batch(ReadBatchOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: batch_id.clone(),
         offset: 0,
         limit: 1,
     })
     .unwrap();
-    assert_eq!(batch_page.total, 2);
-    assert_eq!(batch_page.offset, 0);
-    assert_eq!(batch_page.limit, 1);
-    assert_eq!(batch_page.next_offset, None);
-    assert_eq!(batch_page.entries.len(), 1);
-    assert_eq!(batch_page.entries[0].source, "Iron Sword");
+    assert_eq!(page.total_entries, 2);
+    assert_eq!(page.offset, 0);
+    assert_eq!(page.limit, 1);
+    assert_eq!(page.next_offset, Some(1));
+    assert_eq!(page.entries.len(), 1);
+    assert_eq!(page.entries[0].key, "e001");
+    assert_eq!(page.entries[0].source, "Iron Sword");
 
     let count = count_batch(CountBatchOptions {
         workspace: utf8(fixture.workspace()),
@@ -56,19 +58,21 @@ fn batch_count_claim_apply_and_release_manage_claimed_entries() {
     .unwrap();
     assert_eq!(count.claimed, 2);
 
-    let apply = apply_batch_patch(ApplyBatchPatchOptions {
+    let submitted = submit_batch(BatchSubmitOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: batch_id.clone(),
-        entries: vec![ApplyBatchPatchEntry {
-            id: "scaleform:MyMod:$Title".to_string(),
+        revision: page.revision,
+        entries: vec![BatchSubmitEntry {
+            key: page.entries[0].key.clone(),
+            action: BatchSubmitAction::Translate,
             translation: Some("熟铁剑".to_string()),
-            skip: false,
             skip_reason: None,
         }],
     })
     .unwrap();
-    assert_eq!(apply.applied_entries, 1);
-    assert_eq!(apply.remaining_entries, 1);
+    assert_eq!(submitted.applied_entries, 1);
+    assert_eq!(submitted.remaining_entries, 1);
+    assert_eq!(submitted.revision, 2);
     let rows = jsonl_rows(&fixture.workspace().join(ENTRY_FILE));
     assert_eq!(rows[0]["translation"], "熟铁剑");
     assert_eq!(rows[0]["translation_meta"]["origin"], "agent");
@@ -90,7 +94,7 @@ fn batch_count_claim_apply_and_release_manage_claimed_entries() {
 }
 
 #[test]
-fn batch_apply_skip_marks_entry_done_without_translation() {
+fn batch_submit_skip_marks_entry_done_without_translation() {
     let fixture = workspace_with_rows("batch-skip", rows());
 
     let claim = claim_batch(ClaimBatchOptions {
@@ -100,31 +104,33 @@ fn batch_apply_skip_marks_entry_done_without_translation() {
     })
     .unwrap();
     let batch_id = claim.batch_id.expect("batch id");
-    let page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+    let page = read_batch(ReadBatchOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: batch_id.clone(),
         offset: 0,
         limit: 1,
     })
     .unwrap();
-    let entry_id = page.entries[0].id.clone();
+    let key = page.entries[0].key.clone();
+    let source = page.entries[0].source.clone();
 
-    let apply = apply_batch_patch(ApplyBatchPatchOptions {
+    let submitted = submit_batch(BatchSubmitOptions {
         workspace: utf8(fixture.workspace()),
         batch_id,
-        entries: vec![ApplyBatchPatchEntry {
-            id: entry_id.clone(),
+        revision: page.revision,
+        entries: vec![BatchSubmitEntry {
+            key,
+            action: BatchSubmitAction::Skip,
             translation: None,
-            skip: true,
             skip_reason: Some("not_translatable".to_string()),
         }],
     })
     .unwrap();
-    assert_eq!(apply.applied_entries, 1);
-    assert_eq!(apply.remaining_entries, 0);
+    assert_eq!(submitted.applied_entries, 1);
+    assert_eq!(submitted.remaining_entries, 0);
 
     let rows = jsonl_rows(&fixture.workspace().join(ENTRY_FILE));
-    let skipped = rows.iter().find(|row| row["id"] == entry_id).unwrap();
+    let skipped = rows.iter().find(|row| row["source"] == source).unwrap();
     assert!(skipped.get("translation").is_none());
     assert_eq!(skipped["translation_meta"]["origin"], "skipped");
     assert_eq!(
@@ -139,72 +145,6 @@ fn batch_apply_skip_marks_entry_done_without_translation() {
     .unwrap();
     assert_eq!(count.empty, 1);
     assert_eq!(count.skipped, 1);
-
-    let reclaim = claim_batch(ClaimBatchOptions {
-        workspace: utf8(fixture.workspace()),
-        file: Some(ENTRY_FILE.to_string()),
-        limit: 10,
-    })
-    .unwrap();
-    assert_eq!(reclaim.claimed_entries, 2);
-    let reclaim_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: reclaim.batch_id.expect("batch id"),
-        offset: 0,
-        limit: 10,
-    })
-    .unwrap();
-    assert!(
-        reclaim_page
-            .entries
-            .iter()
-            .all(|entry| entry.id != entry_id)
-    );
-}
-
-#[test]
-fn batch_inspect_omits_next_offset_because_apply_mutates_remaining_entries() {
-    let fixture = workspace_with_rows("batch-mutable-page", rows());
-
-    let claim = claim_batch(ClaimBatchOptions {
-        workspace: utf8(fixture.workspace()),
-        file: Some(ENTRY_FILE.to_string()),
-        limit: 2,
-    })
-    .unwrap();
-    let batch_id = claim.batch_id.expect("batch id");
-
-    let first_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: batch_id.clone(),
-        offset: 0,
-        limit: 1,
-    })
-    .unwrap();
-    assert_eq!(first_page.entries.len(), 1);
-    assert_eq!(first_page.next_offset, None);
-
-    apply_batch_patch(ApplyBatchPatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: batch_id.clone(),
-        entries: vec![ApplyBatchPatchEntry {
-            id: first_page.entries[0].id.clone(),
-            translation: Some("熟铁剑".to_string()),
-            skip: false,
-            skip_reason: None,
-        }],
-    })
-    .unwrap();
-
-    let remaining_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id,
-        offset: 0,
-        limit: 1,
-    })
-    .unwrap();
-    assert_eq!(remaining_page.total, 1);
-    assert_eq!(remaining_page.entries.len(), 1);
 }
 
 #[test]
@@ -230,14 +170,14 @@ fn consecutive_claims_create_distinct_non_overlapping_batches() {
     assert_eq!(first.claimed_entries, 1);
     assert_eq!(second.claimed_entries, 1);
 
-    let first_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+    let first_page = read_batch(ReadBatchOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: first_id,
         offset: 0,
         limit: 10,
     })
     .unwrap();
-    let second_page = inspect_workspace_batch(InspectWorkspaceBatchOptions {
+    let second_page = read_batch(ReadBatchOptions {
         workspace: utf8(fixture.workspace()),
         batch_id: second_id,
         offset: 0,
@@ -245,87 +185,5 @@ fn consecutive_claims_create_distinct_non_overlapping_batches() {
     })
     .unwrap();
 
-    assert_ne!(first_page.entries[0].id, second_page.entries[0].id);
-}
-
-#[test]
-fn batch_apply_rejects_duplicate_missing_unclaimed_and_unknown_entries() {
-    let fixture = workspace_with_rows("batch-errors", rows());
-    write_batch(
-        fixture.workspace(),
-        "b-test",
-        &["scaleform:MyMod:$Title", "scaleform:MyMod:$Missing"],
-    );
-
-    let duplicate = apply_batch_patch(ApplyBatchPatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: "b-test".to_string(),
-        entries: vec![
-            ApplyBatchPatchEntry {
-                id: "scaleform:MyMod:$Title".to_string(),
-                translation: Some("铁剑".to_string()),
-                skip: false,
-                skip_reason: None,
-            },
-            ApplyBatchPatchEntry {
-                id: "scaleform:MyMod:$Title".to_string(),
-                translation: Some("熟铁剑".to_string()),
-                skip: false,
-                skip_reason: None,
-            },
-        ],
-    })
-    .unwrap_err();
-    assert!(matches!(
-        duplicate,
-        WorkspaceOpsError::DuplicateBatchPatchId { .. }
-    ));
-
-    let missing_translation = apply_batch_patch(ApplyBatchPatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: "b-test".to_string(),
-        entries: vec![ApplyBatchPatchEntry {
-            id: "scaleform:MyMod:$Title".to_string(),
-            translation: None,
-            skip: false,
-            skip_reason: None,
-        }],
-    })
-    .unwrap_err();
-    assert!(matches!(
-        missing_translation,
-        WorkspaceOpsError::MissingBatchPatchTranslation { .. }
-    ));
-
-    let unclaimed = apply_batch_patch(ApplyBatchPatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: "b-test".to_string(),
-        entries: vec![ApplyBatchPatchEntry {
-            id: "scaleform:MyMod:$Desc".to_string(),
-            translation: Some("钢剑".to_string()),
-            skip: false,
-            skip_reason: None,
-        }],
-    })
-    .unwrap_err();
-    assert!(matches!(
-        unclaimed,
-        WorkspaceOpsError::BatchEntryNotClaimed { .. }
-    ));
-
-    let unknown = apply_batch_patch(ApplyBatchPatchOptions {
-        workspace: utf8(fixture.workspace()),
-        batch_id: "b-test".to_string(),
-        entries: vec![ApplyBatchPatchEntry {
-            id: "scaleform:MyMod:$Missing".to_string(),
-            translation: Some("不存在".to_string()),
-            skip: false,
-            skip_reason: None,
-        }],
-    })
-    .unwrap_err();
-    assert!(matches!(
-        unknown,
-        WorkspaceOpsError::UnknownTranslationId { .. }
-    ));
+    assert_ne!(first_page.entries[0].source, second_page.entries[0].source);
 }
