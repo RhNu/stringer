@@ -25,6 +25,7 @@ use stringer_workspace_core::{
     write_translation_package_records,
 };
 use stringer_workspace_core::{WorkspaceCoreError, WorkspaceLock, unix_ms};
+use tracing::{debug, info};
 
 const BUILTIN_PROCESSORS: &[&str] = &[
     "stringer.term",
@@ -95,6 +96,89 @@ pub struct KnowledgeIndexSummary {
     pub rebuild_reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KnowledgeOperation {
+    Annotate,
+    Validate,
+    IndexRebuild,
+}
+
+impl KnowledgeOperation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Annotate => "knowledge.annotate",
+            Self::Validate => "knowledge.validate",
+            Self::IndexRebuild => "knowledge.index_rebuild",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KnowledgeProgressPhase {
+    Started,
+    Advanced,
+    Finished,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnowledgeProgressEvent {
+    pub operation: KnowledgeOperation,
+    pub phase: KnowledgeProgressPhase,
+    pub processed: usize,
+    pub total: Option<usize>,
+    pub message: Option<String>,
+}
+
+impl KnowledgeProgressEvent {
+    fn started(
+        operation: KnowledgeOperation,
+        total: Option<usize>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            operation,
+            phase: KnowledgeProgressPhase::Started,
+            processed: 0,
+            total,
+            message: Some(message.into()),
+        }
+    }
+
+    fn advanced(
+        operation: KnowledgeOperation,
+        processed: usize,
+        total: Option<usize>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            operation,
+            phase: KnowledgeProgressPhase::Advanced,
+            processed,
+            total,
+            message: Some(message.into()),
+        }
+    }
+
+    fn finished(
+        operation: KnowledgeOperation,
+        processed: usize,
+        total: Option<usize>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            operation,
+            phase: KnowledgeProgressPhase::Finished,
+            processed,
+            total,
+            message: Some(message.into()),
+        }
+    }
+}
+
+fn package_record_count(package: &stringer_workspace_core::TranslationPackageRecords) -> usize {
+    package.files.iter().map(|file| file.records.len()).sum()
+}
+
 impl KnowledgeIndexSummary {
     fn add(&mut self, other: Self) {
         self.files += other.files;
@@ -128,6 +212,16 @@ pub struct KnowledgeSummary {
 pub fn annotate_translations(
     options: AnnotateTranslationsOptions,
 ) -> Result<KnowledgeSummary, KnowledgeError> {
+    annotate_translations_with_progress(options, |_| {})
+}
+
+pub fn annotate_translations_with_progress<F>(
+    options: AnnotateTranslationsOptions,
+    mut progress: F,
+) -> Result<KnowledgeSummary, KnowledgeError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
     let claimed = claimed_entry_ids(&options.workspace)?;
@@ -142,6 +236,18 @@ pub fn annotate_translations(
         index_used: session.has_indexes(),
         ..KnowledgeSummary::default()
     };
+    let total = package_record_count(&package);
+    info!(
+        workspace = %options.workspace,
+        entries = total,
+        index_used = summary.index_used,
+        "starting knowledge annotation"
+    );
+    progress(KnowledgeProgressEvent::started(
+        KnowledgeOperation::Annotate,
+        Some(total),
+        "annotating workspace entries",
+    ));
 
     for file in &mut package.files {
         for record in &mut file.records {
@@ -185,16 +291,54 @@ pub fn annotate_translations(
             summary.annotations += annotate_report.annotations + memory_report.annotations;
             summary.diagnostics += diagnostics;
             summary.auto_filled += memory_report.auto_filled;
+            debug!(
+                processed = summary.entries,
+                total,
+                annotations = summary.annotations,
+                diagnostics = summary.diagnostics,
+                auto_filled = summary.auto_filled,
+                "annotated workspace entry"
+            );
+            progress(KnowledgeProgressEvent::advanced(
+                KnowledgeOperation::Annotate,
+                summary.entries,
+                Some(total),
+                file.manifest_file.path.clone(),
+            ));
         }
     }
 
     write_translation_package_records(&options.workspace, &package)?;
+    progress(KnowledgeProgressEvent::finished(
+        KnowledgeOperation::Annotate,
+        summary.entries,
+        Some(total),
+        "annotation complete",
+    ));
+    info!(
+        workspace = %options.workspace,
+        entries = summary.entries,
+        annotations = summary.annotations,
+        diagnostics = summary.diagnostics,
+        auto_filled = summary.auto_filled,
+        "finished knowledge annotation"
+    );
     Ok(summary)
 }
 
 pub fn validate_translations(
     options: ValidateTranslationsOptions,
 ) -> Result<KnowledgeSummary, KnowledgeError> {
+    validate_translations_with_progress(options, |_| {})
+}
+
+pub fn validate_translations_with_progress<F>(
+    options: ValidateTranslationsOptions,
+    mut progress: F,
+) -> Result<KnowledgeSummary, KnowledgeError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
     let settings = settings_with_user_knowledge_defaults(
@@ -208,6 +352,18 @@ pub fn validate_translations(
         index_used: session.has_indexes(),
         ..KnowledgeSummary::default()
     };
+    let total = package_record_count(&package);
+    info!(
+        workspace = %options.workspace,
+        entries = total,
+        index_used = summary.index_used,
+        "starting knowledge validation"
+    );
+    progress(KnowledgeProgressEvent::started(
+        KnowledgeOperation::Validate,
+        Some(total),
+        "validating workspace entries",
+    ));
 
     for file in &mut package.files {
         for record in &mut file.records {
@@ -230,10 +386,34 @@ pub fn validate_translations(
             summary.entries += 1;
             summary.annotations += report.annotations;
             summary.diagnostics += diagnostics;
+            debug!(
+                processed = summary.entries,
+                total,
+                diagnostics = summary.diagnostics,
+                "validated workspace entry"
+            );
+            progress(KnowledgeProgressEvent::advanced(
+                KnowledgeOperation::Validate,
+                summary.entries,
+                Some(total),
+                file.manifest_file.path.clone(),
+            ));
         }
     }
 
     write_translation_package_records(&options.workspace, &package)?;
+    progress(KnowledgeProgressEvent::finished(
+        KnowledgeOperation::Validate,
+        summary.entries,
+        Some(total),
+        "validation complete",
+    ));
+    info!(
+        workspace = %options.workspace,
+        entries = summary.entries,
+        diagnostics = summary.diagnostics,
+        "finished knowledge validation"
+    );
     Ok(summary)
 }
 
@@ -286,6 +466,16 @@ pub fn lookup_knowledge(
 pub fn build_knowledge_index(
     options: BuildKnowledgeIndexOptions,
 ) -> Result<KnowledgeIndexSummary, KnowledgeError> {
+    build_knowledge_index_with_progress(options, |_| {})
+}
+
+pub fn build_knowledge_index_with_progress<F>(
+    options: BuildKnowledgeIndexOptions,
+    mut progress: F,
+) -> Result<KnowledgeIndexSummary, KnowledgeError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
     let settings = settings_for_build_scope(
         options.settings,
         options.scope,
@@ -297,7 +487,14 @@ pub fn build_knowledge_index(
     };
     let resources = collect_knowledge_resources(&options.workspace, &settings, selection)?;
     let mut summary = KnowledgeIndexSummary::default();
-    for layer in &resources.layers {
+    let total = resources.layers.len();
+    info!(workspace = %options.workspace, layers = total, "starting knowledge index rebuild");
+    progress(KnowledgeProgressEvent::started(
+        KnowledgeOperation::IndexRebuild,
+        Some(total),
+        "rebuilding knowledge indexes",
+    ));
+    for (index, layer) in resources.layers.iter().enumerate() {
         let knowledge = load_knowledge_from_files(&layer.files)?;
         summary.add(rebuild_knowledge_index(
             &layer.index_path,
@@ -306,7 +503,34 @@ pub fn build_knowledge_index(
             &knowledge,
             Some("explicit"),
         )?);
+        let processed = index + 1;
+        debug!(
+            processed,
+            total,
+            files = layer.files.len(),
+            index_path = %layer.index_path,
+            "rebuilt knowledge index layer"
+        );
+        progress(KnowledgeProgressEvent::advanced(
+            KnowledgeOperation::IndexRebuild,
+            processed,
+            Some(total),
+            layer.index_path.to_string(),
+        ));
     }
+    progress(KnowledgeProgressEvent::finished(
+        KnowledgeOperation::IndexRebuild,
+        total,
+        Some(total),
+        "index rebuild complete",
+    ));
+    info!(
+        workspace = %options.workspace,
+        files = summary.files,
+        indexed_items = summary.indexed_items,
+        fts_rows = summary.fts_rows,
+        "finished knowledge index rebuild"
+    );
     Ok(summary)
 }
 

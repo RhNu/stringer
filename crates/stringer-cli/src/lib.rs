@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod app;
+mod feedback;
 mod help;
 mod workspace;
 
@@ -11,6 +12,7 @@ pub use app::{
     KnowledgeLookupSourceArg, KnowledgeTermCommand, KnowledgeTermDeleteCommand,
     KnowledgeTermStatusArg, KnowledgeTermUpsertCommand, KnowledgeValidateCommand, run,
 };
+pub use feedback::ProgressModeArg;
 pub use workspace::{
     InspectDiagnosticSeverityArg, InspectEntryStatusArg, WorkspaceBatchApplyCommand,
     WorkspaceBatchClaimCommand, WorkspaceBatchCommand, WorkspaceBatchCountCommand,

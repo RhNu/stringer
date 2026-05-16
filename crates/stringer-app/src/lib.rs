@@ -14,9 +14,12 @@ pub use context::StringerApp;
 pub use dto::*;
 pub use error::AppError;
 pub use knowledge::{
-    knowledge_annotate, knowledge_index_rebuild, knowledge_lookup, knowledge_term_delete,
-    knowledge_term_upsert, knowledge_validate, parse_knowledge_kind,
+    knowledge_annotate, knowledge_annotate_with_progress, knowledge_index_rebuild,
+    knowledge_index_rebuild_with_progress, knowledge_lookup, knowledge_term_delete,
+    knowledge_term_upsert, knowledge_validate, knowledge_validate_with_progress,
+    parse_knowledge_kind,
 };
+pub use stringer_knowledge::{KnowledgeOperation, KnowledgeProgressEvent, KnowledgeProgressPhase};
 pub use workspace::{
     workspace_batch_apply, workspace_batch_claim, workspace_batch_count, workspace_batch_release,
     workspace_finalize, workspace_inspect_batch, workspace_inspect_diagnostics,

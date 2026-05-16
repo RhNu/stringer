@@ -1,10 +1,12 @@
+use stringer_knowledge::KnowledgeProgressEvent;
 use stringer_knowledge::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope,
     KnowledgeLookup, KnowledgeSummary, KnowledgeTermDeleteOptions, KnowledgeTermEditSummary,
     KnowledgeTermInput as WorkspaceTermInput, KnowledgeTermStatus, KnowledgeTermsEditSummary,
     KnowledgeTermsUpsertOptions, LookupKnowledgeMode, LookupKnowledgeOptions,
-    ValidateTranslationsOptions, annotate_translations, build_knowledge_index,
-    delete_knowledge_term, lookup_knowledge, upsert_knowledge_terms, validate_translations,
+    ValidateTranslationsOptions, annotate_translations_with_progress,
+    build_knowledge_index_with_progress, delete_knowledge_term, lookup_knowledge,
+    upsert_knowledge_terms, validate_translations_with_progress,
 };
 use stringer_workspace_api::WorkspaceError;
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceSettings, read_workspace_settings};
@@ -25,15 +27,43 @@ pub fn knowledge_annotate(
     knowledge_annotate_with_global_config_source(request, &GlobalConfigSource::Production)
 }
 
+pub fn knowledge_annotate_with_progress<F>(
+    request: KnowledgeAnnotateRequest,
+    progress: F,
+) -> Result<KnowledgeOperationResponse, AppError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
+    knowledge_annotate_with_global_config_source_and_progress(
+        request,
+        &GlobalConfigSource::Production,
+        progress,
+    )
+}
+
 pub(crate) fn knowledge_annotate_with_global_config_source(
     request: KnowledgeAnnotateRequest,
     global_config_source: &GlobalConfigSource,
 ) -> Result<KnowledgeOperationResponse, AppError> {
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: workspace_or_current(request.workspace)?,
-        global_config_source: global_config_source.clone(),
-        skip_memory_fill: request.skip_fill_memory,
-    })?;
+    knowledge_annotate_with_global_config_source_and_progress(request, global_config_source, |_| {})
+}
+
+pub(crate) fn knowledge_annotate_with_global_config_source_and_progress<F>(
+    request: KnowledgeAnnotateRequest,
+    global_config_source: &GlobalConfigSource,
+    progress: F,
+) -> Result<KnowledgeOperationResponse, AppError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
+    let summary = annotate_translations_with_progress(
+        AnnotateTranslationsOptions {
+            workspace: workspace_or_current(request.workspace)?,
+            global_config_source: global_config_source.clone(),
+            skip_memory_fill: request.skip_fill_memory,
+        },
+        progress,
+    )?;
     Ok(knowledge_operation_response(summary))
 }
 
@@ -43,14 +73,42 @@ pub fn knowledge_validate(
     knowledge_validate_with_global_config_source(request, &GlobalConfigSource::Production)
 }
 
+pub fn knowledge_validate_with_progress<F>(
+    request: KnowledgeValidateRequest,
+    progress: F,
+) -> Result<KnowledgeOperationResponse, AppError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
+    knowledge_validate_with_global_config_source_and_progress(
+        request,
+        &GlobalConfigSource::Production,
+        progress,
+    )
+}
+
 pub(crate) fn knowledge_validate_with_global_config_source(
     request: KnowledgeValidateRequest,
     global_config_source: &GlobalConfigSource,
 ) -> Result<KnowledgeOperationResponse, AppError> {
-    let summary = validate_translations(ValidateTranslationsOptions {
-        workspace: workspace_or_current(request.workspace)?,
-        global_config_source: global_config_source.clone(),
-    })?;
+    knowledge_validate_with_global_config_source_and_progress(request, global_config_source, |_| {})
+}
+
+pub(crate) fn knowledge_validate_with_global_config_source_and_progress<F>(
+    request: KnowledgeValidateRequest,
+    global_config_source: &GlobalConfigSource,
+    progress: F,
+) -> Result<KnowledgeOperationResponse, AppError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
+    let summary = validate_translations_with_progress(
+        ValidateTranslationsOptions {
+            workspace: workspace_or_current(request.workspace)?,
+            global_config_source: global_config_source.clone(),
+        },
+        progress,
+    )?;
     Ok(knowledge_operation_response(summary))
 }
 
@@ -88,18 +146,50 @@ pub fn knowledge_index_rebuild(
     knowledge_index_rebuild_with_global_config_source(request, &GlobalConfigSource::Production)
 }
 
+pub fn knowledge_index_rebuild_with_progress<F>(
+    request: KnowledgeIndexRebuildRequest,
+    progress: F,
+) -> Result<KnowledgeIndexRebuildResponse, AppError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
+    knowledge_index_rebuild_with_global_config_source_and_progress(
+        request,
+        &GlobalConfigSource::Production,
+        progress,
+    )
+}
+
 pub(crate) fn knowledge_index_rebuild_with_global_config_source(
     request: KnowledgeIndexRebuildRequest,
     global_config_source: &GlobalConfigSource,
 ) -> Result<KnowledgeIndexRebuildResponse, AppError> {
+    knowledge_index_rebuild_with_global_config_source_and_progress(
+        request,
+        global_config_source,
+        |_| {},
+    )
+}
+
+pub(crate) fn knowledge_index_rebuild_with_global_config_source_and_progress<F>(
+    request: KnowledgeIndexRebuildRequest,
+    global_config_source: &GlobalConfigSource,
+    progress: F,
+) -> Result<KnowledgeIndexRebuildResponse, AppError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
     let workspace = initialized_workspace_or_current(request.workspace)?;
     let settings = read_workspace_settings(&workspace)?;
-    let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
-        workspace,
-        settings,
-        global_config_source: global_config_source.clone(),
-        scope: KnowledgeIndexBuildScope::All,
-    })?;
+    let summary = build_knowledge_index_with_progress(
+        BuildKnowledgeIndexOptions {
+            workspace,
+            settings,
+            global_config_source: global_config_source.clone(),
+            scope: KnowledgeIndexBuildScope::All,
+        },
+        progress,
+    )?;
     Ok(KnowledgeIndexRebuildResponse {
         files: summary.files,
         terms: summary.terms,

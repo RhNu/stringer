@@ -12,9 +12,12 @@ path = "src/main.rs"
 [dependencies]
 camino.workspace = true
 clap = { workspace = true, features = ["derive"] }
+indicatif = "0.18.4"
 miette = { workspace = true, features = ["fancy"] }
 serde.workspace = true
 serde_json.workspace = true
 stringer-app = { path = "../stringer-app" }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true

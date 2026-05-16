@@ -3,17 +3,19 @@ use std::fs;
 use std::io::{self, Read};
 
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use stringer_app::{
     AdaptFormatInput, AdaptImportRequest, AppError, KnowledgeAnnotateRequest,
     KnowledgeIndexRebuildRequest, KnowledgeLookupFieldInput, KnowledgeLookupRequest,
     KnowledgeLookupSourceInput, KnowledgeTermDeleteRequest, KnowledgeTermInput,
     KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, KnowledgeValidateRequest, adapt_import,
-    knowledge_annotate, knowledge_index_rebuild, knowledge_lookup, knowledge_term_delete,
-    knowledge_term_upsert, knowledge_validate, parse_knowledge_kind,
+    knowledge_annotate_with_progress, knowledge_index_rebuild_with_progress, knowledge_lookup,
+    knowledge_term_delete, knowledge_term_upsert, knowledge_validate_with_progress,
+    parse_knowledge_kind,
 };
 use thiserror::Error;
 
+use crate::feedback::{Feedback, ProgressHandle, ProgressModeArg, init_tracing};
 use crate::help::*;
 use crate::workspace::{WorkspaceCommand, run_workspace};
 
@@ -27,6 +29,24 @@ use crate::workspace::{WorkspaceCommand, run_workspace};
     arg_required_else_help = true
 )]
 pub struct Cli {
+    #[arg(
+        short = 'v',
+        long,
+        global = true,
+        action = ArgAction::Count,
+        help = "Increase default diagnostic logging; repeat for trace logs; RUST_LOG overrides"
+    )]
+    pub verbose: u8,
+    #[arg(long, global = true, help = "Suppress progress and diagnostic logging")]
+    pub quiet: bool,
+    #[arg(
+        long,
+        global = true,
+        default_value = "auto",
+        value_name = "MODE",
+        help = "Progress display mode: auto, always, or never"
+    )]
+    pub progress: ProgressModeArg,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -393,6 +413,9 @@ pub enum CliError {
         #[source]
         source: serde_json::Error,
     },
+
+    #[error("{message}")]
+    InvalidArguments { message: String },
 }
 
 impl From<AppError> for CliError {
@@ -402,19 +425,23 @@ impl From<AppError> for CliError {
 }
 
 pub async fn run(cli: Cli) -> Result<(), CliError> {
+    validate_feedback_args(&cli)?;
+    init_tracing(cli.verbose, cli.quiet);
+    let feedback = Feedback::new(cli.quiet, cli.progress);
     match cli.command {
         Command::Workspace { command } => {
-            run_workspace(command).await?;
+            run_workspace(command, &feedback).await?;
             Ok(())
         }
-        Command::Adapt { command } => run_adapt(command).await,
-        Command::Knowledge { command } => run_knowledge(command).await,
+        Command::Adapt { command } => run_adapt(command, &feedback).await,
+        Command::Knowledge { command } => run_knowledge(command, &feedback).await,
     }
 }
 
-async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
+async fn run_adapt(command: AdaptCommand, feedback: &Feedback) -> Result<(), CliError> {
     match command {
         AdaptCommand::Import(command) => {
+            let status = feedback.command("adapt import");
             let imported = adapt_import(AdaptImportRequest {
                 format: command.format.into(),
                 input: command.input.to_string(),
@@ -424,6 +451,7 @@ async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
                 game: command.game,
             })
             .await?;
+            status.finish();
             println!(
                 "adapted {} entries, {} {} memory entries to {}, skipped {} entries, reported {} diagnostics",
                 imported.summary.total_entries,
@@ -438,13 +466,20 @@ async fn run_adapt(command: AdaptCommand) -> Result<(), CliError> {
     }
 }
 
-async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
+async fn run_knowledge(command: KnowledgeCommand, feedback: &Feedback) -> Result<(), CliError> {
     match command {
         KnowledgeCommand::Annotate(command) => {
-            let summary = knowledge_annotate(KnowledgeAnnotateRequest {
-                workspace: Some(command.workspace.to_string()),
-                skip_fill_memory: command.skip_fill_memory,
-            })?;
+            let mut progress = None;
+            let summary = knowledge_annotate_with_progress(
+                KnowledgeAnnotateRequest {
+                    workspace: Some(command.workspace.to_string()),
+                    skip_fill_memory: command.skip_fill_memory,
+                },
+                |event| {
+                    update_knowledge_progress(feedback, "knowledge annotate", &mut progress, event)
+                },
+            )?;
+            finish_progress(progress);
             println!(
                 "annotated {} entries, added {} hints, wrote {} diagnostics, auto-filled {} entries",
                 summary.entries, summary.annotations, summary.diagnostics, summary.auto_filled
@@ -452,9 +487,16 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             Ok(())
         }
         KnowledgeCommand::Validate(command) => {
-            let summary = knowledge_validate(KnowledgeValidateRequest {
-                workspace: Some(command.workspace.to_string()),
-            })?;
+            let mut progress = None;
+            let summary = knowledge_validate_with_progress(
+                KnowledgeValidateRequest {
+                    workspace: Some(command.workspace.to_string()),
+                },
+                |event| {
+                    update_knowledge_progress(feedback, "knowledge validate", &mut progress, event)
+                },
+            )?;
+            finish_progress(progress);
             println!(
                 "validated {} entries and wrote {} diagnostics",
                 summary.entries, summary.diagnostics
@@ -462,6 +504,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             Ok(())
         }
         KnowledgeCommand::Lookup(command) => {
+            let status = feedback.command("knowledge lookup");
             let lookup = knowledge_lookup(KnowledgeLookupRequest {
                 workspace: Some(command.workspace.to_string()),
                 text: command.text,
@@ -474,6 +517,7 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
                 source: command.source.into(),
                 field: command.field.into(),
             })?;
+            status.finish();
             if command.json {
                 println!(
                     "{}",
@@ -515,17 +559,32 @@ async fn run_knowledge(command: KnowledgeCommand) -> Result<(), CliError> {
             }
             Ok(())
         }
-        KnowledgeCommand::Index { command } => run_knowledge_index(command).await,
-        KnowledgeCommand::Term { command } => run_knowledge_term(command).await,
+        KnowledgeCommand::Index { command } => run_knowledge_index(command, feedback).await,
+        KnowledgeCommand::Term { command } => run_knowledge_term(command, feedback).await,
     }
 }
 
-async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliError> {
+async fn run_knowledge_index(
+    command: KnowledgeIndexCommand,
+    feedback: &Feedback,
+) -> Result<(), CliError> {
     match command {
         KnowledgeIndexCommand::Rebuild(command) => {
-            let summary = knowledge_index_rebuild(KnowledgeIndexRebuildRequest {
-                workspace: Some(command.workspace.to_string()),
-            })?;
+            let mut progress = None;
+            let summary = knowledge_index_rebuild_with_progress(
+                KnowledgeIndexRebuildRequest {
+                    workspace: Some(command.workspace.to_string()),
+                },
+                |event| {
+                    update_knowledge_progress(
+                        feedback,
+                        "knowledge index rebuild",
+                        &mut progress,
+                        event,
+                    )
+                },
+            )?;
+            finish_progress(progress);
             println!(
                 "indexed {} files, {} terms, {} memory entries, {} rules, {} diagnostics",
                 summary.files, summary.terms, summary.memory, summary.rules, summary.diagnostics
@@ -535,9 +594,13 @@ async fn run_knowledge_index(command: KnowledgeIndexCommand) -> Result<(), CliEr
     }
 }
 
-async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliError> {
+async fn run_knowledge_term(
+    command: KnowledgeTermCommand,
+    feedback: &Feedback,
+) -> Result<(), CliError> {
     match command {
         KnowledgeTermCommand::Upsert(command) => {
+            let status = feedback.command("knowledge term upsert");
             let response = knowledge_term_upsert(KnowledgeTermUpsertRequest {
                 workspace: Some(command.workspace.to_string()),
                 file: command.file.map(|path| path.to_string()),
@@ -554,6 +617,7 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
                 }],
                 rebuild_index: command.rebuild_index,
             })?;
+            status.finish();
             if command.json {
                 print_json(&response)?;
             } else {
@@ -562,12 +626,14 @@ async fn run_knowledge_term(command: KnowledgeTermCommand) -> Result<(), CliErro
             Ok(())
         }
         KnowledgeTermCommand::Delete(command) => {
+            let status = feedback.command("knowledge term delete");
             let response = knowledge_term_delete(KnowledgeTermDeleteRequest {
                 workspace: Some(command.workspace.to_string()),
                 file: command.file.map(|path| path.to_string()),
                 id: command.id,
                 rebuild_index: command.rebuild_index,
             })?;
+            status.finish();
             if command.json {
                 print_json(&response)?;
             } else {
@@ -655,4 +721,45 @@ pub(crate) fn print_json(value: &impl serde::Serialize) -> Result<(), CliError> 
         })?
     );
     Ok(())
+}
+
+fn validate_feedback_args(cli: &Cli) -> Result<(), CliError> {
+    if cli.quiet && cli.progress == ProgressModeArg::Always {
+        return Err(CliError::InvalidArguments {
+            message: "--quiet cannot be used with --progress always".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn update_knowledge_progress(
+    feedback: &Feedback,
+    label: &str,
+    handle: &mut Option<ProgressHandle>,
+    event: stringer_app::KnowledgeProgressEvent,
+) {
+    match event.phase {
+        stringer_app::KnowledgeProgressPhase::Started => {
+            *handle = Some(feedback.progress(label, event.total.unwrap_or_default() as u64));
+        }
+        stringer_app::KnowledgeProgressPhase::Advanced => {
+            if let Some(progress) = handle {
+                progress.set_position(event.processed as u64);
+                if let Some(message) = event.message {
+                    progress.set_message(format!("{label}: {message}"));
+                }
+            }
+        }
+        stringer_app::KnowledgeProgressPhase::Finished => {
+            if let Some(progress) = handle.take() {
+                progress.finish();
+            }
+        }
+    }
+}
+
+fn finish_progress(progress: Option<ProgressHandle>) {
+    if let Some(progress) = progress {
+        progress.finish();
+    }
 }

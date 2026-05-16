@@ -20,7 +20,9 @@ pub use terms::{
 };
 pub use translations::{
     AnnotateTranslationsOptions, BuildKnowledgeIndexOptions, KnowledgeIndexBuildScope,
-    KnowledgeIndexSummary, KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers,
-    LookupKnowledgeOptions, ValidateTranslationsOptions, annotate_translations,
-    build_knowledge_index, load_knowledge_layers, lookup_knowledge, validate_translations,
+    KnowledgeIndexSummary, KnowledgeOperation, KnowledgeProgressEvent, KnowledgeProgressPhase,
+    KnowledgeSummary, LoadKnowledgeLayersOptions, LoadedKnowledgeLayers, LookupKnowledgeOptions,
+    ValidateTranslationsOptions, annotate_translations, annotate_translations_with_progress,
+    build_knowledge_index, build_knowledge_index_with_progress, load_knowledge_layers,
+    lookup_knowledge, validate_translations, validate_translations_with_progress,
 };

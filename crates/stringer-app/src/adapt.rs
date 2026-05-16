@@ -5,6 +5,7 @@ use stringer_workspace_api::{
     WorkspaceError, game_release_name, global_knowledge_root_from_source, parse_game_release_name,
 };
 use stringer_workspace_core::GlobalConfigSource;
+use tracing::info;
 
 use crate::dto::{AdaptImportRequest, AdaptImportResponse, AdaptImportSummary};
 use crate::error::AppError;
@@ -19,6 +20,7 @@ pub(crate) async fn adapt_import_with_global_config_source(
     global_config_source: &GlobalConfigSource,
 ) -> Result<AdaptImportResponse, AppError> {
     let input = path(request.input);
+    info!(input = %input, format = ?request.format, "starting adapt import");
     let game = request
         .game
         .as_deref()
@@ -47,6 +49,16 @@ pub(crate) async fn adapt_import_with_global_config_source(
         let output = default_adapt_memory_path(&root, &input)?;
         (merge_memory_jsonl(&catalog, &output)?, "merged", output)
     };
+    info!(
+        input = %input,
+        output = %output,
+        action,
+        total_entries = summary.total_entries,
+        written_entries = summary.written_entries,
+        skipped_entries = summary.skipped_entries,
+        diagnostics = summary.diagnostics,
+        "finished adapt import"
+    );
     Ok(AdaptImportResponse {
         summary: AdaptImportSummary {
             total_entries: summary.total_entries,

@@ -15,7 +15,7 @@ use stringer_workspace_core::{
     PackagedTranslationRecord, WorkspaceLock, WorkspaceSettings, external_entry_id,
     packaged_record_from_entry, read_translation_package, write_translation_package,
 };
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::WorkspaceError;
 use crate::paths::{
@@ -117,6 +117,12 @@ pub async fn export_translations(
     options: ExportTranslationsOptions,
 ) -> Result<ExportSummary, WorkspaceError> {
     let source_root = absolute_existing_path(&options.source_root)?;
+    info!(
+        source_root = %source_root,
+        workspace = %options.workspace,
+        force = options.force,
+        "starting workspace export"
+    );
     ensure_workspace_outside_source(&source_root, &options.workspace)?;
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     prepare_workspace_for_export(&options.workspace, options.force)?;
@@ -134,6 +140,7 @@ pub async fn export_translations(
         &options.settings,
         &records,
     )?;
+    info!(entries = records.len(), "finished workspace export");
     debug!(entries = records.len(), "exported translation package");
     Ok(ExportSummary {
         entries: records.len(),
@@ -143,6 +150,12 @@ pub async fn export_translations(
 pub async fn import_translations(
     options: ImportTranslationsOptions,
 ) -> Result<ImportSummary, WorkspaceError> {
+    info!(
+        workspace = %options.workspace,
+        output = %options.output,
+        source_root_override = options.source_root.is_some(),
+        "starting workspace import"
+    );
     let (settings, stored_source_root, mut translations) =
         read_translation_package(&options.workspace)?;
     let source_root = options.source_root.unwrap_or(stored_source_root);
@@ -167,6 +180,7 @@ pub async fn import_translations(
         applied_entries,
         written_files, "imported translation package"
     );
+    info!(applied_entries, written_files, "finished workspace import");
     Ok(ImportSummary {
         applied_entries,
         written_files,

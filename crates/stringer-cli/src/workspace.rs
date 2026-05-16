@@ -13,6 +13,7 @@ use stringer_app::{
 };
 
 use crate::app::{CliError, print_json, read_input};
+use crate::feedback::Feedback;
 use crate::help::*;
 
 #[derive(Debug, Subcommand)]
@@ -321,9 +322,10 @@ pub struct WorkspaceUpgradeCommand {
     pub workspace: Utf8PathBuf,
 }
 
-pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), CliError> {
+pub async fn run_workspace(command: WorkspaceCommand, feedback: &Feedback) -> Result<(), CliError> {
     match command {
         WorkspaceCommand::Open(command) => {
+            let status = feedback.command("workspace open");
             let summary = workspace_open(WorkspaceOpenRequest {
                 source_root: command.source_root.to_string(),
                 workspace: Some(command.workspace.to_string()),
@@ -336,39 +338,48 @@ pub async fn run_workspace(command: WorkspaceCommand) -> Result<(), CliError> {
                 ),
             })
             .await?;
+            status.finish();
             println!("opened workspace with {} entries", summary.entries);
             Ok(())
         }
         WorkspaceCommand::Finalize(command) => {
+            let status = feedback.command("workspace finalize");
             let summary = workspace_finalize(WorkspaceFinalizeRequest {
                 workspace: Some(command.workspace.to_string()),
                 source_root: command.source_root.map(|path| path.to_string()),
                 output: command.output.map(|path| path.to_string()),
             })
             .await?;
+            status.finish();
             println!(
                 "finalized workspace by applying {} entries and writing {} files",
                 summary.applied_entries, summary.written_files
             );
             Ok(())
         }
-        WorkspaceCommand::Batch { command } => run_workspace_batch(command),
-        WorkspaceCommand::Inspect { command } => run_workspace_inspect(command),
+        WorkspaceCommand::Batch { command } => run_workspace_batch(command, feedback),
+        WorkspaceCommand::Inspect { command } => run_workspace_inspect(command, feedback),
         WorkspaceCommand::Upgrade(command) => {
             Err(workspace_upgrade_unsupported(command.workspace.to_string()).into())
         }
     }
 }
 
-fn run_workspace_inspect(command: WorkspaceInspectCommand) -> Result<(), CliError> {
+fn run_workspace_inspect(
+    command: WorkspaceInspectCommand,
+    feedback: &Feedback,
+) -> Result<(), CliError> {
     match command {
         WorkspaceInspectCommand::Files(command) => {
+            let status = feedback.command("workspace inspect files");
             let inspected = workspace_inspect_files(WorkspaceInspectFilesRequest {
                 workspace: Some(command.workspace.to_string()),
             })?;
+            status.finish();
             print_json(&inspected)
         }
         WorkspaceInspectCommand::Entries(command) => {
+            let status = feedback.command("workspace inspect entries");
             let inspected = workspace_inspect_entries(WorkspaceInspectEntriesRequest {
                 workspace: Some(command.workspace.to_string()),
                 file: command.file,
@@ -376,23 +387,29 @@ fn run_workspace_inspect(command: WorkspaceInspectCommand) -> Result<(), CliErro
                 limit: command.limit,
                 offset: command.offset,
             })?;
+            status.finish();
             print_json(&inspected)
         }
         WorkspaceInspectCommand::Entry(command) => {
+            let status = feedback.command("workspace inspect entry");
             let inspected = workspace_inspect_entry(WorkspaceInspectEntryRequest {
                 workspace: Some(command.workspace.to_string()),
                 id: command.id,
             })?;
+            status.finish();
             print_json(&inspected)
         }
         WorkspaceInspectCommand::Batch(command) => {
+            let status = feedback.command("workspace inspect batch");
             let inspected = workspace_inspect_batch(WorkspaceInspectBatchRequest {
                 workspace: Some(command.workspace.to_string()),
                 batch_id: command.batch_id,
             })?;
+            status.finish();
             print_json(&inspected)
         }
         WorkspaceInspectCommand::Diagnostics(command) => {
+            let status = feedback.command("workspace inspect diagnostics");
             let inspected = workspace_inspect_diagnostics(WorkspaceInspectDiagnosticsRequest {
                 workspace: Some(command.workspace.to_string()),
                 file: command.file,
@@ -400,18 +417,24 @@ fn run_workspace_inspect(command: WorkspaceInspectCommand) -> Result<(), CliErro
                 limit: command.limit,
                 offset: command.offset,
             })?;
+            status.finish();
             print_json(&inspected)
         }
     }
 }
 
-fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
+fn run_workspace_batch(
+    command: WorkspaceBatchCommand,
+    feedback: &Feedback,
+) -> Result<(), CliError> {
     match command {
         WorkspaceBatchCommand::Count(command) => {
+            let status = feedback.command("workspace batch count");
             let count = workspace_batch_count(WorkspaceBatchCountRequest {
                 workspace: Some(command.workspace.to_string()),
                 file: command.file,
             })?;
+            status.finish();
             if command.json {
                 print_json(&count)?;
             } else {
@@ -428,14 +451,17 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
             Ok(())
         }
         WorkspaceBatchCommand::Claim(command) => {
+            let status = feedback.command("workspace batch claim");
             let claim = workspace_batch_claim(WorkspaceBatchClaimRequest {
                 workspace: Some(command.workspace.to_string()),
                 file: command.file,
                 limit: command.limit,
             })?;
+            status.finish();
             print_json(&claim)
         }
         WorkspaceBatchCommand::Apply(command) => {
+            let status = feedback.command("workspace batch apply");
             let input = read_input(&command.input)?;
             let patch: WorkspaceBatchApplyPatchInput =
                 serde_json::from_str(&input).map_err(|source| CliError::Json {
@@ -454,13 +480,16 @@ fn run_workspace_batch(command: WorkspaceBatchCommand) -> Result<(), CliError> {
                     })
                     .collect(),
             })?;
+            status.finish();
             print_json(&summary)
         }
         WorkspaceBatchCommand::Release(command) => {
+            let status = feedback.command("workspace batch release");
             let summary = workspace_batch_release(WorkspaceBatchReleaseRequest {
                 workspace: Some(command.workspace.to_string()),
                 batch_id: command.batch_id,
             })?;
+            status.finish();
             print_json(&summary)
         }
     }

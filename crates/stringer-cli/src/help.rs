@@ -12,6 +12,7 @@ pub(crate) const ROOT_AFTER_LONG_HELP: &str = r#"Typical workflow:
 
 Workspace layout: workspace.json, batches/, entries/**/*.jsonl.
 Knowledge layers: user global knowledge, then workspace knowledge/{terms,memory,rules}; workspace ids override global ids. Derived indexes stay per layer.
+Feedback: interactive runs show progress on stderr; use --progress always, --progress never, --quiet, -v for default tracing, or RUST_LOG for explicit trace filters.
 See README.md and skills/stringer-workflows for agent workflows."#;
 
 pub(crate) const SETTINGS_LONG_HELP: &str =
@@ -76,7 +77,9 @@ pub(crate) const ANNOTATE_LONG_ABOUT: &str = r#"Write terminology and memory hin
 
 pub(crate) const ANNOTATE_AFTER_LONG_HELP: &str = r#"Examples:
   stringer knowledge annotate
-  stringer knowledge annotate --workspace ./translations --skip-fill-memory"#;
+  stringer knowledge annotate --workspace ./translations --skip-fill-memory
+
+Progress is shown on stderr for interactive runs; stdout remains a final summary line."#;
 
 pub(crate) const VALIDATE_LONG_ABOUT: &str =
     r#"Recompute workspace diagnostics before review or finalize."#;

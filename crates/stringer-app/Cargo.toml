@@ -15,6 +15,7 @@ stringer-pipeline = { path = "../stringer-pipeline" }
 stringer-workspace-api = { path = "../stringer-workspace-api" }
 stringer-workspace-core = { path = "../stringer-workspace-core" }
 thiserror.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

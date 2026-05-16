@@ -598,6 +598,9 @@ fn root_help_points_to_compact_agent_workflow() {
     assert!(help.contains("workspace batch"));
     assert!(help.contains("adapt import"));
     assert!(help.contains("knowledge annotate"));
+    assert!(help.contains("--progress"));
+    assert!(help.contains("--quiet"));
+    assert!(help.contains("--verbose"));
     assert!(help.contains("entries/**/*.jsonl"));
     assert!(help.contains("skills/stringer-workflows"));
     assert!(!help.contains("Recommended agent workflow"));

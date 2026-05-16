@@ -15,6 +15,7 @@ stringer-pipeline = { path = "../stringer-pipeline" }
 stringer-workspace-core = { path = "../stringer-workspace-core" }
 thiserror.workspace = true
 toml_edit.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
