@@ -537,6 +537,7 @@ fn annotate_record(
         record.translation_meta = Some(TranslationMeta {
             origin: Some("memory".to_string()),
             updated_at_unix_ms: Some(unix_ms()),
+            skip_reason: None,
         });
     }
     Ok(RecordKnowledgeSummary {
@@ -550,6 +551,14 @@ fn validate_record(
     record: &mut TranslationRecord,
     context: &RecordProcessingContext<'_, impl CandidateStore>,
 ) -> Result<RecordKnowledgeSummary, KnowledgeError> {
+    if translation_origin(record) == Some("skipped") {
+        record.diagnostics.clear();
+        return Ok(RecordKnowledgeSummary {
+            annotations: 0,
+            diagnostics: 0,
+            auto_filled: 0,
+        });
+    }
     let mut entry = entry_from_record(record, context.kind, context.asset_path, context.settings)?;
     entry.clear_diagnostics();
     let knowledge = candidate_knowledge_for_entry_from_store(context.store, &entry)?;
@@ -820,16 +829,17 @@ fn should_fill_memory(record: &TranslationRecord, claimed: bool, skip_memory_fil
     if skip_memory_fill || claimed {
         return false;
     }
-    if matches!(
-        record
-            .translation_meta
-            .as_ref()
-            .and_then(|meta| meta.origin.as_deref()),
-        Some("agent" | "manual")
-    ) {
-        return false;
-    }
-    true
+    !matches!(
+        translation_origin(record),
+        Some("agent" | "manual" | "skipped")
+    )
+}
+
+fn translation_origin(record: &TranslationRecord) -> Option<&str> {
+    record
+        .translation_meta
+        .as_ref()
+        .and_then(|meta| meta.origin.as_deref())
 }
 
 #[cfg(test)]

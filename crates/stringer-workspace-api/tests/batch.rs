@@ -97,6 +97,8 @@ async fn batch_count_claim_apply_and_release_manage_claimed_entries() {
         entries: vec![ApplyBatchPatchEntry {
             id: "scaleform:Interface/Translations/MyMod_English.txt:$Title".to_string(),
             translation: Some("熟铁剑".to_string()),
+            skip: false,
+            skip_reason: None,
         }],
     })
     .unwrap();
@@ -300,6 +302,8 @@ async fn batch_apply_rejects_entries_not_claimed_by_batch() {
         entries: vec![ApplyBatchPatchEntry {
             id: unclaimed_id.to_string(),
             translation: Some("钢剑".to_string()),
+            skip: false,
+            skip_reason: None,
         }],
     })
     .unwrap_err();
@@ -347,10 +351,14 @@ async fn batch_apply_rejects_duplicate_ids_and_missing_translation() {
             ApplyBatchPatchEntry {
                 id: id.clone(),
                 translation: Some("铁剑".to_string()),
+                skip: false,
+                skip_reason: None,
             },
             ApplyBatchPatchEntry {
                 id: id.clone(),
                 translation: Some("熟铁剑".to_string()),
+                skip: false,
+                skip_reason: None,
             },
         ],
     })
@@ -363,6 +371,8 @@ async fn batch_apply_rejects_duplicate_ids_and_missing_translation() {
         entries: vec![ApplyBatchPatchEntry {
             id,
             translation: None,
+            skip: false,
+            skip_reason: None,
         }],
     })
     .unwrap_err();

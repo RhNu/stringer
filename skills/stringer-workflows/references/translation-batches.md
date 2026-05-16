@@ -39,7 +39,8 @@ For each entry:
 - Treat suspected terminology as lookup-required. Before choosing a translation for an uncertain name, proper noun, repeated phrase, or domain term, run `knowledge_lookup` and use the returned evidence with the entry context.
 - Do not write a canonical term into the workspace unless it has been verified by lookup evidence and context. Memory hits and prior knowledge are evidence to inspect, not permission to upsert terms by intuition.
 - Keep names consistent across entries in the same asset and record type.
-- Leave `translation` as `null` or omit it only when no safe translation can be produced.
+- Use `skip: true` when an entry does not need translation. Do not repeat `source` as `translation` just to complete the batch.
+- Leave an entry out of the patch only when no safe translation or skip decision can be made.
 - Work from entries returned by `workspace_inspect_batch`. Do not open raw `entries/**/*.jsonl` files to translate.
 
 ## Apply
@@ -54,9 +55,14 @@ Submit one patch for the claimed batch through `workspace_batch_apply`:
     {
       "id": "<ENTRY_ID>",
       "translation": "<TRANSLATION>"
+    },
+    {
+      "id": "<ENTRY_ID>",
+      "skip": true,
+      "skip_reason": "not_translatable"
     }
   ]
 }
 ```
 
-Never apply ids from a different batch. If stopping early, release the batch so remaining entries can be claimed again.
+Skipped entries are removed from the remaining batch and will not be claimed again. Never apply ids from a different batch. If stopping early, release the batch so remaining undecided entries can be claimed again.

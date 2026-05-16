@@ -79,6 +79,12 @@ cargo run -p stringer-cli -- workspace inspect batch `
 {"batch_id":"b1770000000000-1234","entries":[{"id":"plugin:Example.esp:WEAP:0x00001234:FULL:0","translation":"铁剑"}]}
 ```
 
+如果条目经判断不需要翻译，不要把 `source` 原样写成译文；用 `skip` 明确完成该条：
+
+```json
+{"batch_id":"b1770000000000-1234","entries":[{"id":"plugin:Example.esp:WEAP:0x00001235:FULL:0","skip":true,"skip_reason":"not_translatable"}]}
+```
+
 ```powershell
 cargo run -p stringer-cli -- workspace batch apply `
   --workspace path/to/translations `
@@ -127,7 +133,7 @@ translations/
 - `id`：稳定条目 ID，完成工作区时用它定位源文本。
 - `source`：源文本，不建议改。
 - `translation`：译文；缺失时完成工作区会跳过该条。
-- `translation_meta`：译文来源，例如 `memory` 或 `agent`。
+- `translation_meta`：译文来源，例如 `memory`、`agent` 或 `skipped`；`skipped` 表示该条已判定不需要翻译，后续不会再被 batch claim。
 - `context`：记录类型、子记录、Form ID、Scaleform key、PEX 调用位置等上下文。
 - `hints`：`knowledge annotate` 写入的术语和记忆提示。
 - `diagnostics`：`knowledge validate` 写入的校验结果。
@@ -164,7 +170,7 @@ cargo run -p stringer-cli -- workspace inspect diagnostics `
   --severity warning
 ```
 
-`entries --status` 支持 `all`、`empty`、`memory`、`translated`、`claimed` 和 `diagnostic`。`diagnostics --severity` 支持 `all`、`error`、`warning` 和 `info`。`inspect batch` 支持 `--limit` 和 `--offset`，返回当前剩余 batch 的 `total`；如果中途 apply，下一次应从 `--offset 0` 读取剩余条目。Inspect 命令只读，不会创建 claim、释放 batch 或写入译文。
+`entries --status` 支持 `all`、`empty`、`memory`、`translated`、`skipped`、`claimed` 和 `diagnostic`。`diagnostics --severity` 支持 `all`、`error`、`warning` 和 `info`。`inspect batch` 支持 `--limit` 和 `--offset`，返回当前剩余 batch 的 `total`；如果中途 apply，下一次应从 `--offset 0` 读取剩余条目。Inspect 命令只读，不会创建 claim、释放 batch 或写入译文。
 
 ## 配置
 

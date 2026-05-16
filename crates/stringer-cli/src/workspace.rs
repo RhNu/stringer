@@ -143,7 +143,7 @@ pub enum WorkspaceBatchCommand {
     )]
     Claim(WorkspaceBatchClaimCommand),
     #[command(
-        about = "Apply translated entries for a claimed batch",
+        about = "Apply translated or skipped entries for a claimed batch",
         long_about = WORKSPACE_BATCH_APPLY_LONG_ABOUT
     )]
     Apply(WorkspaceBatchApplyCommand),
@@ -229,6 +229,7 @@ pub enum InspectEntryStatusArg {
     Empty,
     Memory,
     Translated,
+    Skipped,
     Claimed,
     Diagnostic,
 }
@@ -445,11 +446,12 @@ fn run_workspace_batch(
                 print_json(&count)?;
             } else {
                 println!(
-                    "counted {} entries: {} empty, {} memory-prefilled, {} translated, {} claimed, {} with diagnostics",
+                    "counted {} entries: {} empty, {} memory-prefilled, {} translated, {} skipped, {} claimed, {} with diagnostics",
                     count.total,
                     count.empty,
                     count.memory_prefilled,
                     count.translated,
+                    count.skipped,
                     count.claimed,
                     count.diagnostics
                 );
@@ -483,6 +485,8 @@ fn run_workspace_batch(
                     .map(|entry| WorkspaceBatchApplyEntry {
                         id: entry.id,
                         translation: entry.translation,
+                        skip: entry.skip,
+                        skip_reason: entry.skip_reason,
                     })
                     .collect(),
             })?;
@@ -512,6 +516,10 @@ struct WorkspaceBatchApplyPatchEntry {
     id: String,
     #[serde(default)]
     translation: Option<String>,
+    #[serde(default)]
+    skip: bool,
+    #[serde(default)]
+    skip_reason: Option<String>,
 }
 
 fn settings_input(
@@ -535,6 +543,7 @@ impl From<InspectEntryStatusArg> for InspectEntryStatusInput {
             InspectEntryStatusArg::Empty => Self::Empty,
             InspectEntryStatusArg::Memory => Self::Memory,
             InspectEntryStatusArg::Translated => Self::Translated,
+            InspectEntryStatusArg::Skipped => Self::Skipped,
             InspectEntryStatusArg::Claimed => Self::Claimed,
             InspectEntryStatusArg::Diagnostic => Self::Diagnostic,
         }
@@ -559,6 +568,7 @@ impl std::fmt::Display for InspectEntryStatusArg {
             Self::Empty => "empty",
             Self::Memory => "memory",
             Self::Translated => "translated",
+            Self::Skipped => "skipped",
             Self::Claimed => "claimed",
             Self::Diagnostic => "diagnostic",
         })

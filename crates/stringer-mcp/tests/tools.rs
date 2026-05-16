@@ -365,6 +365,45 @@ async fn mcp_workspace_batch_claim_inspect_and_apply_use_compact_claims() {
     assert_eq!(applied["applied_entries"], 1);
     assert_eq!(applied["remaining_entries"], 1);
 
+    let remaining = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_inspect_batch").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let skipped_id = remaining["entries"][0]["id"].as_str().unwrap();
+    let skipped = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_apply").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "entries": [{ "id": skipped_id, "skip": true, "skip_reason": "not_translatable" }]
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(skipped["applied_entries"], 1);
+    assert_eq!(skipped["remaining_entries"], 0);
+
+    let count = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_count").with_arguments(args(json!({
+                "workspace": path_string(workspace.path())
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(count["skipped"], 1);
+
     client.cancel().await.unwrap();
     server_handle.await.unwrap();
 }

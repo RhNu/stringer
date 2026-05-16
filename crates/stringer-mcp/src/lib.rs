@@ -82,7 +82,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_apply",
-        description = "Apply translations for a claimed batch.",
+        description = "Apply translations or mark entries skipped for a claimed batch.",
         input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchApplyParams>>(),
         output_schema = compatible_output_schema_for_type::<WorkspaceBatchApplyResult>()
     )]

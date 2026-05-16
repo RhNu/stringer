@@ -28,6 +28,7 @@ pub enum InspectEntryStatus {
     Empty,
     Memory,
     Translated,
+    Skipped,
     Claimed,
     Diagnostic,
 }
@@ -269,8 +270,10 @@ fn entry_matches_status(
             !is_empty_translation(record) && translation_origin(record) == Some("memory")
         }
         InspectEntryStatus::Translated => {
-            !is_empty_translation(record) && translation_origin(record) != Some("memory")
+            !is_empty_translation(record)
+                && !matches!(translation_origin(record), Some("memory" | "skipped"))
         }
+        InspectEntryStatus::Skipped => is_skipped_translation(record),
         InspectEntryStatus::Claimed => claimed_by.is_some(),
         InspectEntryStatus::Diagnostic => !record.diagnostics.is_empty(),
     }
@@ -295,10 +298,17 @@ fn diagnostic_matches_severity(
 }
 
 fn is_empty_translation(record: &TranslationRecord) -> bool {
+    if is_skipped_translation(record) {
+        return false;
+    }
     record
         .translation
         .as_deref()
         .is_none_or(|translation| translation.is_empty())
+}
+
+fn is_skipped_translation(record: &TranslationRecord) -> bool {
+    translation_origin(record) == Some("skipped")
 }
 
 fn translation_origin(record: &TranslationRecord) -> Option<&str> {

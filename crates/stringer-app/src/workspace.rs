@@ -103,6 +103,8 @@ pub fn workspace_batch_apply(
             .map(|entry| ApplyBatchPatchEntry {
                 id: entry.id,
                 translation: entry.translation,
+                skip: entry.skip,
+                skip_reason: entry.skip_reason,
             })
             .collect(),
     })?;
@@ -206,6 +208,7 @@ fn batch_count_response(count: BatchCount) -> WorkspaceBatchCountResponse {
         empty: count.empty,
         memory_prefilled: count.memory_prefilled,
         translated: count.translated,
+        skipped: count.skipped,
         claimed: count.claimed,
         diagnostics: count.diagnostics,
     }
@@ -308,6 +311,7 @@ impl From<InspectEntryStatusInput> for InspectEntryStatus {
             InspectEntryStatusInput::Empty => Self::Empty,
             InspectEntryStatusInput::Memory => Self::Memory,
             InspectEntryStatusInput::Translated => Self::Translated,
+            InspectEntryStatusInput::Skipped => Self::Skipped,
             InspectEntryStatusInput::Claimed => Self::Claimed,
             InspectEntryStatusInput::Diagnostic => Self::Diagnostic,
         }

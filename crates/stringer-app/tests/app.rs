@@ -72,11 +72,91 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
         entries: vec![WorkspaceBatchApplyEntry {
             id: entry_id,
             translation: Some("熟铁剑".to_string()),
+            skip: false,
+            skip_reason: None,
         }],
     })
     .unwrap();
     assert_eq!(summary.applied_entries, 1);
     assert_eq!(summary.remaining_entries, 0);
+}
+
+#[tokio::test]
+async fn app_workspace_batch_apply_can_mark_entry_skipped() {
+    let root = TempRoot::new("workspace-skip-root");
+    let workspace = TempRoot::new("workspace-skip-output");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n");
+
+    test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: settings(),
+        })
+        .await
+        .unwrap();
+
+    let claim = workspace_batch_claim(WorkspaceBatchClaimRequest {
+        workspace: Some(path_string(workspace.path())),
+        file: None,
+        limit: 1,
+    })
+    .unwrap();
+    let batch_id = claim.batch_id.expect("batch id");
+    let page = workspace_inspect_batch(WorkspaceInspectBatchRequest {
+        workspace: Some(path_string(workspace.path())),
+        batch_id: batch_id.clone(),
+        offset: 0,
+        limit: 10,
+    })
+    .unwrap();
+    let entry_id = page.entries[0].id.clone();
+
+    let request: WorkspaceBatchApplyRequest = serde_json::from_value(serde_json::json!({
+        "workspace": path_string(workspace.path()),
+        "batch_id": batch_id,
+        "entries": [
+            { "id": entry_id, "skip": true, "skip_reason": "not_translatable" }
+        ]
+    }))
+    .unwrap();
+    let summary = workspace_batch_apply(request).unwrap();
+    assert_eq!(summary.applied_entries, 1);
+    assert_eq!(summary.remaining_entries, 0);
+
+    let count = workspace_batch_count(WorkspaceBatchCountRequest {
+        workspace: Some(path_string(workspace.path())),
+        file: None,
+    })
+    .unwrap();
+    assert_eq!(count.empty, 0);
+    assert_eq!(count.skipped, 1);
+
+    let skipped = workspace_inspect_entries(WorkspaceInspectEntriesRequest {
+        workspace: Some(path_string(workspace.path())),
+        file: None,
+        status: InspectEntryStatusInput::Skipped,
+        limit: 10,
+        offset: 0,
+    })
+    .unwrap();
+    assert_eq!(skipped.total, 1);
+    assert!(skipped.entries[0].translation.is_none());
+    assert_eq!(
+        skipped.entries[0].translation_meta.as_ref().unwrap()["origin"],
+        "skipped"
+    );
+    assert_eq!(
+        skipped.entries[0].translation_meta.as_ref().unwrap()["skip_reason"],
+        "not_translatable"
+    );
 }
 
 #[tokio::test]

@@ -93,7 +93,7 @@ pub enum WorkspaceError {
     #[error("duplicate batch patch id `{id}`")]
     DuplicateBatchPatchId { id: String },
 
-    #[error("batch patch entry `{id}` is missing translation")]
+    #[error("batch patch entry `{id}` is missing translation or skip=true")]
     MissingBatchPatchTranslation { id: String },
 
     #[error(

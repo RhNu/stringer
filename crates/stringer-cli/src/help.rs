@@ -43,12 +43,12 @@ pub(crate) const WORKSPACE_BATCH_LONG_ABOUT: &str =
     r#"Count, claim, apply, and release translation batches for agent work."#;
 
 pub(crate) const WORKSPACE_BATCH_COUNT_LONG_ABOUT: &str =
-    r#"Count total, empty, memory-prefilled, translated, claimed, and diagnostic rows."#;
+    r#"Count total, empty, memory-prefilled, translated, skipped, claimed, and diagnostic rows."#;
 
 pub(crate) const WORKSPACE_BATCH_CLAIM_LONG_ABOUT: &str = r#"Claim eligible untranslated or memory-prefilled rows and print a compact batch summary. Read claimed entries with workspace inspect batch."#;
 
 pub(crate) const WORKSPACE_BATCH_APPLY_LONG_ABOUT: &str =
-    r#"Apply translations for ids owned by a claimed batch."#;
+    r#"Apply translations or mark skipped ids owned by a claimed batch."#;
 
 pub(crate) const WORKSPACE_BATCH_RELEASE_LONG_ABOUT: &str =
     r#"Release a claimed batch so its remaining entries can be claimed again."#;

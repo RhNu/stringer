@@ -29,6 +29,7 @@ pub struct BatchCount {
     pub empty: usize,
     pub memory_prefilled: usize,
     pub translated: usize,
+    pub skipped: usize,
     pub claimed: usize,
     pub diagnostics: usize,
 }
@@ -57,6 +58,10 @@ pub struct ApplyBatchPatchInput {
 pub struct ApplyBatchPatchEntry {
     pub id: String,
     pub translation: Option<String>,
+    #[serde(default)]
+    pub skip: bool,
+    #[serde(default)]
+    pub skip_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -95,7 +100,9 @@ pub fn count_batch(options: CountBatchOptions) -> Result<BatchCount, WorkspaceOp
     }) {
         for record in &file_records.records {
             count.total += 1;
-            if is_empty_translation(record) {
+            if is_skipped_translation(record) {
+                count.skipped += 1;
+            } else if is_empty_translation(record) {
                 count.empty += 1;
             } else if translation_origin(record) == Some("memory") {
                 count.memory_prefilled += 1;
@@ -175,7 +182,7 @@ pub fn apply_batch_patch(
                 id: entry.id.clone(),
             });
         }
-        if entry.translation.is_none() {
+        if entry.translation.is_none() && !entry.skip {
             return Err(WorkspaceOpsError::MissingBatchPatchTranslation {
                 id: entry.id.clone(),
             });
@@ -201,11 +208,21 @@ pub fn apply_batch_patch(
                 id: entry.id.clone(),
             });
         };
-        record.translation = entry.translation.clone();
-        record.translation_meta = Some(TranslationMeta {
-            origin: Some("agent".to_string()),
-            updated_at_unix_ms: Some(unix_ms()),
-        });
+        if entry.skip {
+            record.translation = None;
+            record.translation_meta = Some(TranslationMeta {
+                origin: Some("skipped".to_string()),
+                updated_at_unix_ms: Some(unix_ms()),
+                skip_reason: entry.skip_reason.clone(),
+            });
+        } else {
+            record.translation = entry.translation.clone();
+            record.translation_meta = Some(TranslationMeta {
+                origin: Some("agent".to_string()),
+                updated_at_unix_ms: Some(unix_ms()),
+                skip_reason: None,
+            });
+        }
     }
     let applied = options.entries.len();
     let applied_ids = options
@@ -264,17 +281,27 @@ fn validate_file_filter(
 }
 
 fn is_claim_eligible(record: &TranslationRecord) -> bool {
-    if matches!(translation_origin(record), Some("agent" | "manual")) {
+    if matches!(
+        translation_origin(record),
+        Some("agent" | "manual" | "skipped")
+    ) {
         return false;
     }
     is_empty_translation(record) || translation_origin(record) == Some("memory")
 }
 
 fn is_empty_translation(record: &TranslationRecord) -> bool {
+    if is_skipped_translation(record) {
+        return false;
+    }
     record
         .translation
         .as_deref()
         .is_none_or(|translation| translation.is_empty())
+}
+
+fn is_skipped_translation(record: &TranslationRecord) -> bool {
+    translation_origin(record) == Some("skipped")
 }
 
 fn translation_origin(record: &TranslationRecord) -> Option<&str> {

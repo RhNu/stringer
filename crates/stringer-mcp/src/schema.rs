@@ -66,6 +66,7 @@ pub struct WorkspaceBatchCountResult {
     pub empty: usize,
     pub memory_prefilled: usize,
     pub translated: usize,
+    pub skipped: usize,
     pub claimed: usize,
     pub diagnostics: usize,
 }
@@ -108,6 +109,10 @@ pub struct WorkspaceBatchApplyEntry {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translation: Option<String>,
+    #[serde(default)]
+    pub skip: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -158,6 +163,7 @@ pub enum InspectEntryStatusParam {
     Empty,
     Memory,
     Translated,
+    Skipped,
     Claimed,
     Diagnostic,
 }
