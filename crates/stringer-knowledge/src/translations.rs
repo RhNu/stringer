@@ -1,6 +1,7 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use camino::Utf8PathBuf;
+use rayon::prelude::*;
 use stringer_pipeline::{
     BasicValidationProcessor, KnowledgeBase, Pipeline, PipelineDiagnostic,
     PipelineDiagnosticSeverity, PipelineEntry, PipelineEntryKind, PipelineOptions, PipelineStage,
@@ -8,13 +9,18 @@ use stringer_pipeline::{
 };
 
 use crate::KnowledgeError;
+use crate::candidates::{CandidateStore, InMemoryCandidateStore};
 use crate::index::{index_is_current, rebuild_knowledge_index};
 use crate::layers::{KnowledgeLayerSelection, collect_knowledge_resources};
 use crate::lookup::{
     KnowledgeLookup, KnowledgeSearchOptions, LookupKnowledgeField, LookupKnowledgeMode,
     LookupKnowledgeSource, search_knowledge_indexes,
 };
-use crate::session::{LayeredKnowledgeSession, load_knowledge_from_files};
+use crate::session::{
+    LayeredKnowledgeSession,
+    candidate_knowledge_for_entry as candidate_knowledge_for_entry_from_store,
+    load_knowledge_from_files,
+};
 use stringer_workspace_core::claimed_entry_ids;
 use stringer_workspace_core::{
     GlobalConfigSource, WorkspaceSettings, game_release_name, global_knowledge_root_from_source,
@@ -33,6 +39,7 @@ const BUILTIN_PROCESSORS: &[&str] = &[
     "stringer.validation",
     "stringer.replacement",
 ];
+const PARALLEL_RECORD_CHUNK_SIZE: usize = 256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnnotateTranslationsOptions {
@@ -209,6 +216,30 @@ pub struct KnowledgeSummary {
     pub index_used: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct RecordKnowledgeSummary {
+    annotations: usize,
+    diagnostics: usize,
+    auto_filled: usize,
+}
+
+struct RecordProcessingContext<'a, S: CandidateStore> {
+    kind: &'a str,
+    asset_path: &'a str,
+    settings: &'a WorkspaceSettings,
+    store: &'a S,
+    pipeline: &'a Pipeline,
+}
+
+impl KnowledgeSummary {
+    fn add_record(&mut self, record: RecordKnowledgeSummary) {
+        self.entries += 1;
+        self.annotations += record.annotations;
+        self.diagnostics += record.diagnostics;
+        self.auto_filled += record.auto_filled;
+    }
+}
+
 pub fn annotate_translations(
     options: AnnotateTranslationsOptions,
 ) -> Result<KnowledgeSummary, KnowledgeError> {
@@ -230,6 +261,7 @@ where
         &options.global_config_source,
     )?;
     let session = LayeredKnowledgeSession::open(&options.workspace, &settings)?;
+    let candidate_store = session.open_candidate_store()?;
     let pipeline = default_pipeline();
     let mut summary = KnowledgeSummary {
         knowledge_diagnostics: session.diagnostics().to_vec(),
@@ -249,62 +281,37 @@ where
         "annotating workspace entries",
     ));
 
-    for file in &mut package.files {
-        for record in &mut file.records {
-            let mut entry = entry_from_record(
-                record,
-                &file.manifest_file.kind,
-                &file.manifest_file.asset_path,
-                &package.settings,
-            )?;
-            entry.clear_annotations_from_processors(BUILTIN_PROCESSORS);
-            let knowledge = session.candidate_knowledge_for_entry(&entry)?;
-            let annotate_report = pipeline.run_stage(
-                PipelineStage::Annotate,
-                std::slice::from_mut(&mut entry),
-                &knowledge,
-                &PipelineOptions::default(),
-            );
-            let memory_options = PipelineOptions {
-                allow_memory_auto_fill: should_fill_memory(
-                    record,
-                    claimed.contains(&record.id),
-                    options.skip_memory_fill,
-                ),
-                ..PipelineOptions::default()
-            };
-            let memory_report = pipeline.run_stage(
-                PipelineStage::MemoryApply,
-                std::slice::from_mut(&mut entry),
-                &knowledge,
-                &memory_options,
-            );
-            let diagnostics = entry.diagnostics().len();
-            write_entry_result(record, entry);
-            if memory_report.auto_filled > 0 {
-                record.translation_meta = Some(TranslationMeta {
-                    origin: Some("memory".to_string()),
-                    updated_at_unix_ms: Some(unix_ms()),
-                });
+    if let Some(store) = candidate_store.in_memory_store() {
+        annotate_package_parallel(
+            &mut package,
+            store,
+            &claimed,
+            options.skip_memory_fill,
+            total,
+            &mut summary,
+            &mut progress,
+        )?;
+    } else {
+        for file in &mut package.files {
+            for record in &mut file.records {
+                let context = RecordProcessingContext {
+                    kind: &file.manifest_file.kind,
+                    asset_path: &file.manifest_file.asset_path,
+                    settings: &package.settings,
+                    store: &candidate_store,
+                    pipeline: &pipeline,
+                };
+                let record_summary =
+                    annotate_record(record, &context, &claimed, options.skip_memory_fill)?;
+                summary.add_record(record_summary);
+                debug_annotate_progress(&summary, total);
+                progress(KnowledgeProgressEvent::advanced(
+                    KnowledgeOperation::Annotate,
+                    summary.entries,
+                    Some(total),
+                    file.manifest_file.path.clone(),
+                ));
             }
-            summary.entries += 1;
-            summary.annotations += annotate_report.annotations + memory_report.annotations;
-            summary.diagnostics += diagnostics;
-            summary.auto_filled += memory_report.auto_filled;
-            debug!(
-                processed = summary.entries,
-                total,
-                annotations = summary.annotations,
-                diagnostics = summary.diagnostics,
-                auto_filled = summary.auto_filled,
-                "annotated workspace entry"
-            );
-            progress(KnowledgeProgressEvent::advanced(
-                KnowledgeOperation::Annotate,
-                summary.entries,
-                Some(total),
-                file.manifest_file.path.clone(),
-            ));
         }
     }
 
@@ -346,6 +353,7 @@ where
         &options.global_config_source,
     )?;
     let session = LayeredKnowledgeSession::open(&options.workspace, &settings)?;
+    let candidate_store = session.open_candidate_store()?;
     let pipeline = default_pipeline();
     let mut summary = KnowledgeSummary {
         knowledge_diagnostics: session.diagnostics().to_vec(),
@@ -365,39 +373,28 @@ where
         "validating workspace entries",
     ));
 
-    for file in &mut package.files {
-        for record in &mut file.records {
-            let mut entry = entry_from_record(
-                record,
-                &file.manifest_file.kind,
-                &file.manifest_file.asset_path,
-                &package.settings,
-            )?;
-            entry.clear_diagnostics();
-            let knowledge = session.candidate_knowledge_for_entry(&entry)?;
-            let report = pipeline.run_stage(
-                PipelineStage::Validate,
-                std::slice::from_mut(&mut entry),
-                &knowledge,
-                &PipelineOptions::default(),
-            );
-            let diagnostics = entry.diagnostics().len();
-            write_entry_result(record, entry);
-            summary.entries += 1;
-            summary.annotations += report.annotations;
-            summary.diagnostics += diagnostics;
-            debug!(
-                processed = summary.entries,
-                total,
-                diagnostics = summary.diagnostics,
-                "validated workspace entry"
-            );
-            progress(KnowledgeProgressEvent::advanced(
-                KnowledgeOperation::Validate,
-                summary.entries,
-                Some(total),
-                file.manifest_file.path.clone(),
-            ));
+    if let Some(store) = candidate_store.in_memory_store() {
+        validate_package_parallel(&mut package, store, total, &mut summary, &mut progress)?;
+    } else {
+        for file in &mut package.files {
+            for record in &mut file.records {
+                let context = RecordProcessingContext {
+                    kind: &file.manifest_file.kind,
+                    asset_path: &file.manifest_file.asset_path,
+                    settings: &package.settings,
+                    store: &candidate_store,
+                    pipeline: &pipeline,
+                };
+                let record_summary = validate_record(record, &context)?;
+                summary.add_record(record_summary);
+                debug_validate_progress(&summary, total);
+                progress(KnowledgeProgressEvent::advanced(
+                    KnowledgeOperation::Validate,
+                    summary.entries,
+                    Some(total),
+                    file.manifest_file.path.clone(),
+                ));
+            }
         }
     }
 
@@ -415,6 +412,180 @@ where
         "finished knowledge validation"
     );
     Ok(summary)
+}
+
+fn annotate_package_parallel<F>(
+    package: &mut stringer_workspace_core::TranslationPackageRecords,
+    store: &InMemoryCandidateStore,
+    claimed: &BTreeSet<String>,
+    skip_memory_fill: bool,
+    total: usize,
+    summary: &mut KnowledgeSummary,
+    progress: &mut F,
+) -> Result<(), KnowledgeError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
+    let settings = package.settings.clone();
+    for file in &mut package.files {
+        let pipeline = default_pipeline();
+        let kind = file.manifest_file.kind.clone();
+        let asset_path = file.manifest_file.asset_path.clone();
+        let file_path = file.manifest_file.path.clone();
+        let context = RecordProcessingContext {
+            kind: &kind,
+            asset_path: &asset_path,
+            settings: &settings,
+            store,
+            pipeline: &pipeline,
+        };
+        for chunk in file.records.chunks_mut(PARALLEL_RECORD_CHUNK_SIZE) {
+            let results = chunk
+                .par_iter_mut()
+                .map(|record| annotate_record(record, &context, claimed, skip_memory_fill))
+                .collect::<Result<Vec<_>, _>>()?;
+            for record_summary in results {
+                summary.add_record(record_summary);
+                debug_annotate_progress(summary, total);
+                progress(KnowledgeProgressEvent::advanced(
+                    KnowledgeOperation::Annotate,
+                    summary.entries,
+                    Some(total),
+                    file_path.clone(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_package_parallel<F>(
+    package: &mut stringer_workspace_core::TranslationPackageRecords,
+    store: &InMemoryCandidateStore,
+    total: usize,
+    summary: &mut KnowledgeSummary,
+    progress: &mut F,
+) -> Result<(), KnowledgeError>
+where
+    F: FnMut(KnowledgeProgressEvent),
+{
+    let settings = package.settings.clone();
+    for file in &mut package.files {
+        let pipeline = default_pipeline();
+        let kind = file.manifest_file.kind.clone();
+        let asset_path = file.manifest_file.asset_path.clone();
+        let file_path = file.manifest_file.path.clone();
+        let context = RecordProcessingContext {
+            kind: &kind,
+            asset_path: &asset_path,
+            settings: &settings,
+            store,
+            pipeline: &pipeline,
+        };
+        for chunk in file.records.chunks_mut(PARALLEL_RECORD_CHUNK_SIZE) {
+            let results = chunk
+                .par_iter_mut()
+                .map(|record| validate_record(record, &context))
+                .collect::<Result<Vec<_>, _>>()?;
+            for record_summary in results {
+                summary.add_record(record_summary);
+                debug_validate_progress(summary, total);
+                progress(KnowledgeProgressEvent::advanced(
+                    KnowledgeOperation::Validate,
+                    summary.entries,
+                    Some(total),
+                    file_path.clone(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn annotate_record(
+    record: &mut TranslationRecord,
+    context: &RecordProcessingContext<'_, impl CandidateStore>,
+    claimed: &BTreeSet<String>,
+    skip_memory_fill: bool,
+) -> Result<RecordKnowledgeSummary, KnowledgeError> {
+    let mut entry = entry_from_record(record, context.kind, context.asset_path, context.settings)?;
+    entry.clear_annotations_from_processors(BUILTIN_PROCESSORS);
+    let knowledge = candidate_knowledge_for_entry_from_store(context.store, &entry)?;
+    let annotate_report = context.pipeline.run_stage(
+        PipelineStage::Annotate,
+        std::slice::from_mut(&mut entry),
+        &knowledge,
+        &PipelineOptions::default(),
+    );
+    let memory_options = PipelineOptions {
+        allow_memory_auto_fill: should_fill_memory(
+            record,
+            claimed.contains(&record.id),
+            skip_memory_fill,
+        ),
+        ..PipelineOptions::default()
+    };
+    let memory_report = context.pipeline.run_stage(
+        PipelineStage::MemoryApply,
+        std::slice::from_mut(&mut entry),
+        &knowledge,
+        &memory_options,
+    );
+    let diagnostics = entry.diagnostics().len();
+    write_entry_result(record, entry);
+    if memory_report.auto_filled > 0 {
+        record.translation_meta = Some(TranslationMeta {
+            origin: Some("memory".to_string()),
+            updated_at_unix_ms: Some(unix_ms()),
+        });
+    }
+    Ok(RecordKnowledgeSummary {
+        annotations: annotate_report.annotations + memory_report.annotations,
+        diagnostics,
+        auto_filled: memory_report.auto_filled,
+    })
+}
+
+fn validate_record(
+    record: &mut TranslationRecord,
+    context: &RecordProcessingContext<'_, impl CandidateStore>,
+) -> Result<RecordKnowledgeSummary, KnowledgeError> {
+    let mut entry = entry_from_record(record, context.kind, context.asset_path, context.settings)?;
+    entry.clear_diagnostics();
+    let knowledge = candidate_knowledge_for_entry_from_store(context.store, &entry)?;
+    let report = context.pipeline.run_stage(
+        PipelineStage::Validate,
+        std::slice::from_mut(&mut entry),
+        &knowledge,
+        &PipelineOptions::default(),
+    );
+    let diagnostics = entry.diagnostics().len();
+    write_entry_result(record, entry);
+    Ok(RecordKnowledgeSummary {
+        annotations: report.annotations,
+        diagnostics,
+        auto_filled: report.auto_filled,
+    })
+}
+
+fn debug_annotate_progress(summary: &KnowledgeSummary, total: usize) {
+    debug!(
+        processed = summary.entries,
+        total,
+        annotations = summary.annotations,
+        diagnostics = summary.diagnostics,
+        auto_filled = summary.auto_filled,
+        "annotated workspace entry"
+    );
+}
+
+fn debug_validate_progress(summary: &KnowledgeSummary, total: usize) {
+    debug!(
+        processed = summary.entries,
+        total,
+        diagnostics = summary.diagnostics,
+        "validated workspace entry"
+    );
 }
 
 pub fn lookup_knowledge(
@@ -662,44 +833,5 @@ fn should_fill_memory(record: &TranslationRecord, claimed: bool, skip_memory_fil
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use stringer_core::Language;
-    use stringer_plugin::GameRelease;
-
-    #[test]
-    fn workspace_scope_build_settings_do_not_resolve_global_defaults() {
-        let settings = settings_for_build_scope_with(
-            test_settings(),
-            KnowledgeIndexBuildScope::Workspace,
-            || panic!("workspace scoped index rebuild should not read global defaults"),
-        )
-        .unwrap();
-
-        assert_eq!(settings.global_knowledge_root, None);
-    }
-
-    #[test]
-    fn all_scope_build_settings_resolve_global_defaults() {
-        let settings =
-            settings_for_build_scope_with(test_settings(), KnowledgeIndexBuildScope::All, || {
-                Ok(Some(Utf8PathBuf::from("global-knowledge")))
-            })
-            .unwrap();
-
-        assert_eq!(
-            settings.global_knowledge_root,
-            Some(Utf8PathBuf::from("global-knowledge"))
-        );
-    }
-
-    fn test_settings() -> WorkspaceSettings {
-        WorkspaceSettings {
-            game_release: GameRelease::SkyrimSe,
-            asset_language: Language::English,
-            source_locale: "en".to_string(),
-            target_locale: "zh-Hans".to_string(),
-            global_knowledge_root: None,
-        }
-    }
-}
+#[path = "translations_tests.rs"]
+mod tests;

@@ -40,6 +40,9 @@ pub enum KnowledgeError {
         source: rusqlite::Error,
     },
 
+    #[error("failed to build in-memory candidate index: {message}")]
+    CandidateIndex { message: String },
+
     #[error(transparent)]
     Pipeline(Box<stringer_pipeline::PipelineError>),
 }

@@ -11,7 +11,7 @@ use crate::model::{
     PipelineOptions, PipelineReport, PipelineStage, annotation_payload,
 };
 
-pub trait PipelineProcessor {
+pub trait PipelineProcessor: Send + Sync {
     fn name(&self) -> &'static str;
 
     fn supports_entry(&self, _entry: &PipelineEntry) -> bool {

@@ -10,21 +10,30 @@ use stringer_pipeline::{
 use stringer_workspace_core::{WorkspaceCoreError, WorkspaceSettings};
 
 use crate::KnowledgeError;
+use crate::candidates::{
+    CandidateStore, DEFAULT_IN_MEMORY_CANDIDATE_BUDGET_BYTES, InMemoryCandidateStore,
+    SqliteCandidateStore, estimate_candidate_bytes,
+};
 use crate::index::{
-    EntryKnowledgeQuery, IndexedEntryKnowledge, IndexedKnowledgeId, KnowledgeFileKind,
-    KnowledgeSourceFile, ensure_knowledge_index, normalize_lookup_text, normalize_loose_text,
-    read_entry_candidate_knowledge, read_index_diagnostics, read_index_knowledge_ids,
-    read_matching_index_knowledge_ids,
+    EntryCandidateIndexReader, EntryKnowledgeQuery, IndexedEntryKnowledge, IndexedKnowledgeId,
+    KnowledgeFileKind, KnowledgeSourceFile, ensure_knowledge_index, read_index_diagnostics,
+    read_index_knowledge_ids, read_matching_index_knowledge_ids,
 };
 use crate::layers::{
     GLOBAL_LAYER, KnowledgeLayerSelection, WORKSPACE_LAYER, collect_knowledge_resources,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct LayeredKnowledgeSession {
     indexes: Vec<KnowledgeIndexHandle>,
     suppressed_items: BTreeSet<IndexedKnowledgeId>,
     diagnostics: Vec<PipelineDiagnostic>,
+}
+
+#[derive(Debug)]
+enum CandidateSource {
+    InMemory(Box<InMemoryCandidateStore>),
+    Sqlite(SqliteCandidateStore),
 }
 
 impl LayeredKnowledgeSession {
@@ -73,21 +82,60 @@ impl LayeredKnowledgeSession {
         !self.indexes.is_empty()
     }
 
-    pub(crate) fn candidate_knowledge_for_entry(
-        &self,
-        entry: &PipelineEntry,
-    ) -> Result<KnowledgeBase, KnowledgeError> {
-        let query = EntryKnowledgeQuery {
-            source: entry.source_text().to_string(),
-            source_norm: normalize_lookup_text(entry.source_text()),
-            source_loose: normalize_loose_text(entry.source_text()),
-            source_locale: entry.source_locale().to_string(),
-            target_locale: entry.target_locale().to_string(),
+    pub(crate) fn open_candidate_store(&self) -> Result<LayeredCandidateStore, KnowledgeError> {
+        let index_paths = self.index_paths();
+        let readers = open_candidate_readers(&index_paths)?;
+        let estimated_bytes = estimate_candidate_bytes(&readers)?;
+        let source = if estimated_bytes <= DEFAULT_IN_MEMORY_CANDIDATE_BUDGET_BYTES {
+            match InMemoryCandidateStore::from_index_readers(&readers, &self.suppressed_items) {
+                Ok(store) => CandidateSource::InMemory(Box::new(store)),
+                Err(KnowledgeError::CandidateIndex { .. }) => CandidateSource::Sqlite(
+                    SqliteCandidateStore::open(&index_paths, &self.suppressed_items)?,
+                ),
+                Err(error) => return Err(error),
+            }
+        } else {
+            CandidateSource::Sqlite(SqliteCandidateStore::open(
+                &index_paths,
+                &self.suppressed_items,
+            )?)
         };
-        let candidates =
-            read_entry_candidate_knowledge(&self.index_paths(), &query, self.suppressed_items())?;
-        knowledge_from_index_candidates(candidates)
+        Ok(LayeredCandidateStore { source })
     }
+}
+
+#[derive(Debug)]
+pub(crate) struct LayeredCandidateStore {
+    source: CandidateSource,
+}
+
+impl LayeredCandidateStore {
+    pub(crate) fn in_memory_store(&self) -> Option<&InMemoryCandidateStore> {
+        match &self.source {
+            CandidateSource::InMemory(store) => Some(store.as_ref()),
+            CandidateSource::Sqlite(_) => None,
+        }
+    }
+}
+
+impl CandidateStore for LayeredCandidateStore {
+    fn candidates_for_query(
+        &self,
+        query: &EntryKnowledgeQuery,
+    ) -> Result<IndexedEntryKnowledge, KnowledgeError> {
+        match &self.source {
+            CandidateSource::InMemory(store) => store.candidates_for_query(query),
+            CandidateSource::Sqlite(store) => store.candidates_for_query(query),
+        }
+    }
+}
+
+pub(crate) fn candidate_knowledge_for_entry(
+    store: &impl CandidateStore,
+    entry: &PipelineEntry,
+) -> Result<KnowledgeBase, KnowledgeError> {
+    let query = EntryKnowledgeQuery::from_entry(entry);
+    knowledge_from_index_candidates(store.candidates_for_query(&query)?)
 }
 
 pub(crate) fn load_knowledge_from_files(
@@ -151,6 +199,15 @@ fn knowledge_from_index_candidates(
         }));
     }
     KnowledgeBase::from_layers(vec![global, workspace]).map_err(KnowledgeError::from)
+}
+
+fn open_candidate_readers(
+    paths: &[Utf8PathBuf],
+) -> Result<Vec<EntryCandidateIndexReader>, KnowledgeError> {
+    paths
+        .iter()
+        .map(|path| EntryCandidateIndexReader::open(path))
+        .collect()
 }
 
 fn layer_mut<'a>(

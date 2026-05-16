@@ -14,10 +14,11 @@ use stringer_workspace_core::{WorkspaceCoreError, WorkspaceSettings, game_releas
 mod entry;
 
 pub(crate) use entry::{
-    EntryKnowledgeQuery, IndexedEntryKnowledge, read_entry_candidate_knowledge,
+    EntryCandidateIndexReader, EntryKnowledgeQuery, IndexedEntryKnowledge, IndexedMemoryCandidate,
+    IndexedTermCandidate,
 };
 
-pub(crate) const KNOWLEDGE_INDEX_SCHEMA_VERSION: &str = "4";
+pub(crate) const KNOWLEDGE_INDEX_SCHEMA_VERSION: &str = "5";
 const INDEX_COMPLETE_KEY: &str = "index_complete";
 const KNOWLEDGE_ID_MATCH_CHUNK: usize = 250;
 
@@ -156,6 +157,7 @@ fn build_replacement_index(
     populate_fts(&transaction, path)?;
     write_knowledge_ids(&transaction, path, knowledge)?;
     write_diagnostics(&transaction, path, knowledge)?;
+    create_indexes(&transaction, path)?;
     write_meta(&transaction, settings, path)?;
     let fts_rows = fts_row_count(&transaction, path)?;
     transaction
@@ -387,16 +389,8 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Knowled
                 source_len INTEGER NOT NULL,
                 file_id INTEGER NOT NULL
             );
-            CREATE TABLE aliases(
-                item_rowid INTEGER NOT NULL,
-                alias TEXT NOT NULL,
-                alias_norm TEXT NOT NULL
-            );
-            CREATE TABLE item_scope(
-                item_rowid INTEGER NOT NULL,
-                key TEXT NOT NULL,
-                value TEXT NOT NULL
-            );
+            CREATE TABLE aliases(item_rowid INTEGER NOT NULL, alias TEXT NOT NULL, alias_norm TEXT NOT NULL);
+            CREATE TABLE item_scope(item_rowid INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL);
             CREATE TABLE diagnostics(
                 severity TEXT NOT NULL,
                 code TEXT NOT NULL,
@@ -410,13 +404,6 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Knowled
                 id TEXT NOT NULL,
                 layer TEXT NOT NULL
             );
-            CREATE INDEX idx_items_kind_locale ON items(item_kind, source_locale, target_locale);
-            CREATE INDEX idx_items_source_norm ON items(source_norm);
-            CREATE INDEX idx_items_source_loose ON items(source_loose);
-            CREATE INDEX idx_items_target_norm ON items(target_norm);
-            CREATE INDEX idx_aliases_alias_norm ON aliases(alias_norm);
-            CREATE INDEX idx_scope_item_key ON item_scope(item_rowid, key);
-            CREATE INDEX idx_knowledge_ids_kind_id ON knowledge_ids(kind, id);
             CREATE VIRTUAL TABLE items_fts USING fts5(
                 source_norm,
                 target_norm,
@@ -425,6 +412,28 @@ fn create_schema(connection: &Connection, path: &Utf8Path) -> Result<(), Knowled
                 content_rowid='rowid',
                 tokenize='trigram'
             );
+            ",
+        )
+        .map_err(|source| KnowledgeError::Sqlite {
+            path: path.to_owned(),
+            source,
+        })
+}
+
+fn create_indexes(connection: &Connection, path: &Utf8Path) -> Result<(), KnowledgeError> {
+    connection
+        .execute_batch(
+            "
+            CREATE INDEX idx_items_kind_locale ON items(item_kind, source_locale, target_locale);
+            CREATE INDEX idx_items_source_norm ON items(source_norm);
+            CREATE INDEX idx_items_source_loose ON items(source_loose);
+            CREATE INDEX idx_items_target_norm ON items(target_norm);
+            CREATE INDEX idx_items_memory_source_exact ON items(item_kind, source_locale, target_locale, source);
+            CREATE INDEX idx_items_memory_source_norm ON items(item_kind, source_locale, target_locale, source_norm);
+            CREATE INDEX idx_items_memory_source_loose ON items(item_kind, source_locale, target_locale, source_loose);
+            CREATE INDEX idx_aliases_alias_norm ON aliases(alias_norm);
+            CREATE INDEX idx_scope_item_key ON item_scope(item_rowid, key);
+            CREATE INDEX idx_knowledge_ids_kind_id ON knowledge_ids(kind, id);
             ",
         )
         .map_err(|source| KnowledgeError::Sqlite {

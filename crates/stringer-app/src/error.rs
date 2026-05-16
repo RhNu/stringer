@@ -160,6 +160,7 @@ fn knowledge_error_code(error: &KnowledgeError) -> &'static str {
         KnowledgeError::InvalidKnowledgeTermFile { .. } => "workspace.invalid_knowledge_term_file",
         KnowledgeError::InvalidLookupRegex { .. } => "workspace.invalid_lookup_regex",
         KnowledgeError::Sqlite { .. } => "workspace.sqlite",
+        KnowledgeError::CandidateIndex { .. } => "workspace.candidate_index",
         KnowledgeError::Pipeline(_) => "workspace.pipeline",
     }
 }
@@ -181,6 +182,7 @@ fn knowledge_error_details(error: &KnowledgeError) -> Value {
             json!({ "id": id, "key": key })
         }
         KnowledgeError::InvalidLookupRegex { pattern, .. } => json!({ "pattern": pattern }),
+        KnowledgeError::CandidateIndex { message } => json!({ "message": message }),
         KnowledgeError::Pipeline(_) => json!({}),
     }
 }

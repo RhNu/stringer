@@ -6,7 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+aho-corasick.workspace = true
 camino.workspace = true
+rayon.workspace = true
 regex.workspace = true
 rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }
