@@ -12,8 +12,8 @@ use crate::translations::{
     build_knowledge_index,
 };
 use stringer_workspace_core::WorkspaceCoreError;
-use stringer_workspace_core::WorkspaceSettings;
 use stringer_workspace_core::fsutil::{replace_file, temp_path};
+use stringer_workspace_core::{GlobalConfigSource, WorkspaceSettings};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KnowledgeTermUpsertOptions {
@@ -288,6 +288,7 @@ fn rebuild_index_if_requested(
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace,
         settings,
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::Workspace,
     })
     .map(Some)

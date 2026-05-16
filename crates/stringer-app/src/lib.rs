@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod adapt;
+mod context;
 mod dto;
 mod error;
 mod knowledge;
@@ -9,6 +10,7 @@ mod settings;
 mod workspace;
 
 pub use adapt::adapt_import;
+pub use context::StringerApp;
 pub use dto::*;
 pub use error::AppError;
 pub use knowledge::{

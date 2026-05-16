@@ -6,7 +6,7 @@ use stringer_knowledge::{
     lookup_knowledge,
 };
 use stringer_pipeline::PipelineEntryKind;
-use stringer_workspace_core::WorkspaceSettings;
+use stringer_workspace_core::{GlobalConfigSource, WorkspaceSettings};
 
 #[allow(dead_code)]
 mod support;
@@ -25,6 +25,7 @@ fn explicit_rebuild_splits_global_and_workspace_indexes() {
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
@@ -61,6 +62,7 @@ fn build_index_counts_duplicate_memory_ids_across_layers() {
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
@@ -85,6 +87,7 @@ fn lookup_auto_creates_global_index_without_copying_global_rows_to_workspace_ind
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -120,6 +123,7 @@ fn lookup_with_empty_workspace_knowledge_uses_global_index_only() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -156,6 +160,7 @@ fn lookup_with_empty_workspace_knowledge_files_uses_global_index_only() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -191,6 +196,7 @@ fn lookup_reports_cross_layer_override_from_split_indexes() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -220,6 +226,7 @@ fn lookup_reports_cross_layer_override_from_split_indexes() {
     let hidden_global = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "全局铁剑".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -255,6 +262,7 @@ fn load_knowledge_layers_suppresses_overridden_global_memory() {
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         prefer_index: false,
     })
     .unwrap();
@@ -295,6 +303,7 @@ fn lookup_suppresses_overridden_global_memory_from_split_indexes() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -342,6 +351,7 @@ fn lookup_suppresses_diagnostics_from_overridden_global_rule() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -435,6 +445,7 @@ fn lookup_rebuilds_corrupt_global_index_without_moving_global_rows_to_workspace_
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
@@ -448,6 +459,7 @@ fn lookup_rebuilds_corrupt_global_index_without_moving_global_rows_to_workspace_
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -490,6 +502,7 @@ fn lookup_rebuilds_stale_workspace_index_without_rebuilding_global_index() {
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
@@ -508,6 +521,7 @@ fn lookup_rebuilds_stale_workspace_index_without_rebuilding_global_index() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global.clone())),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Steel Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),

@@ -28,9 +28,10 @@ pub use operations::{
 };
 pub use stringer_pipeline::PipelineEntryKind;
 pub use stringer_workspace_core::{
-    LoadWorkspaceSettingsOptions, SCHEMA_VERSION, TranslationManifest, TranslationManifestFile,
-    TranslationMeta, TranslationRecord, WorkspaceSettings, WorkspaceSettingsOverrides,
-    default_config_path, game_release_name, language_name, load_global_knowledge_root,
+    GlobalConfigSource, LoadWorkspaceSettingsOptions, SCHEMA_VERSION, TranslationManifest,
+    TranslationManifestFile, TranslationMeta, TranslationRecord, WorkspaceSettings,
+    WorkspaceSettingsOverrides, default_config_path, game_release_name,
+    global_knowledge_root_from_source, language_name, load_global_knowledge_root,
     load_workspace_settings, parse_game_release_name, parse_language_name, read_workspace_settings,
-    read_workspace_source_root,
+    read_workspace_source_root, with_global_knowledge_defaults,
 };

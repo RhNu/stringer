@@ -27,8 +27,16 @@ pub struct WorkspaceSettingsOverrides {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum GlobalConfigSource {
+    #[default]
+    Production,
+    ConfigFile(Utf8PathBuf),
+    FixedKnowledgeRoot(Option<Utf8PathBuf>),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LoadWorkspaceSettingsOptions {
-    pub user_config_path: Option<Utf8PathBuf>,
+    pub global_config_source: GlobalConfigSource,
     pub workspace_config_path: Option<Utf8PathBuf>,
     pub overrides: WorkspaceSettingsOverrides,
 }
@@ -54,10 +62,15 @@ struct LoadedConfigFile {
     path: Option<Utf8PathBuf>,
 }
 
+struct LoadedGlobalConfig {
+    config: ConfigFile,
+    knowledge_root: Option<Utf8PathBuf>,
+}
+
 pub fn load_workspace_settings(
     options: LoadWorkspaceSettingsOptions,
 ) -> Result<WorkspaceSettings, WorkspaceCoreError> {
-    let user = load_user_config_file(options.user_config_path)?;
+    let user = load_global_config(&options.global_config_source)?;
     let workspace_config = load_workspace_config_file(options.workspace_config_path)?;
     let user_config = user.config;
     let user_game_release = user_config
@@ -110,8 +123,43 @@ pub fn load_workspace_settings(
             user_config.target_locale,
             "target_locale",
         )?,
-        global_knowledge_root: user_knowledge_root(user.path.as_ref()),
+        global_knowledge_root: user.knowledge_root,
     })
+}
+
+pub fn with_global_knowledge_defaults(
+    mut settings: WorkspaceSettings,
+    source: &GlobalConfigSource,
+) -> Result<WorkspaceSettings, WorkspaceCoreError> {
+    if settings.global_knowledge_root.is_none() {
+        settings.global_knowledge_root = global_knowledge_root_from_source(source)?;
+    }
+    Ok(settings)
+}
+
+fn load_global_config(
+    source: &GlobalConfigSource,
+) -> Result<LoadedGlobalConfig, WorkspaceCoreError> {
+    match source {
+        GlobalConfigSource::Production => {
+            let loaded = load_user_config_file(None)?;
+            Ok(LoadedGlobalConfig {
+                knowledge_root: user_knowledge_root(loaded.path.as_ref()),
+                config: loaded.config,
+            })
+        }
+        GlobalConfigSource::ConfigFile(path) => {
+            let loaded = load_user_config_file(Some(path.clone()))?;
+            Ok(LoadedGlobalConfig {
+                knowledge_root: user_knowledge_root(loaded.path.as_ref()),
+                config: loaded.config,
+            })
+        }
+        GlobalConfigSource::FixedKnowledgeRoot(root) => Ok(LoadedGlobalConfig {
+            config: ConfigFile::default(),
+            knowledge_root: root.clone(),
+        }),
+    }
 }
 
 fn load_user_config_file(
@@ -168,15 +216,22 @@ pub fn default_config_path() -> Option<Utf8PathBuf> {
 pub fn load_global_knowledge_root(
     config_path: Option<Utf8PathBuf>,
 ) -> Result<Option<Utf8PathBuf>, WorkspaceCoreError> {
-    let explicit = config_path.is_some();
-    let Some(path) = config_path.or_else(default_config_path) else {
-        return Ok(None);
+    let source = match config_path {
+        Some(path) => GlobalConfigSource::ConfigFile(path),
+        None => GlobalConfigSource::Production,
     };
-    if !path.exists() && !explicit {
-        return Ok(user_knowledge_root(Some(&path)));
+    global_knowledge_root_from_source(&source)
+}
+
+pub fn global_knowledge_root_from_source(
+    source: &GlobalConfigSource,
+) -> Result<Option<Utf8PathBuf>, WorkspaceCoreError> {
+    match source {
+        GlobalConfigSource::FixedKnowledgeRoot(root) => Ok(root.clone()),
+        GlobalConfigSource::Production | GlobalConfigSource::ConfigFile(_) => {
+            Ok(load_global_config(source)?.knowledge_root)
+        }
     }
-    let loaded = load_user_config_file(Some(path))?;
-    Ok(user_knowledge_root(loaded.path.as_ref()))
 }
 
 fn env_config_path() -> Option<Utf8PathBuf> {

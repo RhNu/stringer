@@ -12,7 +12,7 @@ use stringer_workspace_api::{
     ClaimBatchOptions, ExportTranslationsOptions, ImportTranslationsOptions, claim_batch,
     export_translations, import_translations,
 };
-use stringer_workspace_core::WorkspaceSettings;
+use stringer_workspace_core::{GlobalConfigSource, WorkspaceSettings};
 
 #[allow(dead_code)]
 mod support;
@@ -48,11 +48,7 @@ scope = { game = "SkyrimSe" }
     .await
     .unwrap();
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: true,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, true)).unwrap();
 
     assert_eq!(summary.entries, 1);
     assert_eq!(summary.auto_filled, 0);
@@ -92,11 +88,7 @@ async fn annotate_translations_preserves_existing_diagnostics() {
         ),
     );
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: true,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, true)).unwrap();
 
     assert_eq!(summary.diagnostics, 1);
     let rows = entry_rows(&translations, "scaleform", None);
@@ -137,11 +129,7 @@ async fn annotate_translations_fills_missing_memory_by_default_but_preserves_exi
         ),
     );
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: false,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, false)).unwrap();
 
     assert_eq!(summary.auto_filled, 1);
     let rows = entry_rows(&translations, "scaleform", None);
@@ -187,11 +175,7 @@ async fn annotate_translations_does_not_fill_agent_origin_entries() {
         "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Stringer Test Iron Source\",\"translation_meta\":{\"origin\":\"agent\"}}\n",
     );
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: false,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, false)).unwrap();
 
     assert_eq!(summary.auto_filled, 0);
     let rows = entry_rows(&translations, "scaleform", None);
@@ -228,11 +212,7 @@ async fn annotate_translations_does_not_fill_claimed_entries() {
     .unwrap();
     assert!(claim.batch_id.is_some());
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: false,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, false)).unwrap();
 
     assert_eq!(summary.auto_filled, 0);
     let rows = entry_rows(&translations, "scaleform", None);
@@ -261,11 +241,7 @@ async fn annotate_translations_can_skip_memory_fill() {
     .await
     .unwrap();
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: true,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, true)).unwrap();
 
     assert_eq!(summary.auto_filled, 0);
     let rows = entry_rows(&translations, "scaleform", None);
@@ -294,11 +270,7 @@ async fn annotate_uses_indexed_workspace_memory_for_auto_fill() {
     .await
     .unwrap();
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: false,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, false)).unwrap();
 
     assert_eq!(summary.auto_filled, 1);
     assert!(summary.index_used);
@@ -353,10 +325,7 @@ status = "forbidden"
         ),
     );
 
-    let summary = validate_translations(ValidateTranslationsOptions {
-        workspace: utf8(&translations),
-    })
-    .unwrap();
+    let summary = validate_translations(validate_options(&translations)).unwrap();
 
     assert_eq!(summary.entries, 1);
     let rows = entry_rows(&translations, "scaleform", None);
@@ -389,10 +358,7 @@ async fn validate_translations_reports_missing_translation() {
     .await
     .unwrap();
 
-    let summary = validate_translations(ValidateTranslationsOptions {
-        workspace: utf8(&translations),
-    })
-    .unwrap();
+    let summary = validate_translations(validate_options(&translations)).unwrap();
 
     assert_eq!(summary.diagnostics, 1);
     let rows = entry_rows(&translations, "scaleform", None);
@@ -426,10 +392,7 @@ async fn validate_uses_indexed_rejected_memory_for_conflict_diagnostics() {
         "scaleform",
         "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Stringer Test Iron Source\",\"translation\":\"错误铁源\"}\n",
     );
-    let summary = validate_translations(ValidateTranslationsOptions {
-        workspace: utf8(&translations),
-    })
-    .unwrap();
+    let summary = validate_translations(validate_options(&translations)).unwrap();
     assert!(summary.index_used);
     let rows = entry_rows(&translations, "scaleform", None);
     assert!(
@@ -513,7 +476,8 @@ fn lookup_uses_global_then_workspace_layers_and_ignores_library_fixtures() {
 
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
-        settings: settings_with_global(Some(global)),
+        settings: settings(),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(Some(utf8(&global))),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: vec![("record_type".to_string(), "WEAP".to_string())],
@@ -553,6 +517,7 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
@@ -563,6 +528,7 @@ fn build_index_creates_sqlite_and_lookup_marks_fresh_index_used() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Codex Fresh Index Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -592,6 +558,7 @@ fn lookup_auto_creates_missing_index_without_stale_diagnostic() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Codex Auto Index Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -622,6 +589,7 @@ fn lookup_refreshes_changed_knowledge_index_without_stale_diagnostic() {
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
@@ -635,6 +603,7 @@ fn lookup_refreshes_changed_knowledge_index_without_stale_diagnostic() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Codex Refresh Index Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -675,11 +644,7 @@ async fn annotate_auto_refreshes_missing_index_without_stale_diagnostic() {
     .await
     .unwrap();
 
-    let summary = annotate_translations(AnnotateTranslationsOptions {
-        workspace: utf8(&translations),
-        skip_memory_fill: true,
-    })
-    .unwrap();
+    let summary = annotate_translations(annotate_options(&translations, true)).unwrap();
 
     assert_eq!(summary.diagnostics, 0);
     assert!(summary.index_used);
@@ -706,6 +671,7 @@ fn lookup_rebuilds_corrupt_index_without_stale_diagnostic() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Codex Corrupt Index Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -736,6 +702,7 @@ fn fresh_index_preserves_duplicate_memory_ids_across_files_in_same_layer() {
     build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         scope: KnowledgeIndexBuildScope::All,
     })
     .unwrap();
@@ -743,6 +710,7 @@ fn fresh_index_preserves_duplicate_memory_ids_across_files_in_same_layer() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Steel Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -783,6 +751,7 @@ fn lookup_reports_merge_diagnostics_once() {
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace: utf8(root.path()),
         settings: settings_with_global(Some(global)),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: "Iron Sword".to_string(),
         kind: PipelineEntryKind::Plugin,
         context: Vec::new(),
@@ -808,6 +777,24 @@ fn row_by_id<'a>(rows: &'a [Value], id: &str) -> &'a Value {
     rows.iter()
         .find(|row| row["id"].as_str() == Some(id))
         .expect("row by id")
+}
+
+fn annotate_options(
+    workspace: &std::path::Path,
+    skip_memory_fill: bool,
+) -> AnnotateTranslationsOptions {
+    AnnotateTranslationsOptions {
+        workspace: utf8(workspace),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
+        skip_memory_fill,
+    }
+}
+
+fn validate_options(workspace: &std::path::Path) -> ValidateTranslationsOptions {
+    ValidateTranslationsOptions {
+        workspace: utf8(workspace),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
+    }
 }
 
 fn settings_with_global(global_knowledge_root: Option<std::path::PathBuf>) -> WorkspaceSettings {

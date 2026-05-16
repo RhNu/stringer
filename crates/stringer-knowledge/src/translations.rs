@@ -17,11 +17,14 @@ use crate::lookup::{
 use crate::session::{LayeredKnowledgeSession, load_knowledge_from_files};
 use stringer_workspace_core::claimed_entry_ids;
 use stringer_workspace_core::{
+    GlobalConfigSource, WorkspaceSettings, game_release_name, global_knowledge_root_from_source,
+    with_global_knowledge_defaults,
+};
+use stringer_workspace_core::{
     TranslationMeta, TranslationRecord, read_translation_package_records,
     write_translation_package_records,
 };
 use stringer_workspace_core::{WorkspaceCoreError, WorkspaceLock, unix_ms};
-use stringer_workspace_core::{WorkspaceSettings, game_release_name, load_global_knowledge_root};
 
 const BUILTIN_PROCESSORS: &[&str] = &[
     "stringer.term",
@@ -33,18 +36,21 @@ const BUILTIN_PROCESSORS: &[&str] = &[
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnnotateTranslationsOptions {
     pub workspace: Utf8PathBuf,
+    pub global_config_source: GlobalConfigSource,
     pub skip_memory_fill: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidateTranslationsOptions {
     pub workspace: Utf8PathBuf,
+    pub global_config_source: GlobalConfigSource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LookupKnowledgeOptions {
     pub workspace: Utf8PathBuf,
     pub settings: WorkspaceSettings,
+    pub global_config_source: GlobalConfigSource,
     pub text: String,
     pub kind: PipelineEntryKind,
     pub context: Vec<(String, String)>,
@@ -59,6 +65,7 @@ pub struct LookupKnowledgeOptions {
 pub struct LoadKnowledgeLayersOptions {
     pub workspace: Utf8PathBuf,
     pub settings: WorkspaceSettings,
+    pub global_config_source: GlobalConfigSource,
     pub prefer_index: bool,
 }
 
@@ -66,6 +73,7 @@ pub struct LoadKnowledgeLayersOptions {
 pub struct BuildKnowledgeIndexOptions {
     pub workspace: Utf8PathBuf,
     pub settings: WorkspaceSettings,
+    pub global_config_source: GlobalConfigSource,
     pub scope: KnowledgeIndexBuildScope,
 }
 
@@ -123,7 +131,10 @@ pub fn annotate_translations(
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
     let claimed = claimed_entry_ids(&options.workspace)?;
-    let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
+    let settings = settings_with_user_knowledge_defaults(
+        package.settings.clone(),
+        &options.global_config_source,
+    )?;
     let session = LayeredKnowledgeSession::open(&options.workspace, &settings)?;
     let pipeline = default_pipeline();
     let mut summary = KnowledgeSummary {
@@ -186,7 +197,10 @@ pub fn validate_translations(
 ) -> Result<KnowledgeSummary, KnowledgeError> {
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut package = read_translation_package_records(&options.workspace)?;
-    let settings = settings_with_user_knowledge_defaults(package.settings.clone())?;
+    let settings = settings_with_user_knowledge_defaults(
+        package.settings.clone(),
+        &options.global_config_source,
+    )?;
     let session = LayeredKnowledgeSession::open(&options.workspace, &settings)?;
     let pipeline = default_pipeline();
     let mut summary = KnowledgeSummary {
@@ -227,7 +241,10 @@ pub fn lookup_knowledge(
     options: LookupKnowledgeOptions,
 ) -> Result<KnowledgeLookup, KnowledgeError> {
     let query = options.text.clone();
-    let settings = settings_with_user_knowledge_defaults(options.settings.clone())?;
+    let settings = settings_with_user_knowledge_defaults(
+        options.settings.clone(),
+        &options.global_config_source,
+    )?;
     let mut context = BTreeMap::new();
     context.insert(
         "game".to_string(),
@@ -269,7 +286,11 @@ pub fn lookup_knowledge(
 pub fn build_knowledge_index(
     options: BuildKnowledgeIndexOptions,
 ) -> Result<KnowledgeIndexSummary, KnowledgeError> {
-    let settings = settings_for_build_scope(options.settings, options.scope)?;
+    let settings = settings_for_build_scope(
+        options.settings,
+        options.scope,
+        &options.global_config_source,
+    )?;
     let selection = match options.scope {
         KnowledgeIndexBuildScope::All => KnowledgeLayerSelection::All,
         KnowledgeIndexBuildScope::Workspace => KnowledgeLayerSelection::WorkspaceOnly,
@@ -292,7 +313,8 @@ pub fn build_knowledge_index(
 pub fn load_knowledge_layers(
     options: LoadKnowledgeLayersOptions,
 ) -> Result<LoadedKnowledgeLayers, KnowledgeError> {
-    let settings = settings_with_user_knowledge_defaults(options.settings)?;
+    let settings =
+        settings_with_user_knowledge_defaults(options.settings, &options.global_config_source)?;
     let resources =
         collect_knowledge_resources(&options.workspace, &settings, KnowledgeLayerSelection::All)?;
     let files = resources.all_source_files();
@@ -333,19 +355,20 @@ fn index_stale_diagnostic() -> PipelineDiagnostic {
 }
 
 fn settings_with_user_knowledge_defaults(
-    mut settings: WorkspaceSettings,
+    settings: WorkspaceSettings,
+    source: &GlobalConfigSource,
 ) -> Result<WorkspaceSettings, KnowledgeError> {
-    if settings.global_knowledge_root.is_none() {
-        settings.global_knowledge_root = load_global_knowledge_root(None)?;
-    }
-    Ok(settings)
+    Ok(with_global_knowledge_defaults(settings, source)?)
 }
 
 fn settings_for_build_scope(
     settings: WorkspaceSettings,
     scope: KnowledgeIndexBuildScope,
+    source: &GlobalConfigSource,
 ) -> Result<WorkspaceSettings, KnowledgeError> {
-    settings_for_build_scope_with(settings, scope, || Ok(load_global_knowledge_root(None)?))
+    settings_for_build_scope_with(settings, scope, || {
+        Ok(global_knowledge_root_from_source(source)?)
+    })
 }
 
 fn settings_for_build_scope_with(

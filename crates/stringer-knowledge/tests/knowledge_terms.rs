@@ -6,6 +6,7 @@ use stringer_knowledge::{
     KnowledgeTermUpsertOptions, KnowledgeTermsUpsertOptions, LoadKnowledgeLayersOptions,
     delete_knowledge_term, load_knowledge_layers, upsert_knowledge_term, upsert_knowledge_terms,
 };
+use stringer_workspace_core::GlobalConfigSource;
 
 #[allow(dead_code)]
 mod support;
@@ -33,6 +34,7 @@ fn term_upsert_creates_default_workspace_file_and_loads_from_knowledge_layers() 
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
         workspace: utf8(root.path()),
         settings: settings(),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         prefer_index: false,
     })
     .unwrap();
@@ -101,6 +103,7 @@ kind = ["plugin"]
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
         workspace: utf8(root.path()),
         settings: settings(),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         prefer_index: false,
     })
     .unwrap();
@@ -262,6 +265,7 @@ target = "旧钢剑"
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
         workspace: utf8(root.path()),
         settings: settings(),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         prefer_index: false,
     })
     .unwrap();
@@ -422,6 +426,7 @@ fn term_upsert_can_rebuild_knowledge_index() {
     let loaded = load_knowledge_layers(LoadKnowledgeLayersOptions {
         workspace: utf8(root.path()),
         settings: settings(),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         prefer_index: true,
     })
     .unwrap();

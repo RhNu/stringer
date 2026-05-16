@@ -10,6 +10,7 @@ use stringer_workspace_api::{
     inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
     inspect_workspace_files, release_batch,
 };
+use stringer_workspace_core::GlobalConfigSource;
 
 use crate::dto::{
     InspectDiagnosticSeverityInput, InspectEntryStatusInput, WorkspaceBatchApplyRequest,
@@ -30,8 +31,15 @@ use crate::settings::load_settings_for_workspace;
 pub async fn workspace_open(
     request: WorkspaceOpenRequest,
 ) -> Result<WorkspaceOpenResponse, AppError> {
+    workspace_open_with_global_config_source(request, &GlobalConfigSource::Production).await
+}
+
+pub(crate) async fn workspace_open_with_global_config_source(
+    request: WorkspaceOpenRequest,
+    global_config_source: &GlobalConfigSource,
+) -> Result<WorkspaceOpenResponse, AppError> {
     let workspace = workspace_or_current(request.workspace)?;
-    let settings = load_settings_for_workspace(&workspace, request.settings)?;
+    let settings = load_settings_for_workspace(&workspace, request.settings, global_config_source)?;
     let summary = export_translations(ExportTranslationsOptions {
         source_root: path(request.source_root),
         workspace,

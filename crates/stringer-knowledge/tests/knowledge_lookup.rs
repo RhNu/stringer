@@ -3,7 +3,7 @@ use stringer_knowledge::{
     lookup_knowledge,
 };
 use stringer_pipeline::PipelineEntryKind;
-use stringer_workspace_core::WorkspaceSettings;
+use stringer_workspace_core::{GlobalConfigSource, WorkspaceSettings};
 
 #[allow(dead_code)]
 mod support;
@@ -201,6 +201,7 @@ fn lookup_options(root: &std::path::Path, text: &str) -> LookupKnowledgeOptions 
     LookupKnowledgeOptions {
         workspace: utf8(root),
         settings: settings_with_global(None),
+        global_config_source: GlobalConfigSource::FixedKnowledgeRoot(None),
         text: text.to_string(),
         kind: PipelineEntryKind::Plugin,
         context: vec![("record_type".to_string(), "WEAP".to_string())],

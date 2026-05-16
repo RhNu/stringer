@@ -5,14 +5,14 @@ use serde_json::Value;
 use stringer_app::{
     AdaptFormatInput, AdaptImportRequest, AppError, InspectDiagnosticSeverityInput,
     InspectEntryStatusInput, KnowledgeTermInput, KnowledgeTermStatusInput,
-    KnowledgeTermUpsertRequest, SettingsInput, WorkspaceBatchApplyEntry,
+    KnowledgeTermUpsertRequest, SettingsInput, StringerApp, WorkspaceBatchApplyEntry,
     WorkspaceBatchApplyRequest, WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest,
     WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
     WorkspaceOpenRequest, adapt_import, knowledge_term_upsert, workspace_batch_apply,
     workspace_batch_claim, workspace_batch_count, workspace_finalize,
-    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_open,
+    workspace_inspect_diagnostics, workspace_inspect_entries,
 };
-use stringer_workspace_core::WorkspaceCoreError;
+use stringer_workspace_core::{GlobalConfigSource, WorkspaceCoreError};
 
 #[tokio::test]
 async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
@@ -26,14 +26,16 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
         .join("MyMod_English.txt");
     write_text(&asset, "$Title\tIron Sword\n");
 
-    let opened = workspace_open(WorkspaceOpenRequest {
-        source_root: path_string(root.path()),
-        workspace: Some(path_string(workspace.path())),
-        force: false,
-        settings: settings(),
-    })
-    .await
-    .unwrap();
+    let app = test_app();
+    let opened = app
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: settings(),
+        })
+        .await
+        .unwrap();
     assert_eq!(opened.entries, 1);
 
     let count = workspace_batch_count(WorkspaceBatchCountRequest {
@@ -96,14 +98,15 @@ target_locale = "zh-Hans"
 "#,
     );
 
-    workspace_open(WorkspaceOpenRequest {
-        source_root: path_string(root.path()),
-        workspace: Some(path_string(workspace.path())),
-        force: false,
-        settings: SettingsInput::default(),
-    })
-    .await
-    .unwrap();
+    test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: SettingsInput::default(),
+        })
+        .await
+        .unwrap();
 
     let manifest: Value =
         serde_json::from_str(&fs::read_to_string(workspace.path().join("workspace.json")).unwrap())
@@ -125,14 +128,15 @@ async fn app_workspace_finalize_defaults_output_under_workspace() {
         "$Title\tIron Sword\n",
     );
 
-    workspace_open(WorkspaceOpenRequest {
-        source_root: path_string(root.path()),
-        workspace: Some(path_string(workspace.path())),
-        force: false,
-        settings: settings(),
-    })
-    .await
-    .unwrap();
+    test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: settings(),
+        })
+        .await
+        .unwrap();
     write_text(
         &entry_file_path(workspace.path()),
         r#"{"id":"scaleform:Interface/Translations/MyMod_English.txt:$Title","translation":"熟铁剑"}"#,
@@ -184,6 +188,37 @@ async fn app_adapt_import_returns_action_output_and_summary() {
 }
 
 #[tokio::test]
+async fn app_adapt_import_uses_injected_global_config_source_for_default_output() {
+    let temp = TempRoot::new("adapt-injected-global");
+    let input = temp.path().join("source.eet");
+    let fake_global = temp.path().join("fake-global");
+    fs::write(&input, eet_v1_fixture()).unwrap();
+    let app = StringerApp::with_global_config_source(GlobalConfigSource::FixedKnowledgeRoot(Some(
+        utf8(&fake_global),
+    )));
+
+    let imported = app
+        .adapt_import(AdaptImportRequest {
+            format: AdaptFormatInput::Eet,
+            input: path_string(&input),
+            out: None,
+            source_locale: "en".to_string(),
+            target_locale: "zh-Hans".to_string(),
+            game: Some("skyrim-se".to_string()),
+        })
+        .await
+        .unwrap();
+
+    let expected_output = fake_global.join("memory/adapt/source.eet.jsonl");
+    assert_eq!(imported.action, "merged");
+    assert_eq!(
+        imported.output.replace('\\', "/"),
+        path_string(&expected_output)
+    );
+    assert!(expected_output.exists());
+}
+
+#[tokio::test]
 async fn app_knowledge_term_upsert_can_prepare_workspace_knowledge_before_open() {
     let workspace = TempRoot::new("term-before-open");
 
@@ -230,14 +265,15 @@ async fn app_error_codes_preserve_core_and_knowledge_failures() {
         "$Title\tIron Sword\n",
     );
 
-    let core_error = workspace_open(WorkspaceOpenRequest {
-        source_root: path_string(root.path()),
-        workspace: Some(path_string(workspace.path())),
-        force: false,
-        settings: SettingsInput::default(),
-    })
-    .await
-    .unwrap_err();
+    let core_error = test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: SettingsInput::default(),
+        })
+        .await
+        .unwrap_err();
     assert_eq!(core_error.code(), "workspace.missing_setting");
     assert_eq!(core_error.details()["name"], "game_release");
 
@@ -284,14 +320,15 @@ async fn app_workspace_inspect_entries_and_diagnostics_return_agent_safe_json_va
         .join("MyMod_English.txt");
     write_text(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n");
 
-    workspace_open(WorkspaceOpenRequest {
-        source_root: path_string(root.path()),
-        workspace: Some(path_string(workspace.path())),
-        force: false,
-        settings: settings(),
-    })
-    .await
-    .unwrap();
+    test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: settings(),
+        })
+        .await
+        .unwrap();
     let entry_file = entry_file_path(workspace.path());
     write_text(
         &entry_file,
@@ -345,6 +382,10 @@ fn settings() -> SettingsInput {
     }
 }
 
+fn test_app() -> StringerApp {
+    StringerApp::with_global_config_source(GlobalConfigSource::FixedKnowledgeRoot(None))
+}
+
 fn write_text(path: &std::path::Path, text: &str) {
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, text).unwrap();
@@ -352,6 +393,10 @@ fn write_text(path: &std::path::Path, text: &str) {
 
 fn path_string(path: &std::path::Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn utf8(path: &std::path::Path) -> camino::Utf8PathBuf {
+    camino::Utf8PathBuf::from_path_buf(path.to_path_buf()).unwrap()
 }
 
 fn entry_file_path(workspace: &std::path::Path) -> std::path::PathBuf {

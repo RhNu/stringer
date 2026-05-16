@@ -24,7 +24,9 @@ pub use package::{
     write_translation_package_records,
 };
 pub use settings::{
-    LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
-    default_config_path, game_release_name, language_name, load_global_knowledge_root,
+    GlobalConfigSource, LoadWorkspaceSettingsOptions, WorkspaceSettings,
+    WorkspaceSettingsOverrides, default_config_path, game_release_name,
+    global_knowledge_root_from_source, language_name, load_global_knowledge_root,
     load_workspace_settings, parse_game_release_name, parse_language_name,
+    with_global_knowledge_defaults,
 };

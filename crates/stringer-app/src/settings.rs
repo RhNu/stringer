@@ -4,8 +4,9 @@ use stringer_knowledge::{LookupKnowledgeField, LookupKnowledgeSource};
 use stringer_pipeline::PipelineEntryKind;
 use stringer_workspace_api::WorkspaceError;
 use stringer_workspace_core::{
-    LoadWorkspaceSettingsOptions, WorkspaceSettings, WorkspaceSettingsOverrides,
-    load_workspace_settings, parse_game_release_name, parse_language_name,
+    GlobalConfigSource, LoadWorkspaceSettingsOptions, WorkspaceSettings,
+    WorkspaceSettingsOverrides, load_workspace_settings, parse_game_release_name,
+    parse_language_name,
 };
 
 use crate::dto::{
@@ -17,9 +18,10 @@ use crate::paths::workspace_config_path;
 pub(crate) fn load_settings_for_workspace(
     workspace: &Utf8PathBuf,
     settings: SettingsInput,
+    global_config_source: &GlobalConfigSource,
 ) -> Result<WorkspaceSettings, WorkspaceError> {
     Ok(load_workspace_settings(LoadWorkspaceSettingsOptions {
-        user_config_path: None,
+        global_config_source: global_config_source.clone(),
         workspace_config_path: workspace_config_path(workspace),
         overrides: settings.overrides()?,
     })?)

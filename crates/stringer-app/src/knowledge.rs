@@ -7,7 +7,7 @@ use stringer_knowledge::{
     delete_knowledge_term, lookup_knowledge, upsert_knowledge_terms, validate_translations,
 };
 use stringer_workspace_api::WorkspaceError;
-use stringer_workspace_core::{WorkspaceSettings, read_workspace_settings};
+use stringer_workspace_core::{GlobalConfigSource, WorkspaceSettings, read_workspace_settings};
 
 use crate::dto::{
     KnowledgeAnnotateRequest, KnowledgeIndexRebuildRequest, KnowledgeIndexRebuildResponse,
@@ -22,8 +22,16 @@ use crate::paths::{initialized_workspace_or_current, path, workspace_or_current}
 pub fn knowledge_annotate(
     request: KnowledgeAnnotateRequest,
 ) -> Result<KnowledgeOperationResponse, AppError> {
+    knowledge_annotate_with_global_config_source(request, &GlobalConfigSource::Production)
+}
+
+pub(crate) fn knowledge_annotate_with_global_config_source(
+    request: KnowledgeAnnotateRequest,
+    global_config_source: &GlobalConfigSource,
+) -> Result<KnowledgeOperationResponse, AppError> {
     let summary = annotate_translations(AnnotateTranslationsOptions {
         workspace: workspace_or_current(request.workspace)?,
+        global_config_source: global_config_source.clone(),
         skip_memory_fill: request.skip_fill_memory,
     })?;
     Ok(knowledge_operation_response(summary))
@@ -32,8 +40,16 @@ pub fn knowledge_annotate(
 pub fn knowledge_validate(
     request: KnowledgeValidateRequest,
 ) -> Result<KnowledgeOperationResponse, AppError> {
+    knowledge_validate_with_global_config_source(request, &GlobalConfigSource::Production)
+}
+
+pub(crate) fn knowledge_validate_with_global_config_source(
+    request: KnowledgeValidateRequest,
+    global_config_source: &GlobalConfigSource,
+) -> Result<KnowledgeOperationResponse, AppError> {
     let summary = validate_translations(ValidateTranslationsOptions {
         workspace: workspace_or_current(request.workspace)?,
+        global_config_source: global_config_source.clone(),
     })?;
     Ok(knowledge_operation_response(summary))
 }
@@ -41,11 +57,19 @@ pub fn knowledge_validate(
 pub fn knowledge_lookup(
     request: KnowledgeLookupRequest,
 ) -> Result<KnowledgeLookupResponse, AppError> {
+    knowledge_lookup_with_global_config_source(request, &GlobalConfigSource::Production)
+}
+
+pub(crate) fn knowledge_lookup_with_global_config_source(
+    request: KnowledgeLookupRequest,
+    global_config_source: &GlobalConfigSource,
+) -> Result<KnowledgeLookupResponse, AppError> {
     let workspace = initialized_workspace_or_current(request.workspace)?;
     let settings = read_workspace_settings(&workspace)?;
     let lookup = lookup_knowledge(LookupKnowledgeOptions {
         workspace,
         settings,
+        global_config_source: global_config_source.clone(),
         text: request.text,
         kind: request.kind.into(),
         context: lookup_context(request.record_type, request.subrecord),
@@ -61,11 +85,19 @@ pub fn knowledge_lookup(
 pub fn knowledge_index_rebuild(
     request: KnowledgeIndexRebuildRequest,
 ) -> Result<KnowledgeIndexRebuildResponse, AppError> {
+    knowledge_index_rebuild_with_global_config_source(request, &GlobalConfigSource::Production)
+}
+
+pub(crate) fn knowledge_index_rebuild_with_global_config_source(
+    request: KnowledgeIndexRebuildRequest,
+    global_config_source: &GlobalConfigSource,
+) -> Result<KnowledgeIndexRebuildResponse, AppError> {
     let workspace = initialized_workspace_or_current(request.workspace)?;
     let settings = read_workspace_settings(&workspace)?;
     let summary = build_knowledge_index(BuildKnowledgeIndexOptions {
         workspace,
         settings,
+        global_config_source: global_config_source.clone(),
         scope: KnowledgeIndexBuildScope::All,
     })?;
     Ok(KnowledgeIndexRebuildResponse {
