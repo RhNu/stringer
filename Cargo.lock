@@ -1293,7 +1293,6 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "camino",
- "serde",
  "serde_json",
  "stringer-core",
  "stringer-pex",
@@ -1302,6 +1301,7 @@ dependencies = [
  "stringer-reader",
  "stringer-scaleform",
  "stringer-workspace-core",
+ "stringer-workspace-ops",
  "thiserror 2.0.18",
  "tokio",
  "toml",
@@ -1321,6 +1321,18 @@ dependencies = [
  "stringer-plugin",
  "thiserror 2.0.18",
  "toml",
+]
+
+[[package]]
+name = "stringer-workspace-ops"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "serde",
+ "serde_json",
+ "stringer-pipeline",
+ "stringer-workspace-core",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -2,6 +2,7 @@ use std::io;
 
 use camino::Utf8PathBuf;
 use stringer_workspace_core::WorkspaceCoreError;
+use stringer_workspace_ops::WorkspaceOpsError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -151,6 +152,22 @@ impl From<WorkspaceCoreError> for WorkspaceError {
                 Self::DuplicateTranslationId { path, id }
             }
             WorkspaceCoreError::BatchNotFound { batch_id } => Self::BatchNotFound { batch_id },
+        }
+    }
+}
+
+impl From<WorkspaceOpsError> for WorkspaceError {
+    fn from(source: WorkspaceOpsError) -> Self {
+        match source {
+            WorkspaceOpsError::Core(source) => source.into(),
+            WorkspaceOpsError::UnknownTranslationId { id } => Self::UnknownTranslationId { id },
+            WorkspaceOpsError::DuplicateBatchPatchId { id } => Self::DuplicateBatchPatchId { id },
+            WorkspaceOpsError::MissingBatchPatchTranslation { id } => {
+                Self::MissingBatchPatchTranslation { id }
+            }
+            WorkspaceOpsError::BatchEntryNotClaimed { batch_id, id } => {
+                Self::BatchEntryNotClaimed { batch_id, id }
+            }
         }
     }
 }
