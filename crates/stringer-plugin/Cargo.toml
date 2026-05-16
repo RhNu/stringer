@@ -10,10 +10,12 @@ bytes.workspace = true
 camino.workspace = true
 encoding_rs.workspace = true
 flate2.workspace = true
+stringer-extraction-filter = { path = "../stringer-extraction-filter" }
 stringer-core = { path = "../stringer-core" }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "sync"] }
 tracing.workspace = true
 
 [dev-dependencies]
+toml.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

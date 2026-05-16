@@ -67,6 +67,7 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::Toml { .. } => "workspace.toml",
         WorkspaceError::MissingSetting { .. } => "workspace.missing_setting",
         WorkspaceError::InvalidSetting { .. } => "workspace.invalid_setting",
+        WorkspaceError::ExtractionFilter(_) => "workspace.extraction_filter",
         WorkspaceError::JsonLine { .. } => "workspace.json_line",
         WorkspaceError::Json { .. } => "workspace.json",
         WorkspaceError::UnsupportedTranslationSchema { .. } => {
@@ -114,6 +115,7 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         WorkspaceError::InvalidSetting { name, value } => {
             json!({ "name": name, "value": value })
         }
+        WorkspaceError::ExtractionFilter(error) => json!({ "message": error.to_string() }),
         WorkspaceError::UnsupportedTranslationSchema { path, version } => {
             json!({ "path": json_path(path), "version": version })
         }
@@ -203,6 +205,7 @@ fn workspace_core_error_code(error: &WorkspaceCoreError) -> &'static str {
         WorkspaceCoreError::Toml { .. } => "workspace.toml",
         WorkspaceCoreError::MissingSetting { .. } => "workspace.missing_setting",
         WorkspaceCoreError::InvalidSetting { .. } => "workspace.invalid_setting",
+        WorkspaceCoreError::ExtractionFilter(_) => "workspace.extraction_filter",
         WorkspaceCoreError::JsonLine { .. } => "workspace.json_line",
         WorkspaceCoreError::Json { .. } => "workspace.json",
         WorkspaceCoreError::UnsupportedTranslationSchema { .. } => {
@@ -237,6 +240,7 @@ fn workspace_core_error_details(error: &WorkspaceCoreError) -> Value {
         WorkspaceCoreError::InvalidSetting { name, value } => {
             json!({ "name": name, "value": value })
         }
+        WorkspaceCoreError::ExtractionFilter(error) => json!({ "message": error.to_string() }),
         WorkspaceCoreError::UnsupportedTranslationSchema { path, version } => {
             json!({ "path": json_path(path), "version": version })
         }

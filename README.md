@@ -189,9 +189,26 @@ game_release = "SkyrimSe"
 asset_language = "English"
 source_locale = "en"
 target_locale = "zh-Hans"
+
+[extraction_filters]
+[[extraction_filters.rules]]
+id = "pex.identifier_like_source"
+enabled = false
+
+[[extraction_filters.rules]]
+id = "user.skip_debug_pex_notifications"
+enabled = true
+reason = "debug notification strings"
+when = { all = [
+  { field = "kind", op = "eq", value = "pex" },
+  { field = "call_member", op = "eq", value = "Notification" },
+  { field = "text", op = "regex", value = "^(DEBUG|TODO)" },
+] }
 ```
 
 用户知识库位置固定为默认用户目录下的 `knowledge/`：Windows 为 `Documents/My Games/Stringer/knowledge`，其他平台为用户配置目录下的 `stringer/knowledge`。workspace `stringer.toml` 只读取 `game_release`、`asset_language`、`source_locale` 和 `target_locale`。
+
+`extraction_filters` 只从用户全局配置读取，用于在导出工作区前跳过不需要翻译的提取结果。内置规则也有固定 id，可通过同 id 配置禁用或覆盖；第一版支持 `all`、`any`、`not` 条件树，以及 `eq`、`ne`、`in`、`contains`、`starts_with`、`ends_with`、`regex`、`exists`、`is_empty`、`identifier_like` 和 `tag_list` 操作。
 
 已有 workspace 命令会从 `workspace.json` 读取设置。`knowledge lookup`、`knowledge annotate`、`knowledge validate` 和 `knowledge index rebuild` 默认使用当前目录作为 workspace。
 

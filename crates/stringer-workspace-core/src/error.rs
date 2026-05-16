@@ -32,6 +32,9 @@ pub enum WorkspaceCoreError {
         source: toml::de::Error,
     },
 
+    #[error(transparent)]
+    ExtractionFilter(#[from] stringer_extraction_filter::ExtractionFilterError),
+
     #[error("failed to write TOML `{path}`: {source}")]
     Toml {
         path: Utf8PathBuf,

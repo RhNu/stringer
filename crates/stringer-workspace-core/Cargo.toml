@@ -11,6 +11,7 @@ directories.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 stringer-core = { path = "../stringer-core" }
+stringer-extraction-filter = { path = "../stringer-extraction-filter" }
 stringer-pipeline = { path = "../stringer-pipeline" }
 stringer-plugin = { path = "../stringer-plugin" }
 thiserror.workspace = true

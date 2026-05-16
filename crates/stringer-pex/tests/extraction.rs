@@ -2,6 +2,7 @@ use bytes::Bytes;
 use stringer_core::{
     FileAsset, PexOperandPath, PexStringMetadata, StringEntryBundle, StringEntrySource,
 };
+use stringer_extraction_filter::{ExtractionFilterConfig, ExtractionFilterSet};
 use stringer_pex::{
     PexDebugFunctionInfo, PexDebugFunctionType, PexDebugInfo, PexFile, PexFunction, PexHeader,
     PexInstruction, PexLocal, PexObject, PexOpcode, PexState, PexUserFlag, PexValue,
@@ -229,6 +230,68 @@ fn filters_empty_identifier_like_and_tag_list_sources() {
         .map(|entry| entry.text())
         .collect::<Vec<_>>();
     assert_eq!(texts, ["Open Door", "Hello world"]);
+}
+
+#[test]
+fn custom_filter_config_can_disable_builtin_identifier_rule() {
+    let file = filter_fixture(["SomeIdentifier", "Open Door"]);
+    let asset = FileAsset::new(
+        "Data/Scripts/Example.pex",
+        Bytes::from(file.write_to_vec().unwrap()),
+    );
+    let config: ExtractionFilterConfig = toml::from_str(
+        r#"
+[[rules]]
+id = "pex.identifier_like_source"
+enabled = false
+"#,
+    )
+    .unwrap();
+    let filters = ExtractionFilterSet::from_config(config).unwrap();
+
+    let bundle = read_pex_strings(
+        asset,
+        ReadPexOptions::default().with_extraction_filters(filters),
+    )
+    .unwrap();
+
+    let texts = bundle
+        .string_entries()
+        .iter()
+        .map(|entry| entry.text())
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["SomeIdentifier", "Open Door"]);
+}
+
+#[test]
+fn custom_filter_config_can_filter_pex_call_context() {
+    let bytes = extractable_file().write_to_vec().unwrap();
+    let asset = FileAsset::new("Data/Scripts/Example.pex", Bytes::from(bytes));
+    let config: ExtractionFilterConfig = toml::from_str(
+        r#"
+[[rules]]
+id = "user.skip_debug_notifications"
+when = { all = [
+  { field = "kind", op = "eq", value = "pex" },
+  { field = "call_member", op = "eq", value = "Notification" },
+] }
+"#,
+    )
+    .unwrap();
+    let filters = ExtractionFilterSet::from_config(config).unwrap();
+
+    let bundle = read_pex_strings(
+        asset,
+        ReadPexOptions::default().with_extraction_filters(filters),
+    )
+    .unwrap();
+
+    let texts = bundle
+        .string_entries()
+        .iter()
+        .map(|entry| entry.text())
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Hello world"]);
 }
 
 #[test]

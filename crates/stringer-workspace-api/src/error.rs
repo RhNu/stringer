@@ -47,6 +47,9 @@ pub enum WorkspaceError {
     #[error("invalid workspace setting `{name}` value `{value}`")]
     InvalidSetting { name: &'static str, value: String },
 
+    #[error(transparent)]
+    ExtractionFilter(#[from] stringer_extraction_filter::ExtractionFilterError),
+
     #[error("failed to parse JSONL `{path}` line {line}: {source}")]
     JsonLine {
         path: Utf8PathBuf,
@@ -135,6 +138,7 @@ impl From<WorkspaceCoreError> for WorkspaceError {
             WorkspaceCoreError::InvalidSetting { name, value } => {
                 Self::InvalidSetting { name, value }
             }
+            WorkspaceCoreError::ExtractionFilter(source) => Self::ExtractionFilter(source),
             WorkspaceCoreError::JsonLine { path, line, source } => {
                 Self::JsonLine { path, line, source }
             }

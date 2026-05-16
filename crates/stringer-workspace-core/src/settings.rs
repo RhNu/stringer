@@ -3,6 +3,7 @@ use std::fs;
 use camino::Utf8PathBuf;
 use serde::Deserialize;
 use stringer_core::Language;
+use stringer_extraction_filter::{ExtractionFilterConfig, ExtractionFilterSet};
 use stringer_plugin::GameRelease;
 
 use crate::WorkspaceCoreError;
@@ -16,6 +17,7 @@ pub struct WorkspaceSettings {
     pub source_locale: String,
     pub target_locale: String,
     pub global_knowledge_root: Option<Utf8PathBuf>,
+    pub extraction_filters: ExtractionFilterSet,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -41,12 +43,13 @@ pub struct LoadWorkspaceSettingsOptions {
     pub overrides: WorkspaceSettingsOverrides,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default)]
 struct ConfigFile {
     game_release: Option<String>,
     asset_language: Option<String>,
     source_locale: Option<String>,
     target_locale: Option<String>,
+    extraction_filters: Option<ExtractionFilterConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -93,6 +96,12 @@ pub fn load_workspace_settings(
         .as_deref()
         .map(parse_language_name)
         .transpose()?;
+    let extraction_filters = user_config
+        .extraction_filters
+        .clone()
+        .map(ExtractionFilterSet::from_config)
+        .transpose()?
+        .unwrap_or_default();
 
     Ok(WorkspaceSettings {
         game_release: options
@@ -124,6 +133,7 @@ pub fn load_workspace_settings(
             "target_locale",
         )?,
         global_knowledge_root: user.knowledge_root,
+        extraction_filters,
     })
 }
 

@@ -1,77 +1,29 @@
 use stringer_core::{PexCallContext, PexFunctionKind, PexOperandPath};
+use stringer_extraction_filter::{
+    ExtractionFilterInput, ExtractionFilterMatch, ExtractionFilterSet, evaluate_builtin,
+};
 
 use crate::{PexOpcode, PexStringId};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PexStringFilter {
-    rules: Vec<PexFilterRule>,
+    rules: ExtractionFilterSet,
 }
 
 impl PexStringFilter {
-    pub(crate) fn default_rules() -> Self {
-        Self {
-            rules: vec![
-                PexFilterRule::EmptySource,
-                PexFilterRule::TagListSource,
-                PexFilterRule::IdentifierLikeSource,
-            ],
+    pub(crate) fn with_rules(rules: ExtractionFilterSet) -> Self {
+        Self { rules }
+    }
+
+    pub(crate) fn evaluate(
+        &self,
+        input: &PexStringFilterInput<'_>,
+    ) -> Option<ExtractionFilterMatch> {
+        if self.rules.is_default() {
+            return evaluate_builtin("pex", input.text);
         }
+        self.rules.evaluate(&input.as_extraction_input())
     }
-
-    pub(crate) fn evaluate(&self, input: &PexStringFilterInput<'_>) -> Option<PexFilterReason> {
-        self.rules.iter().find_map(|rule| rule.evaluate(input))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PexFilterRule {
-    EmptySource,
-    IdentifierLikeSource,
-    TagListSource,
-    #[allow(dead_code)]
-    FunctionContext,
-}
-
-impl PexFilterRule {
-    fn evaluate(self, input: &PexStringFilterInput<'_>) -> Option<PexFilterReason> {
-        match self {
-            Self::EmptySource => input
-                .text
-                .trim()
-                .is_empty()
-                .then_some(PexFilterReason::EmptySource),
-            Self::IdentifierLikeSource => {
-                identifier_like_source(input.text).then_some(PexFilterReason::IdentifierLikeSource)
-            }
-            Self::TagListSource => {
-                tag_list_source(input.text).then_some(PexFilterReason::TagListSource)
-            }
-            Self::FunctionContext => {
-                let _ = (
-                    input.path,
-                    input.object_name,
-                    input.state_name,
-                    input.function_name,
-                    input.function_kind,
-                    input.opcode,
-                    input.operand,
-                    input.string_id,
-                    input.call_context,
-                    input.in_concat,
-                );
-                None
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PexFilterReason {
-    EmptySource,
-    IdentifierLikeSource,
-    TagListSource,
-    #[allow(dead_code)]
-    FunctionContextRule,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -89,39 +41,44 @@ pub(crate) struct PexStringFilterInput<'a> {
     pub(crate) in_concat: bool,
 }
 
-fn identifier_like_source(text: &str) -> bool {
-    let trimmed = text.trim();
-    if trimmed.is_empty() || text.chars().any(char::is_whitespace) {
-        return false;
-    }
-    if tag_list_source(trimmed) {
-        return false;
-    }
-    let mut chars = trimmed.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    (first == '_' || first.is_ascii_alphabetic())
-        && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.'))
-}
-
-fn tag_list_source(text: &str) -> bool {
-    let trimmed = text.trim();
-    if !trimmed.contains(',') || trimmed.chars().any(char::is_whitespace) {
-        return false;
-    }
-    let mut count = 0;
-    for token in trimmed.split(',') {
-        if token.is_empty() || !token.chars().all(tag_token_char) {
-            return false;
+impl PexStringFilterInput<'_> {
+    fn as_extraction_input(&self) -> ExtractionFilterInput {
+        let mut input = ExtractionFilterInput::new("pex", asset_path(self.path), self.text)
+            .with_context("path", self.path)
+            .with_context("object", self.object_name)
+            .with_context("state", self.state_name)
+            .with_context("function", self.function_name)
+            .with_context("function_kind", format!("{:?}", self.function_kind))
+            .with_context("opcode", self.opcode.name())
+            .with_context("operand", operand_name(self.operand))
+            .with_context("string_id", self.string_id.index().to_string())
+            .with_context("in_concat", self.in_concat.to_string());
+        if let Some(call_context) = self.call_context {
+            input.insert_context("call_opcode", call_context.opcode.clone());
+            if let Some(target) = &call_context.target {
+                input.insert_context("call_target", target.clone());
+            }
+            if let Some(member) = &call_context.member {
+                input.insert_context("call_member", member.clone());
+            }
         }
-        count += 1;
+        input
     }
-    count >= 2
 }
 
-fn tag_token_char(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | ':')
+fn operand_name(operand: PexOperandPath) -> String {
+    match operand {
+        PexOperandPath::Fixed(index) => format!("fixed-{index}"),
+        PexOperandPath::Variadic(index) => format!("variadic-{index}"),
+    }
+}
+
+fn asset_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    if normalized.len() > 5 && normalized[..5].eq_ignore_ascii_case("Data/") {
+        return normalized[5..].to_string();
+    }
+    normalized
 }
 
 #[cfg(test)]
@@ -146,10 +103,10 @@ mod tests {
 
     #[test]
     fn empty_source_rule_runs_before_other_rules() {
-        let filter = PexStringFilter::default_rules();
+        let filter = PexStringFilter::with_rules(ExtractionFilterSet::default());
 
         let reason = filter.evaluate(&input("   "));
 
-        assert_eq!(reason, Some(PexFilterReason::EmptySource));
+        assert_eq!(reason.unwrap().rule_id(), "core.empty_source");
     }
 }

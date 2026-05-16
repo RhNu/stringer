@@ -1294,6 +1294,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "stringer-extraction-filter"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
 name = "stringer-knowledge"
 version = "0.1.0"
 dependencies = [
@@ -1337,7 +1347,9 @@ version = "0.1.0"
 dependencies = [
  "bytes",
  "stringer-core",
+ "stringer-extraction-filter",
  "thiserror 2.0.18",
+ "toml",
  "tracing",
 ]
 
@@ -1362,8 +1374,10 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "stringer-core",
+ "stringer-extraction-filter",
  "thiserror 2.0.18",
  "tokio",
+ "toml",
  "tracing",
 ]
 
@@ -1399,6 +1413,7 @@ dependencies = [
  "camino",
  "serde_json",
  "stringer-core",
+ "stringer-extraction-filter",
  "stringer-pex",
  "stringer-pipeline",
  "stringer-plugin",
@@ -1421,6 +1436,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stringer-core",
+ "stringer-extraction-filter",
  "stringer-pipeline",
  "stringer-plugin",
  "thiserror 2.0.18",

@@ -9,6 +9,7 @@ use stringer_core::{
     PexOperandPath, PluginStringStorage, StringEntry, StringEntryContext, StringEntrySource,
     StringEntryView,
 };
+use stringer_extraction_filter::{ExtractionFilterConfig, ExtractionFilterSet};
 use stringer_pipeline::{PipelineAnnotation, PipelineDiagnostic};
 
 use crate::WorkspaceCoreError;
@@ -34,6 +35,8 @@ pub struct TranslationManifest {
     pub asset_language: String,
     pub source_locale: String,
     pub target_locale: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extraction_filters: Option<ExtractionFilterConfig>,
     pub files: Vec<TranslationManifestFile>,
 }
 
@@ -178,6 +181,7 @@ pub fn write_translation_package(
         asset_language: language_name(settings.asset_language).to_string(),
         source_locale: settings.source_locale.clone(),
         target_locale: settings.target_locale.clone(),
+        extraction_filters: settings.extraction_filters.config().cloned(),
         files,
     };
     let legacy = path.join(LEGACY_MANIFEST_FILE);
@@ -452,6 +456,12 @@ fn settings_from_manifest(
         source_locale: required_manifest_setting(manifest.source_locale.clone(), "source_locale")?,
         target_locale: required_manifest_setting(manifest.target_locale.clone(), "target_locale")?,
         global_knowledge_root: None,
+        extraction_filters: manifest
+            .extraction_filters
+            .clone()
+            .map(ExtractionFilterSet::from_config)
+            .transpose()?
+            .unwrap_or_default(),
     })
 }
 

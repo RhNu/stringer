@@ -2,6 +2,7 @@ mod support;
 
 use bytes::Bytes;
 use stringer_core::{FileAsset, FileBundle, PluginStringStorage, StringEntrySource};
+use stringer_extraction_filter::{ExtractionFilterConfig, ExtractionFilterSet};
 use stringer_plugin::{
     GameRelease, Language, PluginError, ReadOptions, StringsFile, StringsKind, WriteOptions,
     read_localization, write_localization, write_strings_file,
@@ -550,4 +551,114 @@ async fn filters_whitespace_embedded_record_sources() {
     .unwrap();
 
     assert!(localization.entries().is_empty());
+}
+
+#[tokio::test]
+async fn custom_filter_config_can_disable_builtin_empty_rule_for_plugins() {
+    let plugin = build_plugin(
+        localized_header(),
+        vec![build_major(
+            "WEAP",
+            0x800,
+            0,
+            vec![build_subrecord("FULL", &1u32.to_le_bytes())],
+        )],
+    );
+    let mut strings = StringsFile::new(StringsKind::Normal, Language::English);
+    strings.insert(1, "");
+    let bundle = FileBundle::new(vec![
+        FileAsset::new("Data/MyMod.esp", Bytes::from(plugin)),
+        write_strings_file(
+            "Data/Strings/MyMod_English.STRINGS",
+            &strings,
+            GameRelease::SkyrimSe,
+        )
+        .unwrap(),
+    ]);
+    let config: ExtractionFilterConfig = toml::from_str(
+        r#"
+[[rules]]
+id = "core.empty_source"
+enabled = false
+"#,
+    )
+    .unwrap();
+    let filters = ExtractionFilterSet::from_config(config).unwrap();
+
+    let localization = read_localization(
+        bundle,
+        ReadOptions::new(GameRelease::SkyrimSe, Language::English).with_extraction_filters(filters),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(localization.entries().len(), 1);
+    assert_eq!(localization.entries()[0].text(), "");
+}
+
+#[tokio::test]
+async fn custom_filter_config_can_filter_plugin_record_context() {
+    let plugin = build_plugin(
+        localized_header(),
+        vec![
+            build_major(
+                "WEAP",
+                0x800,
+                0,
+                vec![build_subrecord("FULL", &1u32.to_le_bytes())],
+            ),
+            build_major(
+                "BOOK",
+                0x801,
+                0,
+                vec![build_subrecord("DESC", &2u32.to_le_bytes())],
+            ),
+        ],
+    );
+    let mut strings = StringsFile::new(StringsKind::Normal, Language::English);
+    strings.insert(1, "Iron Sword");
+    let mut dlstrings = StringsFile::new(StringsKind::Dl, Language::English);
+    dlstrings.insert(2, "Book description");
+    let bundle = FileBundle::new(vec![
+        FileAsset::new("Data/MyMod.esp", Bytes::from(plugin)),
+        write_strings_file(
+            "Data/Strings/MyMod_English.STRINGS",
+            &strings,
+            GameRelease::SkyrimSe,
+        )
+        .unwrap(),
+        write_strings_file(
+            "Data/Strings/MyMod_English.DLSTRINGS",
+            &dlstrings,
+            GameRelease::SkyrimSe,
+        )
+        .unwrap(),
+    ]);
+    let config: ExtractionFilterConfig = toml::from_str(
+        r#"
+[[rules]]
+id = "user.skip_book_descriptions"
+when = { all = [
+  { field = "kind", op = "eq", value = "plugin" },
+  { field = "record_type", op = "eq", value = "BOOK" },
+  { field = "subrecord", op = "eq", value = "DESC" },
+] }
+"#,
+    )
+    .unwrap();
+    let filters = ExtractionFilterSet::from_config(config).unwrap();
+
+    let localization = read_localization(
+        bundle,
+        ReadOptions::new(GameRelease::SkyrimSe, Language::English).with_extraction_filters(filters),
+    )
+    .await
+    .unwrap();
+
+    let texts = localization
+        .entries()
+        .iter()
+        .map(|entry| entry.text())
+        .collect::<Vec<_>>();
+    assert_eq!(texts, ["Iron Sword"]);
 }

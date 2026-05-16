@@ -1,64 +1,29 @@
 use stringer_core::PluginStringStorage;
+use stringer_extraction_filter::{
+    ExtractionFilterInput, ExtractionFilterMatch, ExtractionFilterSet, evaluate_builtin,
+};
 
 use crate::{LocalizedFieldSource, StringsKind};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PluginStringFilter {
-    rules: Vec<PluginFilterRule>,
+    rules: ExtractionFilterSet,
 }
 
 impl PluginStringFilter {
-    pub(crate) fn default_rules() -> Self {
-        Self {
-            rules: vec![PluginFilterRule::EmptySource],
-        }
+    pub(crate) fn with_rules(rules: ExtractionFilterSet) -> Self {
+        Self { rules }
     }
 
     pub(crate) fn evaluate(
         &self,
         input: &PluginStringFilterInput<'_>,
-    ) -> Option<PluginFilterReason> {
-        self.rules.iter().find_map(|rule| rule.evaluate(input))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PluginFilterRule {
-    EmptySource,
-    #[allow(dead_code)]
-    RecordContext,
-}
-
-impl PluginFilterRule {
-    fn evaluate(self, input: &PluginStringFilterInput<'_>) -> Option<PluginFilterReason> {
-        match self {
-            Self::EmptySource => input
-                .text
-                .trim()
-                .is_empty()
-                .then_some(PluginFilterReason::EmptySource),
-            Self::RecordContext => {
-                let _ = (
-                    input.path,
-                    input.record_type,
-                    input.form_id,
-                    input.subrecord,
-                    input.field_source,
-                    input.storage,
-                    input.strings_kind,
-                    input.string_id,
-                );
-                None
-            }
+    ) -> Option<ExtractionFilterMatch> {
+        if self.rules.is_default() {
+            return evaluate_builtin("plugin", input.text);
         }
+        self.rules.evaluate(&input.as_extraction_input())
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PluginFilterReason {
-    EmptySource,
-    #[allow(dead_code)]
-    RecordContextRule,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,6 +37,46 @@ pub(crate) struct PluginStringFilterInput<'a> {
     pub(crate) storage: PluginStringStorage,
     pub(crate) strings_kind: StringsKind,
     pub(crate) string_id: Option<u32>,
+}
+
+impl PluginStringFilterInput<'_> {
+    fn as_extraction_input(&self) -> ExtractionFilterInput {
+        let mut input = ExtractionFilterInput::new("plugin", asset_path(self.path), self.text)
+            .with_context("path", self.path)
+            .with_context("record_type", self.record_type)
+            .with_context("form_id", format!("{:#010X}", self.form_id))
+            .with_context("subrecord", self.subrecord)
+            .with_context("field_source", field_source_name(self.field_source))
+            .with_context("storage", storage_name(self.storage))
+            .with_context("strings_kind", self.strings_kind.extension());
+        if let Some(string_id) = self.string_id {
+            input.insert_context("string_id", string_id.to_string());
+        }
+        input
+    }
+}
+
+fn asset_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    if normalized.len() > 5 && normalized[..5].eq_ignore_ascii_case("Data/") {
+        return normalized[5..].to_string();
+    }
+    normalized
+}
+
+fn field_source_name(source: LocalizedFieldSource) -> &'static str {
+    match source {
+        LocalizedFieldSource::Normal => "Normal",
+        LocalizedFieldSource::Dl => "DL",
+        LocalizedFieldSource::Il => "IL",
+    }
+}
+
+fn storage_name(storage: PluginStringStorage) -> &'static str {
+    match storage {
+        PluginStringStorage::Localized => "localized",
+        PluginStringStorage::Embedded => "embedded",
+    }
 }
 
 #[cfg(test)]
@@ -94,10 +99,10 @@ mod tests {
 
     #[test]
     fn empty_source_rule_filters_whitespace_text() {
-        let filter = PluginStringFilter::default_rules();
+        let filter = PluginStringFilter::with_rules(ExtractionFilterSet::default());
 
         let reason = filter.evaluate(&input("  \t "));
 
-        assert_eq!(reason, Some(PluginFilterReason::EmptySource));
+        assert_eq!(reason.unwrap().rule_id(), "core.empty_source");
     }
 }

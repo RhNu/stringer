@@ -4,14 +4,22 @@ use stringer_core::{
     PexOperandPath, PexStringMetadata, StringEntry, StringEntryBundle, StringEntryContext,
     StringEntrySource,
 };
+use stringer_extraction_filter::ExtractionFilterSet;
 use tracing::{debug, instrument, trace};
 
 use crate::filter::{PexStringFilter, PexStringFilterInput};
 use crate::{PexError, PexFile, PexFunction, PexInstruction, PexOpcode, PexStringId, PexValue};
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ReadPexOptions {
-    _reserved: (),
+    extraction_filters: ExtractionFilterSet,
+}
+
+impl ReadPexOptions {
+    pub fn with_extraction_filters(mut self, filters: ExtractionFilterSet) -> Self {
+        self.extraction_filters = filters;
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -148,12 +156,18 @@ pub fn write_pex_file(parsed: &ParsedPex) -> Result<FileAsset, PexError> {
 #[instrument(skip(asset), fields(path = %asset.path()), err)]
 pub fn read_pex_strings(
     asset: FileAsset,
-    _options: ReadPexOptions,
+    options: ReadPexOptions,
 ) -> Result<PexStringBundle, PexError> {
     let parsed = parse_pex_file(&asset)?;
     let mut entries = Vec::new();
     let mut bindings = Vec::new();
-    extract_entries(parsed.path(), parsed.file(), &mut entries, &mut bindings);
+    extract_entries(
+        parsed.path(),
+        parsed.file(),
+        &mut entries,
+        &mut bindings,
+        &PexStringFilter::with_rules(options.extraction_filters),
+    );
     debug!(
         entries = entries.len(),
         bindings = bindings.len(),
@@ -228,8 +242,8 @@ fn extract_entries(
     file: &PexFile,
     entries: &mut Vec<StringEntry>,
     bindings: &mut Vec<PexStringBinding>,
+    filter: &PexStringFilter,
 ) {
-    let filter = PexStringFilter::default_rules();
     for (object_index, object) in file.objects.iter().enumerate() {
         for (property_index, property) in object.properties.iter().enumerate() {
             if let Some(function) = &property.read_function {
@@ -249,7 +263,7 @@ fn extract_entries(
                     function,
                     entries,
                     bindings,
-                    &filter,
+                    filter,
                 );
             }
             if let Some(function) = &property.write_function {
@@ -269,7 +283,7 @@ fn extract_entries(
                     function,
                     entries,
                     bindings,
-                    &filter,
+                    filter,
                 );
             }
         }
@@ -292,7 +306,7 @@ fn extract_entries(
                     function,
                     entries,
                     bindings,
-                    &filter,
+                    filter,
                 );
             }
         }

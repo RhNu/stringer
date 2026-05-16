@@ -4,6 +4,7 @@ use stringer_core::{
     FileBundle, PluginStringMetadata, PluginStringStorage, StringEntry, StringEntryBundle,
     StringEntryContext, StringEntrySource, StringEntryView,
 };
+use stringer_extraction_filter::ExtractionFilterSet;
 use tokio::task;
 use tracing::{debug, instrument, trace};
 
@@ -13,15 +14,25 @@ use crate::{
     parse_plugin_file, parse_strings_file, write_plugin_file, write_strings_file,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ReadOptions {
     release: GameRelease,
     language: Language,
+    extraction_filters: ExtractionFilterSet,
 }
 
 impl ReadOptions {
     pub fn new(release: GameRelease, language: Language) -> Self {
-        Self { release, language }
+        Self {
+            release,
+            language,
+            extraction_filters: ExtractionFilterSet::default(),
+        }
+    }
+
+    pub fn with_extraction_filters(mut self, filters: ExtractionFilterSet) -> Self {
+        self.extraction_filters = filters;
+        self
     }
 }
 
@@ -191,7 +202,7 @@ pub async fn read_localization(
 
     let mut entries = Vec::new();
     let mut bindings = Vec::new();
-    let filter = PluginStringFilter::default_rules();
+    let filter = PluginStringFilter::with_rules(options.extraction_filters);
     for (plugin_entry_index, plugin_entry) in plugin.entries().iter().enumerate() {
         let kind = plugin_entry.strings_kind();
         let (string_id, text) = if let Some(string_id) = plugin_entry.string_id() {

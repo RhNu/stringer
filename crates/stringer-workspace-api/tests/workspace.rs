@@ -175,6 +175,7 @@ async fn import_uses_asset_language_from_manifest() {
             source_locale: "fr".to_string(),
             target_locale: "zh-Hans".to_string(),
             global_knowledge_root: None,
+            extraction_filters: Default::default(),
         },
         force: false,
     })

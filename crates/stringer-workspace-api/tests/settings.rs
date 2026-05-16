@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use stringer_core::Language;
+use stringer_extraction_filter::ExtractionFilterInput;
 use stringer_plugin::GameRelease;
 use stringer_workspace_api::{
     GlobalConfigSource, LoadWorkspaceSettingsOptions, WorkspaceSettingsOverrides,
@@ -42,6 +43,105 @@ target_locale = "zh-Hans"
     assert_eq!(
         settings.global_knowledge_root,
         Some(utf8(&root.path().join("knowledge")))
+    );
+}
+
+#[test]
+fn load_settings_reads_global_extraction_filters() {
+    let root = TempRoot::new("settings-global-extraction-filters");
+    let config = root.path().join("config.toml");
+    write_text(
+        &config,
+        r#"
+game_release = "SkyrimSe"
+asset_language = "English"
+source_locale = "en"
+target_locale = "zh-Hans"
+
+[extraction_filters]
+[[extraction_filters.rules]]
+id = "pex.identifier_like_source"
+enabled = false
+
+[[extraction_filters.rules]]
+id = "user.skip_debug"
+when = { field = "text", op = "contains", value = "DEBUG" }
+"#,
+    );
+
+    let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
+        global_config_source: GlobalConfigSource::ConfigFile(utf8(&config)),
+        workspace_config_path: None,
+        overrides: WorkspaceSettingsOverrides::default(),
+    })
+    .unwrap();
+
+    assert!(
+        settings
+            .extraction_filters
+            .evaluate(&ExtractionFilterInput::new(
+                "pex",
+                "Scripts/Example.pex",
+                "SomeIdentifier"
+            ))
+            .is_none()
+    );
+    assert_eq!(
+        settings
+            .extraction_filters
+            .evaluate(&ExtractionFilterInput::new(
+                "plugin",
+                "MyMod.esp",
+                "DEBUG: skip"
+            ))
+            .unwrap()
+            .rule_id(),
+        "user.skip_debug"
+    );
+}
+
+#[test]
+fn load_settings_ignores_workspace_extraction_filters() {
+    let root = TempRoot::new("settings-workspace-extraction-filters-ignored");
+    let user_config = root.path().join("user/config.toml");
+    let workspace_config = root.path().join("workspace/stringer.toml");
+    write_text(
+        &user_config,
+        r#"
+game_release = "SkyrimSe"
+asset_language = "English"
+source_locale = "en"
+target_locale = "zh-Hans"
+"#,
+    );
+    write_text(
+        &workspace_config,
+        r#"
+[extraction_filters]
+[[extraction_filters.rules]]
+id = "pex.identifier_like_source"
+enabled = false
+"#,
+    );
+
+    let settings = load_workspace_settings(LoadWorkspaceSettingsOptions {
+        global_config_source: GlobalConfigSource::ConfigFile(utf8(&user_config)),
+        workspace_config_path: Some(utf8(&workspace_config)),
+        overrides: WorkspaceSettingsOverrides::default(),
+    })
+    .unwrap();
+
+    assert_eq!(
+        settings
+            .extraction_filters
+            .evaluate(&ExtractionFilterInput::new(
+                "pex",
+                "Scripts/Example.pex",
+                "SomeIdentifier"
+            ))
+            .unwrap()
+            .rule_id(),
+        "pex.identifier_like_source"
     );
 }
 

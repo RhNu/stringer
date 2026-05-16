@@ -350,7 +350,8 @@ async fn read_editable_bundles(
         plugin_files.extend(string_assets.iter().cloned());
         let bundle = read_localization(
             FileBundle::new(plugin_files),
-            ReadOptions::new(settings.game_release, settings.asset_language),
+            ReadOptions::new(settings.game_release, settings.asset_language)
+                .with_extraction_filters(settings.extraction_filters.clone()),
         )
         .await?;
         bundles.push(EditableBundle::Plugin(bundle));
@@ -359,7 +360,7 @@ async fn read_editable_bundles(
     for asset in files.pex().cloned() {
         bundles.push(EditableBundle::Pex(read_pex_strings(
             asset,
-            ReadPexOptions::default(),
+            ReadPexOptions::default().with_extraction_filters(settings.extraction_filters.clone()),
         )?));
     }
 
