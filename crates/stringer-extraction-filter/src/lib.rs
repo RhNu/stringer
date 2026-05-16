@@ -699,11 +699,12 @@ fn identifier_like_source(text: &str) -> bool {
 
 fn tag_list_source(text: &str) -> bool {
     let trimmed = text.trim();
-    if !trimmed.contains(',') || trimmed.chars().any(char::is_whitespace) {
+    if !trimmed.contains(',') {
         return false;
     }
     let mut count = 0;
     for token in trimmed.split(',') {
+        let token = token.trim();
         if token.is_empty() || !token.chars().all(tag_token_char) {
             return false;
         }

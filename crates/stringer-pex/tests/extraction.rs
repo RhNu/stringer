@@ -214,6 +214,7 @@ fn filters_empty_identifier_like_and_tag_list_sources() {
         "queststage01",
         "tag,tag,tag",
         "foo_bar,baz-1",
+        "MF, Tag, U",
         "Open Door",
         "Hello world",
     ]);

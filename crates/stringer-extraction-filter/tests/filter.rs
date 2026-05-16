@@ -8,6 +8,12 @@ fn input(text: &str) -> ExtractionFilterInput {
         .with_context("call_member", "Notification")
 }
 
+fn scoped_input(kind: &str, text: &str) -> ExtractionFilterInput {
+    ExtractionFilterInput::new(kind, "Scripts/Example.pex", text)
+        .with_context("function", "Run")
+        .with_context("call_member", "Notification")
+}
+
 #[test]
 fn expression_tree_supports_all_any_and_not() {
     let config: ExtractionFilterConfig = toml::from_str(
@@ -309,4 +315,22 @@ fn identifier_like_and_tag_list_match_existing_pex_behavior() {
         "pex.tag_list_source"
     );
     assert!(filter.evaluate(&input("Open Door")).is_none());
+}
+
+#[test]
+fn builtin_tag_list_filters_comma_space_pex_sources_only() {
+    let filter = ExtractionFilterSet::default();
+
+    assert_eq!(
+        filter
+            .evaluate(&scoped_input("pex", "MF, Tag, U"))
+            .unwrap()
+            .rule_id(),
+        "pex.tag_list_source"
+    );
+    assert!(
+        filter
+            .evaluate(&scoped_input("plugin", "MF, Tag, U"))
+            .is_none()
+    );
 }
