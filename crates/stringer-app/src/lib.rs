@@ -17,7 +17,6 @@ pub use knowledge::{
     knowledge_term_upsert, knowledge_validate, knowledge_validate_with_progress,
     parse_knowledge_kind,
 };
-pub use stringer_interface::*;
 pub use stringer_knowledge::{KnowledgeOperation, KnowledgeProgressEvent, KnowledgeProgressPhase};
 pub use workspace::{
     workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,

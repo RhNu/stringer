@@ -52,14 +52,12 @@ pub enum ExtractionFilterError {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ExtractionFilterConfig {
     #[serde(default)]
     pub rules: Vec<ExtractionFilterRuleConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ExtractionFilterRuleConfig {
     pub id: String,
     #[serde(default = "default_enabled")]
@@ -71,7 +69,6 @@ pub struct ExtractionFilterRuleConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 #[serde(rename_all = "snake_case")]
 #[serde(untagged)]
 pub enum ExtractionFilterExpression {
@@ -400,7 +397,7 @@ impl CompiledCondition {
         let field = input.field_value(&self.field);
         match self.op {
             ExtractionFilterOperator::Exists => field.is_some(),
-            ExtractionFilterOperator::IsEmpty => field.is_none_or(|value| value.trim().is_empty()),
+            ExtractionFilterOperator::IsEmpty => field.is_some_and(|value| value.trim().is_empty()),
             ExtractionFilterOperator::IdentifierLike => field.is_some_and(identifier_like_source),
             ExtractionFilterOperator::TagList => field.is_some_and(tag_list_source),
             ExtractionFilterOperator::Eq => self.value.as_ref().is_some_and(|value| {
@@ -570,7 +567,7 @@ fn validate_field(id: &str, field: &str) -> Result<(), ExtractionFilterError> {
         && field
             .chars()
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_'));
-    if !valid || !SUPPORTED_FIELDS.contains(&field) {
+    if !valid {
         return Err(ExtractionFilterError::InvalidField {
             id: id.to_string(),
             field: field.to_string(),
@@ -720,27 +717,3 @@ fn tag_token_char(ch: char) -> bool {
 fn default_enabled() -> bool {
     true
 }
-
-const SUPPORTED_FIELDS: &[&str] = &[
-    "kind",
-    "asset_path",
-    "path",
-    "text",
-    "record_type",
-    "form_id",
-    "subrecord",
-    "field_source",
-    "storage",
-    "strings_kind",
-    "string_id",
-    "object",
-    "state",
-    "function",
-    "function_kind",
-    "opcode",
-    "operand",
-    "call_opcode",
-    "call_target",
-    "call_member",
-    "in_concat",
-];

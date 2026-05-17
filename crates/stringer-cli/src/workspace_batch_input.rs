@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use stringer_app::WorkspaceBatchSubmitActionInput;
+use stringer_interface::WorkspaceBatchSubmitActionInput;
 
 use crate::app::{CliError, read_input};
 

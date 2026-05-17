@@ -7,8 +7,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
 use stringer_workspace_core::fsutil::{replace_file, temp_path};
 use stringer_workspace_core::{
-    BatchEntry, BatchFile, BatchScope, TranslationRecord, WorkspaceLock, claimed_entry_ids,
-    read_batch_file, read_translation_package_records, unix_ms, validate_batch_id,
+    BATCH_FORMAT_VERSION, BatchEntry, BatchFile, BatchScope, TranslationRecord, WorkspaceLock,
+    claimed_entry_ids, read_batch_file, read_translation_package_records, unix_ms,
+    validate_batch_id,
 };
 
 use crate::WorkspaceOpsError;
@@ -138,10 +139,10 @@ pub fn claim_batch(options: ClaimBatchOptions) -> Result<ClaimedBatch, Workspace
     claimed_after.extend(ids.iter().cloned());
     let batch = BatchFile {
         schema_version: stringer_workspace_core::SCHEMA_VERSION,
-        batch_format_version: Some(2),
+        batch_format_version: BATCH_FORMAT_VERSION,
         batch_id: batch_id.clone(),
         created_at_unix_ms: unix_ms(),
-        revision: Some(1),
+        revision: 1,
         scope: scope.clone(),
         entries: ids
             .into_iter()
@@ -151,7 +152,6 @@ pub fn claim_batch(options: ClaimBatchOptions) -> Result<ClaimedBatch, Workspace
                 id,
             })
             .collect(),
-        entry_ids: Vec::new(),
     };
     write_batch_file(&options.workspace, &batch)?;
     Ok(ClaimedBatch {

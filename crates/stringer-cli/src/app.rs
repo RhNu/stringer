@@ -5,13 +5,15 @@ use std::io::{self, Read};
 use camino::Utf8PathBuf;
 use clap::{ArgAction, Parser, Subcommand, ValueEnum};
 use stringer_app::{
-    AdaptFormatInput, AdaptImportRequest, AppError, KnowledgeAnnotateRequest,
-    KnowledgeIndexRebuildRequest, KnowledgeLookupFieldInput, KnowledgeLookupRequest,
-    KnowledgeLookupSourceInput, KnowledgeTermDeleteRequest, KnowledgeTermInput,
-    KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, KnowledgeValidateRequest, adapt_import,
-    knowledge_annotate_with_progress, knowledge_index_rebuild_with_progress, knowledge_lookup,
-    knowledge_term_delete, knowledge_term_upsert, knowledge_validate_with_progress,
-    parse_knowledge_kind,
+    AppError, adapt_import, knowledge_annotate_with_progress,
+    knowledge_index_rebuild_with_progress, knowledge_lookup, knowledge_term_delete,
+    knowledge_term_upsert, knowledge_validate_with_progress, parse_knowledge_kind,
+};
+use stringer_interface::{
+    AdaptFormatInput, AdaptImportRequest, KnowledgeAnnotateRequest, KnowledgeIndexRebuildRequest,
+    KnowledgeLookupFieldInput, KnowledgeLookupRequest, KnowledgeLookupSourceInput,
+    KnowledgeTermDeleteRequest, KnowledgeTermInput, KnowledgeTermStatusInput,
+    KnowledgeTermUpsertRequest, KnowledgeValidateRequest,
 };
 use thiserror::Error;
 

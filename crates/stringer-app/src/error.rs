@@ -79,6 +79,7 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::UnsupportedTranslationSchema { .. } => {
             "workspace.unsupported_translation_schema"
         }
+        WorkspaceError::UnsupportedBatchFormat { .. } => "workspace.unsupported_batch_format",
         WorkspaceError::LegacyTranslationWorkspace { .. } => {
             "workspace.legacy_translation_workspace"
         }
@@ -155,6 +156,9 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         }
         WorkspaceError::ExtractionFilter(error) => json!({ "message": error.to_string() }),
         WorkspaceError::UnsupportedTranslationSchema { path, version } => {
+            json!({ "path": json_path(path), "version": version })
+        }
+        WorkspaceError::UnsupportedBatchFormat { path, version } => {
             json!({ "path": json_path(path), "version": version })
         }
         WorkspaceError::InvalidTranslationPackagePath { path, message } => {
@@ -275,6 +279,7 @@ fn workspace_core_error_code(error: &WorkspaceCoreError) -> &'static str {
         WorkspaceCoreError::UnsupportedTranslationSchema { .. } => {
             "workspace.unsupported_translation_schema"
         }
+        WorkspaceCoreError::UnsupportedBatchFormat { .. } => "workspace.unsupported_batch_format",
         WorkspaceCoreError::LegacyTranslationWorkspace { .. } => {
             "workspace.legacy_translation_workspace"
         }
@@ -306,6 +311,9 @@ fn workspace_core_error_details(error: &WorkspaceCoreError) -> Value {
         }
         WorkspaceCoreError::ExtractionFilter(error) => json!({ "message": error.to_string() }),
         WorkspaceCoreError::UnsupportedTranslationSchema { path, version } => {
+            json!({ "path": json_path(path), "version": version })
+        }
+        WorkspaceCoreError::UnsupportedBatchFormat { path, version } => {
             json!({ "path": json_path(path), "version": version })
         }
         WorkspaceCoreError::InvalidTranslationPackagePath { path, message } => {

@@ -7,21 +7,18 @@ use serde::{Deserialize, Serialize};
 use crate::WorkspaceCoreError;
 
 const BATCHES_DIR: &str = "batches";
+pub const BATCH_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BatchFile {
     pub schema_version: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub batch_format_version: Option<u32>,
+    pub batch_format_version: u32,
     pub batch_id: String,
     pub created_at_unix_ms: u128,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revision: Option<u64>,
+    pub revision: u64,
     pub scope: BatchScope,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<BatchEntry>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub entry_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,29 +28,8 @@ pub struct BatchEntry {
 }
 
 impl BatchFile {
-    pub fn revision(&self) -> u64 {
-        self.revision.unwrap_or(1)
-    }
-
-    pub fn keyed_entries(&self) -> Vec<BatchEntry> {
-        if !self.entries.is_empty() {
-            return self.entries.clone();
-        }
-        self.entry_ids
-            .iter()
-            .enumerate()
-            .map(|(index, id)| BatchEntry {
-                key: batch_key(index),
-                id: id.clone(),
-            })
-            .collect()
-    }
-
     pub fn remaining_ids(&self) -> Vec<String> {
-        self.keyed_entries()
-            .into_iter()
-            .map(|entry| entry.id)
-            .collect()
+        self.entries.iter().cloned().map(|entry| entry.id).collect()
     }
 }
 
@@ -104,7 +80,9 @@ fn read_batch_files(workspace: &Utf8Path) -> Result<Vec<BatchFile>, WorkspaceCor
             }
         })?;
         if path.extension() == Some("json") {
-            batches.push(read_json(&path)?);
+            let batch: BatchFile = read_json(&path)?;
+            validate_batch_format(&path, &batch)?;
+            batches.push(batch);
         }
     }
     Ok(batches)
@@ -122,6 +100,7 @@ pub fn read_batch_file(
         });
     }
     let batch: BatchFile = read_json(&path)?;
+    validate_batch_format(&path, &batch)?;
     validate_loaded_batch_id(batch_id, &batch.batch_id)?;
     Ok(batch)
 }
@@ -151,6 +130,22 @@ fn validate_loaded_batch_id(requested: &str, loaded: &str) -> Result<(), Workspa
     })
 }
 
+fn validate_batch_format(path: &Utf8Path, batch: &BatchFile) -> Result<(), WorkspaceCoreError> {
+    if batch.schema_version != crate::SCHEMA_VERSION {
+        return Err(WorkspaceCoreError::UnsupportedTranslationSchema {
+            path: path.to_owned(),
+            version: batch.schema_version,
+        });
+    }
+    if batch.batch_format_version != BATCH_FORMAT_VERSION {
+        return Err(WorkspaceCoreError::UnsupportedBatchFormat {
+            path: path.to_owned(),
+            version: batch.batch_format_version,
+        });
+    }
+    Ok(())
+}
+
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Utf8Path) -> Result<T, WorkspaceCoreError> {
     let text = fs::read_to_string(path).map_err(|source| WorkspaceCoreError::ReadFile {
         path: path.to_owned(),
@@ -160,8 +155,4 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Utf8Path) -> Result<T, Workspa
         path: path.to_owned(),
         source,
     })
-}
-
-fn batch_key(index: usize) -> String {
-    format!("e{:03}", index + 1)
 }

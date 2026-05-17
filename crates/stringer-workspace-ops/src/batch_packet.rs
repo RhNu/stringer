@@ -7,13 +7,12 @@ use serde::{Deserialize, Serialize};
 use stringer_pipeline::{PipelineAnnotation, PipelineDiagnostic};
 use stringer_workspace_core::fsutil::{replace_file, temp_path};
 use stringer_workspace_core::{
-    BatchFile, TranslationMeta, TranslationRecord, WorkspaceLock, read_batch_file,
-    read_translation_package_records, unix_ms, write_translation_package_records,
+    BATCH_FORMAT_VERSION, BatchFile, TranslationMeta, TranslationRecord, WorkspaceLock,
+    read_batch_file, read_translation_package_records, unix_ms, write_translation_package_records,
 };
 
 use crate::{WorkspaceOpsError, workspace_context_label};
 
-const BATCH_FORMAT_VERSION: u32 = 2;
 const BATCH_WORK_DIR: &str = "batch-work";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,7 +216,7 @@ pub fn read_batch(options: ReadBatchOptions) -> Result<BatchRead, WorkspaceOpsEr
         .take(end.saturating_sub(start))
         .map(compact_entry)
         .collect();
-    let revision = batch.revision();
+    let revision = batch.revision;
     Ok(BatchRead {
         batch_id: batch.batch_id,
         revision,
@@ -246,7 +245,7 @@ pub fn read_batch_detail(
         .filter(|entry| requested.contains(&entry.key))
         .map(|entry| detail_entry(entry, &batch.batch_id))
         .collect();
-    let revision = batch.revision();
+    let revision = batch.revision;
     Ok(BatchDetail {
         batch_id: batch.batch_id,
         revision,
@@ -257,7 +256,7 @@ pub fn read_batch_detail(
 pub fn submit_batch(options: BatchSubmitOptions) -> Result<BatchSubmitSummary, WorkspaceOpsError> {
     let _lock = WorkspaceLock::acquire(&options.workspace)?;
     let mut batch = read_batch_file(&options.workspace, &options.batch_id)?;
-    let current_revision = batch.revision();
+    let current_revision = batch.revision;
     if current_revision != options.revision {
         return Err(WorkspaceOpsError::BatchRevisionConflict {
             batch_id: options.batch_id,
@@ -266,8 +265,8 @@ pub fn submit_batch(options: BatchSubmitOptions) -> Result<BatchSubmitSummary, W
         });
     }
 
-    let keyed_entries = batch.keyed_entries();
-    let key_to_id = keyed_entries
+    let original_entries = batch.entries.clone();
+    let key_to_id = original_entries
         .iter()
         .map(|entry| (entry.key.clone(), entry.id.clone()))
         .collect::<BTreeMap<_, _>>();
@@ -324,7 +323,7 @@ pub fn submit_batch(options: BatchSubmitOptions) -> Result<BatchSubmitSummary, W
             applied_entries: 0,
             ignored_entries: ignored,
             rejected_entries: rejected,
-            remaining_entries: keyed_entries.len(),
+            remaining_entries: original_entries.len(),
             next_read_offset: 0,
             results,
         });
@@ -372,15 +371,14 @@ pub fn submit_batch(options: BatchSubmitOptions) -> Result<BatchSubmitSummary, W
     } else {
         current_revision
     };
-    let remaining_entries = keyed_entries
+    let remaining_entries = original_entries
         .into_iter()
         .filter(|entry| !applied_keys.contains(&entry.key))
         .collect::<Vec<_>>();
     write_translation_package_records(&options.workspace, &package)?;
-    batch.batch_format_version = Some(BATCH_FORMAT_VERSION);
-    batch.revision = Some(revision);
+    batch.batch_format_version = BATCH_FORMAT_VERSION;
+    batch.revision = revision;
     batch.entries = remaining_entries;
-    batch.entry_ids.clear();
     if batch.entries.is_empty() {
         remove_batch_file(&options.workspace, &batch.batch_id)?;
     } else {
@@ -529,12 +527,14 @@ fn hydrate_batch_entries(
         }
     }
     let mut hydrated = Vec::new();
-    for entry in batch.keyed_entries() {
+    for entry in &batch.entries {
         let Some((file, record)) = records.get(&entry.id) else {
-            return Err(WorkspaceOpsError::UnknownTranslationId { id: entry.id });
+            return Err(WorkspaceOpsError::UnknownTranslationId {
+                id: entry.id.clone(),
+            });
         };
         hydrated.push(HydratedBatchEntry {
-            key: entry.key,
+            key: entry.key.clone(),
             file: file.clone(),
             record: record.clone(),
         });
@@ -564,7 +564,7 @@ fn write_json_submission(
 ) -> Result<(), WorkspaceOpsError> {
     let submission = serde_json::json!({
         "batch_id": &batch.batch_id,
-        "revision": batch.revision(),
+        "revision": batch.revision,
         "entries": entries.iter().map(export_entry).collect::<Vec<_>>(),
     });
     write_json_atomic(path, &submission)
@@ -591,8 +591,7 @@ fn write_csv_submission(
 ) -> Result<(), WorkspaceOpsError> {
     let mut text = format!(
         "# stringer batch_id={} revision={}\n",
-        batch.batch_id,
-        batch.revision()
+        batch.batch_id, batch.revision
     );
     text.push_str(
         "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",

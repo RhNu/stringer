@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchCountRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
@@ -26,7 +25,6 @@ pub struct WorkspaceBatchCountResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchClaimRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
@@ -52,7 +50,6 @@ pub struct WorkspaceBatchClaimResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchReleaseRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
@@ -65,7 +62,6 @@ pub struct WorkspaceBatchReleaseResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchReadRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
@@ -77,7 +73,6 @@ pub struct WorkspaceBatchReadRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchDetailRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
@@ -137,7 +132,6 @@ pub struct WorkspaceBatchDetailEntryResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchSubmitRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
@@ -147,7 +141,6 @@ pub struct WorkspaceBatchSubmitRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchSubmitEntry {
     pub key: String,
     pub action: WorkspaceBatchSubmitActionInput,
@@ -201,7 +194,6 @@ pub enum WorkspaceBatchExportFormatInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceBatchExportRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,

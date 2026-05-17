@@ -3,16 +3,19 @@ use std::fs;
 
 use serde_json::Value;
 use stringer_app::{
-    AdaptFormatInput, AdaptImportRequest, AppError, InspectDiagnosticSeverityInput,
-    InspectEntryStatusInput, KnowledgeTermInput, KnowledgeTermStatusInput,
-    KnowledgeTermUpsertRequest, SettingsInput, StringerApp, WorkspaceBatchClaimRequest,
-    WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest, WorkspaceBatchReadRequest,
-    WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry, WorkspaceBatchSubmitRequest,
-    WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
-    WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest, WorkspaceOpenRequest, adapt_import,
-    knowledge_term_upsert, workspace_batch_claim, workspace_batch_count, workspace_batch_detail,
-    workspace_batch_read, workspace_batch_submit, workspace_finalize,
-    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_normalize,
+    AppError, StringerApp, adapt_import, knowledge_term_upsert, workspace_batch_claim,
+    workspace_batch_count, workspace_batch_detail, workspace_batch_read, workspace_batch_submit,
+    workspace_finalize, workspace_inspect_diagnostics, workspace_inspect_entries,
+    workspace_normalize,
+};
+use stringer_interface::{
+    AdaptFormatInput, AdaptImportRequest, InspectDiagnosticSeverityInput, InspectEntryStatusInput,
+    KnowledgeTermInput, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, SettingsInput,
+    WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest,
+    WorkspaceBatchReadRequest, WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry,
+    WorkspaceBatchSubmitRequest, WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectEntriesRequest, WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest,
+    WorkspaceOpenRequest,
 };
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceCoreError};
 

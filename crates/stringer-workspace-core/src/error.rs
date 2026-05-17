@@ -66,6 +66,9 @@ pub enum WorkspaceCoreError {
     #[error("unsupported translation package schema version {version} in `{path}`")]
     UnsupportedTranslationSchema { path: Utf8PathBuf, version: u32 },
 
+    #[error("unsupported batch format version {version} in `{path}`")]
+    UnsupportedBatchFormat { path: Utf8PathBuf, version: u32 },
+
     #[error(
         "legacy translation workspace `{path}` uses manifest.json; recreate it with workspace open"
     )]

@@ -91,24 +91,22 @@ when = { field = "text", op = "matches", value = "x" }
 }
 
 #[test]
-fn unknown_fields_are_rejected() {
+fn unknown_runtime_fields_compile_but_do_not_match() {
     let config: ExtractionFilterConfig = toml::from_str(
         r#"
 [[rules]]
 id = "user.bad_field"
 when = { field = "tex", op = "contains", value = "x" }
+
+[[rules]]
+id = "user.bad_empty_field"
+when = { field = "tex", op = "is_empty" }
 "#,
     )
     .unwrap();
+    let filter = ExtractionFilterSet::from_config(config).unwrap();
 
-    let error = ExtractionFilterSet::from_config(config).unwrap_err();
-
-    assert!(
-        error
-            .to_string()
-            .contains("invalid extraction filter field")
-    );
-    assert!(error.to_string().contains("tex"));
+    assert!(filter.evaluate(&scoped_input("plugin", "x")).is_none());
 }
 
 #[test]
@@ -128,8 +126,8 @@ when = { all = [] }
 }
 
 #[test]
-fn extra_expression_keys_are_rejected() {
-    let error = toml::from_str::<ExtractionFilterConfig>(
+fn extra_expression_keys_are_ignored() {
+    let config = toml::from_str::<ExtractionFilterConfig>(
         r#"
 [[rules]]
 id = "user.extra_key"
@@ -138,10 +136,34 @@ when = { all = [
 ], field = "text" }
 "#,
     )
-    .unwrap_err();
+    .unwrap();
+    let filter = ExtractionFilterSet::from_config(config).unwrap();
 
-    let message = error.to_string();
-    assert!(message.contains("unknown field") || message.contains("did not match any variant"));
+    assert_eq!(
+        filter.evaluate(&input("DEBUG: opened")).unwrap().rule_id(),
+        "user.extra_key"
+    );
+}
+
+#[test]
+fn extra_config_and_rule_keys_are_ignored() {
+    let config: ExtractionFilterConfig = toml::from_str(
+        r#"
+unused_top_level = true
+
+[[rules]]
+id = "user.extra_config"
+description = "old metadata"
+when = { field = "text", op = "contains", value = "DEBUG" }
+"#,
+    )
+    .unwrap();
+    let filter = ExtractionFilterSet::from_config(config).unwrap();
+
+    assert_eq!(
+        filter.evaluate(&input("DEBUG: opened")).unwrap().rule_id(),
+        "user.extra_config"
+    );
 }
 
 #[test]

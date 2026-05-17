@@ -51,6 +51,31 @@ pub fn workspace_with_rows(label: &str, rows: &str) -> WorkspaceFixture {
 
 #[allow(dead_code)]
 pub fn write_batch(workspace: &Path, batch_id: &str, entry_ids: &[&str]) {
+    let entries = entry_ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| format!(r#"{{"key":"e{:03}","id":"{id}"}}"#, index + 1))
+        .collect::<Vec<_>>()
+        .join(",");
+    write_text(
+        &workspace.join("batches").join(format!("{batch_id}.json")),
+        &format!(
+            r#"{{
+  "schema_version": 4,
+  "batch_format_version": 2,
+  "batch_id": "{batch_id}",
+  "created_at_unix_ms": 1,
+  "revision": 1,
+  "scope": {{"file": "entries/scaleform/MyMod.jsonl"}},
+  "entries": [{entries}]
+}}
+"#
+        ),
+    );
+}
+
+#[allow(dead_code)]
+pub fn write_legacy_batch(workspace: &Path, batch_id: &str, entry_ids: &[&str]) {
     let ids = entry_ids
         .iter()
         .map(|id| format!(r#""{id}""#))

@@ -251,7 +251,7 @@ fn parse_rules(
                     "EndRule without StartRule",
                 ));
             };
-            finish_rule(path, line_number, builder, &mut rules, &mut warnings)?;
+            finish_rule(builder, &mut rules, &mut warnings);
             continue;
         }
         if let Some(builder) = &mut current
@@ -274,16 +274,10 @@ fn parse_rules(
 }
 
 fn finish_rule(
-    path: &Utf8PathBuf,
-    line: usize,
     builder: RuleBuilder,
     rules: &mut Vec<NormalizeRule>,
     warnings: &mut Vec<NormalizeWarning>,
-) -> Result<(), WorkspaceOpsError> {
-    validate_supported_value(path, line, &builder, "mode", "0")?;
-    validate_supported_value(path, line, &builder, "select", "0")?;
-    validate_supported_value(path, line, &builder, "alllists", "1")?;
-
+) {
     let search = builder.values.get("search").cloned().unwrap_or_default();
     let replace = builder.values.get("replace").cloned().unwrap_or_default();
     if search.is_empty() || replace.is_empty() {
@@ -311,27 +305,6 @@ fn finish_rule(
         search,
         replace,
     });
-    Ok(())
-}
-
-fn validate_supported_value(
-    path: &Utf8PathBuf,
-    line: usize,
-    builder: &RuleBuilder,
-    key: &'static str,
-    expected: &'static str,
-) -> Result<(), WorkspaceOpsError> {
-    let Some(value) = builder.values.get(key) else {
-        return Ok(());
-    };
-    if value == expected {
-        return Ok(());
-    }
-    Err(rule_parse_error(
-        path,
-        line,
-        format!("unsupported {key}={value}; only {key}={expected} is supported"),
-    ))
 }
 
 fn add_cross_rule_warnings(rules: &[NormalizeRule], warnings: &mut Vec<NormalizeWarning>) {

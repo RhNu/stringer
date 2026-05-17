@@ -1,5 +1,5 @@
 use stringer_workspace_ops::{
-    NormalizeRuleEncoding, NormalizeWorkspaceOptions, WorkspaceOpsError, normalize_workspace,
+    NormalizeRuleEncoding, NormalizeWorkspaceOptions, normalize_workspace,
 };
 
 mod support;
@@ -253,7 +253,7 @@ fn normalize_decodes_utf8_bom_rules() {
 }
 
 #[test]
-fn normalize_reports_rule_warnings_and_rejects_unsupported_rules() {
+fn normalize_reports_rule_warnings_and_ignores_extra_rule_keys() {
     let fixture = workspace_with_rows(
         "normalize-warnings",
         r#"{"id":"scaleform:MyMod:$Desc","source":"Steel Sword","translation":"钢剑"}"#,
@@ -293,9 +293,9 @@ fn normalize_reports_rule_warnings_and_rejects_unsupported_rules() {
 
     write_text(
         &rules,
-        "StartRule\nSearch=钢剑\nReplace=熟铁剑\nmode=1\nEndRule\n",
+        "StartRule\nSearch=钢剑\nReplace=熟铁剑\nmode=1\nselect=2\nAllLists=0\nPattern=[%REPLACE%] %ORIG%\nEndRule\n",
     );
-    let err = normalize_workspace(NormalizeWorkspaceOptions {
+    let summary = normalize_workspace(NormalizeWorkspaceOptions {
         workspace: utf8(fixture.workspace()),
         rules: utf8(&rules),
         file: None,
@@ -303,11 +303,34 @@ fn normalize_reports_rule_warnings_and_rejects_unsupported_rules() {
         encoding: NormalizeRuleEncoding::Utf8,
         limit: 10,
     })
-    .unwrap_err();
-    assert!(matches!(
-        err,
-        WorkspaceOpsError::NormalizeRuleParse { line: 5, .. }
-    ));
+    .unwrap();
+    assert_eq!(summary.changed_entries, 1);
+    assert_eq!(summary.total_replacements, 1);
+}
+
+#[test]
+fn normalize_drops_unknown_record_fields_when_writing() {
+    let fixture = workspace_with_rows(
+        "normalize-drops-extra",
+        r#"{"id":"scaleform:MyMod:$Desc","source":"Steel Sword","translation":"钢剑","legacy_field":"remove me"}"#,
+    );
+    let rules = fixture.workspace().join("rules.txt");
+    write_text(&rules, "StartRule\nSearch=钢剑\nReplace=熟铁剑\nEndRule\n");
+
+    let summary = normalize_workspace(NormalizeWorkspaceOptions {
+        workspace: utf8(fixture.workspace()),
+        rules: utf8(&rules),
+        file: None,
+        apply: true,
+        encoding: NormalizeRuleEncoding::Utf8,
+        limit: 10,
+    })
+    .unwrap();
+
+    assert_eq!(summary.changed_entries, 1);
+    let rows = jsonl_rows(&fixture.workspace().join(ENTRY_FILE));
+    assert_eq!(rows[0]["translation"], "熟铁剑");
+    assert!(rows[0].get("legacy_field").is_none());
 }
 
 fn cp936_rule(search: &str, replace: &str) -> Vec<u8> {

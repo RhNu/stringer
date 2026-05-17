@@ -2,7 +2,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct SettingsInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_release: Option<String>,
@@ -15,7 +14,6 @@ pub struct SettingsInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceOpenRequest {
     pub source_root: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -32,7 +30,6 @@ pub struct WorkspaceOpenResponse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceFinalizeRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
@@ -59,7 +56,6 @@ pub enum WorkspaceNormalizeEncodingInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct WorkspaceNormalizeRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,

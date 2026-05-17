@@ -4,7 +4,6 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use stringer_core::{
     PexOperandPath, PluginStringStorage, StringEntry, StringEntryContext, StringEntrySource,
     StringEntryView,
@@ -64,9 +63,6 @@ pub struct TranslationRecord {
     pub hints: Vec<PipelineAnnotation>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<PipelineDiagnostic>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[serde(flatten)]
-    pub extra: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -131,7 +127,6 @@ pub fn packaged_record_from_entry(
             context,
             hints: Vec::new(),
             diagnostics: Vec::new(),
-            extra: BTreeMap::new(),
         },
     }
 }

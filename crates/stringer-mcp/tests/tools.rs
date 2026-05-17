@@ -30,12 +30,9 @@ fn mcp_workspace_open_params_share_interface_contract_type() {
 
     assert_eq!(params.workspace.as_deref(), Some("translations"));
     assert_workspace_open_interface(params.clone());
-    assert_workspace_open_app(params);
 }
 
 fn assert_workspace_open_interface(_: stringer_interface::WorkspaceOpenRequest) {}
-
-fn assert_workspace_open_app(_: stringer_app::WorkspaceOpenRequest) {}
 
 #[tokio::test]
 async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
@@ -103,56 +100,44 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
 }
 
 #[test]
-fn mcp_params_reject_removed_workspace_path_fields() {
+fn mcp_params_ignore_removed_workspace_path_fields() {
     let open_root = serde_json::from_value::<WorkspaceOpenRequest>(json!({
         "source_root": "input",
         "root": "old-workspace"
     }))
-    .unwrap_err();
-    assert!(open_root.to_string().contains("unknown field `root`"));
+    .unwrap();
+    assert_eq!(open_root.source_root, "input");
+    assert!(open_root.workspace.is_none());
 
     let open_project = serde_json::from_value::<WorkspaceOpenRequest>(json!({
         "source_root": "input",
         "project_root": "old-workspace"
     }))
-    .unwrap_err();
-    assert!(
-        open_project
-            .to_string()
-            .contains("unknown field `project_root`")
-    );
+    .unwrap();
+    assert_eq!(open_project.source_root, "input");
+    assert!(open_project.workspace.is_none());
 
     let finalize_override = serde_json::from_value::<WorkspaceFinalizeRequest>(json!({
         "override_root": "old-output"
     }))
-    .unwrap_err();
-    assert!(
-        finalize_override
-            .to_string()
-            .contains("unknown field `override_root`")
-    );
+    .unwrap();
+    assert!(finalize_override.output.is_none());
 
     let lookup_project = serde_json::from_value::<KnowledgeLookupRequest>(json!({
         "text": "Iron Sword",
         "project_root": "old-workspace"
     }))
-    .unwrap_err();
-    assert!(
-        lookup_project
-            .to_string()
-            .contains("unknown field `project_root`")
-    );
+    .unwrap();
+    assert_eq!(lookup_project.text, "Iron Sword");
+    assert!(lookup_project.workspace.is_none());
 
     let normalize_old_path = serde_json::from_value::<WorkspaceNormalizeRequest>(json!({
         "workspace": "translations",
+        "rules": "rules.txt",
         "rule_path": "rules.txt"
     }))
-    .unwrap_err();
-    assert!(
-        normalize_old_path
-            .to_string()
-            .contains("unknown field `rule_path`")
-    );
+    .unwrap();
+    assert_eq!(normalize_old_path.rules, "rules.txt");
 }
 
 #[tokio::test]

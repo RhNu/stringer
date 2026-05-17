@@ -392,3 +392,52 @@ fn batch_export_json_and_csv_submission_files_can_be_submitted() {
         "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason"
     ));
 }
+
+#[test]
+fn batch_submit_drops_unknown_record_fields_when_writing() {
+    let fixture = workspace_with_rows(
+        "packet-drops-extra",
+        r#"{"id":"scaleform:MyMod:$Title","source":"Iron Sword","legacy_field":"remove me"}"#,
+    );
+    let claim = claim_batch(ClaimBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        file: Some(ENTRY_FILE.to_string()),
+        limit: 1,
+    })
+    .unwrap();
+    let batch_id = claim.batch_id.expect("batch id");
+
+    let summary = submit_batch(BatchSubmitOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id,
+        revision: 1,
+        entries: vec![BatchSubmitEntry {
+            key: "e001".to_string(),
+            action: BatchSubmitAction::Translate,
+            translation: Some("熟铁剑".to_string()),
+            skip_reason: None,
+        }],
+    })
+    .unwrap();
+
+    assert_eq!(summary.applied_entries, 1);
+    let rows = jsonl_rows(&fixture.workspace().join(ENTRY_FILE));
+    assert_eq!(rows[0]["translation"], "熟铁剑");
+    assert!(rows[0].get("legacy_field").is_none());
+}
+
+#[test]
+fn old_entry_ids_batch_files_are_rejected() {
+    let fixture = workspace_with_rows("packet-old-entry-ids", rows());
+    write_legacy_batch(fixture.workspace(), "legacy", &["scaleform:MyMod:$Title"]);
+
+    let error = read_batch(ReadBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: "legacy".to_string(),
+        offset: 0,
+        limit: 10,
+    })
+    .unwrap_err();
+
+    assert!(error.to_string().contains("failed to process JSON"));
+}

@@ -1,6 +1,12 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 use stringer_app::{
+    workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
+    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
+    workspace_inspect_files, workspace_normalize, workspace_open,
+};
+use stringer_interface::{
     InspectDiagnosticSeverityInput, InspectEntryStatusInput, SettingsInput,
     WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest,
     WorkspaceBatchExportFormatInput, WorkspaceBatchExportRequest, WorkspaceBatchReadRequest,
@@ -8,10 +14,6 @@ use stringer_app::{
     WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
     WorkspaceInspectEntryRequest, WorkspaceInspectFilesRequest, WorkspaceNormalizeEncodingInput,
     WorkspaceNormalizeRequest, WorkspaceNormalizeResponse, WorkspaceOpenRequest,
-    workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
-    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
-    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
-    workspace_inspect_files, workspace_normalize, workspace_open,
 };
 
 use crate::app::{CliError, print_json};
