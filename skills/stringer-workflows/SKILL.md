@@ -13,6 +13,7 @@ description: Use when an agent needs to operate Stringer MCP tools for Bethesda 
 - Use `knowledge_lookup` before choosing translations for suspected terms, uncertain names, repeated phrases, or diagnostic review.
 - Use `knowledge_term_upsert` and `knowledge_term_delete` for workspace terminology edits; do not hand-edit term TOML.
 - Only write terminology that has been verified through lookup evidence and entry context. Do not create or update terms from knowledge-base intuition or memory alone.
+- Prefer deriving local workspace terminology from NPC and place-name related entries first; use their record context as the strongest local evidence before generalizing a term.
 - Run `knowledge_validate` before `workspace_finalize`. Finalize requires no claimable rows, active claims, or diagnostics unless `force: true` is explicitly requested.
 - Treat diagnostics as review inputs. Resolve real risks; do not delete diagnostics manually.
 - Mutating workspace tools wait briefly for an existing workspace lock before failing; do not manually remove lock files.
@@ -22,7 +23,7 @@ description: Use when an agent needs to operate Stringer MCP tools for Bethesda 
 1. Open or receive a workspace with `workspace_open` or an existing workspace path.
 2. Annotate it with global and workspace knowledge using `knowledge_annotate`.
 3. Inspect files, remaining work, and diagnostics with `workspace_inspect_*` and `workspace_batch_count`; do not read raw workspace files.
-4. Organize terminology before formal translation: use `hints`, diagnostics, and `knowledge_lookup` to identify repeated or risky terms, then update workspace terminology with `knowledge_term_upsert` or `knowledge_term_delete`.
+4. Organize terminology before formal translation: use `hints`, diagnostics, and `knowledge_lookup` to identify repeated or risky terms, prioritizing NPC and place-name related entries as sources for local terminology before updating workspace terminology with `knowledge_term_upsert` or `knowledge_term_delete`.
 5. Re-run `knowledge_annotate` after terminology changes so later batches carry the updated hints.
 6. Start formal batch translation with `workspace_batch_claim`, read compact rows with `workspace_batch_read`, fetch full rows with `workspace_batch_detail` only when needed, and write small batches inline through `workspace_batch_submit`.
 7. For large batches or tool-output limits, use `workspace_batch_export` to create `patch.json` or `patch.csv`, edit the patch file directly or with scripts, then submit it through `workspace_batch_submit` with `input` or through the CLI with `workspace batch submit --input`.

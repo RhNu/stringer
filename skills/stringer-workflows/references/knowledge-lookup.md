@@ -10,7 +10,7 @@ Knowledge is layered as global first, then workspace. Workspace term, rule, and 
 
 Use term edit tools instead of direct TOML edits. They create `knowledge/terms/workspace.toml` by default and restrict custom files to `.toml` paths under `<WORKSPACE>/knowledge/terms/`.
 
-Before upserting any term, verify it with `knowledge_lookup` and relevant entry context. Do not create or replace workspace terms from memory hits, prior knowledge, or knowledge-base intuition alone.
+Before upserting any term, verify it with `knowledge_lookup` and relevant entry context. Prefer local workspace terms that can be derived from NPC and place-name related entries first; treat those records as the strongest local evidence for names, aliases, and recurring proper nouns. Do not create or replace workspace terms from memory hits, prior knowledge, or knowledge-base intuition alone.
 
 Upsert terms with `knowledge_term_upsert`:
 
