@@ -12,10 +12,10 @@ use stringer_interface::{
     AdaptFormatInput, AdaptImportRequest, InspectDiagnosticSeverityInput, InspectEntryStatusInput,
     KnowledgeTermInput, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, SettingsInput,
     WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest,
-    WorkspaceBatchReadRequest, WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry,
-    WorkspaceBatchSubmitRequest, WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest,
-    WorkspaceInspectEntriesRequest, WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest,
-    WorkspaceOpenRequest,
+    WorkspaceBatchReadRequest, WorkspaceBatchSkipReasonInput, WorkspaceBatchSubmitActionInput,
+    WorkspaceBatchSubmitEntry, WorkspaceBatchSubmitRequest, WorkspaceFinalizeRequest,
+    WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
+    WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest, WorkspaceOpenRequest,
 };
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceCoreError};
 
@@ -81,6 +81,7 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
     .unwrap();
     assert_eq!(detail.entries[0].key, key);
     assert!(detail.entries[0].id.contains("scaleform:"));
+    assert!(detail.missing_keys.is_empty());
 
     let summary = workspace_batch_submit(WorkspaceBatchSubmitRequest {
         workspace: Some(path_string(workspace.path())),
@@ -168,6 +169,36 @@ async fn app_workspace_batch_submit_can_mark_entry_skipped() {
     assert_eq!(skipped.total, 1);
     assert!(skipped.entries[0].current_translation.is_none());
     assert_eq!(skipped.entries[0].origin.as_deref(), Some("skipped"));
+}
+
+#[test]
+fn app_workspace_batch_submit_rejects_unknown_skip_reason_before_submit() {
+    let request = serde_json::from_value::<WorkspaceBatchSubmitRequest>(serde_json::json!({
+        "batch_id": "b-test",
+        "revision": 1,
+        "entries": [
+            { "key": "e001", "action": "skip", "skip_reason": "legacy" }
+        ]
+    }));
+
+    assert!(request.is_err());
+
+    let request = WorkspaceBatchSubmitRequest {
+        workspace: None,
+        batch_id: "b-test".to_string(),
+        revision: 1,
+        entries: vec![WorkspaceBatchSubmitEntry {
+            key: "e001".to_string(),
+            action: WorkspaceBatchSubmitActionInput::Skip,
+            translation: None,
+            skip_reason: Some(WorkspaceBatchSkipReasonInput::NotTranslatable),
+        }],
+    };
+
+    assert_eq!(
+        serde_json::to_value(request).unwrap()["entries"][0]["skip_reason"],
+        "not_translatable"
+    );
 }
 
 #[tokio::test]
@@ -297,6 +328,7 @@ async fn app_workspace_finalize_defaults_output_under_workspace() {
         workspace: Some(path_string(workspace.path())),
         source_root: None,
         output: None,
+        force: true,
     })
     .await
     .unwrap();
@@ -308,6 +340,43 @@ async fn app_workspace_finalize_defaults_output_under_workspace() {
             .join("output/Data/Interface/Translations/MyMod_English.txt")
             .exists()
     );
+}
+
+#[tokio::test]
+async fn app_workspace_finalize_requires_completion_unless_forced() {
+    let root = TempRoot::new("workspace-finalize-incomplete-root");
+    let workspace = TempRoot::new("workspace-finalize-incomplete-output");
+    write_text(
+        &root
+            .path()
+            .join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n",
+    );
+
+    test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: settings(),
+        })
+        .await
+        .unwrap();
+
+    let error = workspace_finalize(WorkspaceFinalizeRequest {
+        workspace: Some(path_string(workspace.path())),
+        source_root: None,
+        output: None,
+        force: false,
+    })
+    .await
+    .unwrap_err();
+    let payload = error.payload();
+
+    assert_eq!(payload.code, "workspace.incomplete");
+    assert_eq!(payload.details["claimable"], 1);
+    assert_eq!(payload.details["claimed"], 0);
+    assert_eq!(payload.details["diagnostics"], 0);
 }
 
 #[tokio::test]

@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use stringer_interface::WorkspaceBatchSubmitActionInput;
+use stringer_interface::{WorkspaceBatchSkipReasonInput, WorkspaceBatchSubmitActionInput};
 
 use crate::app::{CliError, read_input};
 
@@ -17,7 +17,7 @@ pub(crate) struct WorkspaceBatchSubmitEntryInput {
     #[serde(default)]
     pub(crate) translation: Option<String>,
     #[serde(default)]
-    pub(crate) skip_reason: Option<String>,
+    pub(crate) skip_reason: Option<WorkspaceBatchSkipReasonInput>,
 }
 
 pub(crate) fn read_batch_submit_input(
@@ -85,7 +85,7 @@ fn parse_batch_submit_csv(
             key: csv_get(&row, key_index).to_string(),
             action,
             translation: non_empty(csv_get(&row, translation_index)),
-            skip_reason: non_empty(csv_get(&row, skip_reason_index)),
+            skip_reason: parse_skip_reason(path, csv_get(&row, skip_reason_index))?,
         });
     }
     Ok(WorkspaceBatchSubmitInput {
@@ -127,6 +127,26 @@ fn non_empty(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_string())
 }
 
+fn parse_skip_reason(
+    path: &Utf8PathBuf,
+    value: &str,
+) -> Result<Option<WorkspaceBatchSkipReasonInput>, CliError> {
+    let reason = match value {
+        "" => None,
+        "not_translatable" => Some(WorkspaceBatchSkipReasonInput::NotTranslatable),
+        "source_is_target" => Some(WorkspaceBatchSkipReasonInput::SourceIsTarget),
+        "identifier_or_token" => Some(WorkspaceBatchSkipReasonInput::IdentifierOrToken),
+        "duplicate_or_obsolete" => Some(WorkspaceBatchSkipReasonInput::DuplicateOrObsolete),
+        "needs_manual_review" => Some(WorkspaceBatchSkipReasonInput::NeedsManualReview),
+        other => {
+            return Err(CliError::InvalidArguments {
+                message: format!("unsupported skip_reason `{other}` in `{path}`"),
+            });
+        }
+    };
+    Ok(reason)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,6 +157,7 @@ mod tests {
             "# stringer batch_id=b-test revision=7\n",
             "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",
             "e001,\"Iron\nSword\",,,memory.conflict,translate,\"熟\n铁剑\",\n",
+            "e002,Done,,,,skip,,source_is_target\n",
         );
 
         let parsed =
@@ -144,8 +165,30 @@ mod tests {
 
         assert_eq!(parsed.batch_id, "b-test");
         assert_eq!(parsed.revision, 7);
-        assert_eq!(parsed.entries.len(), 1);
+        assert_eq!(parsed.entries.len(), 2);
         assert_eq!(parsed.entries[0].key, "e001");
         assert_eq!(parsed.entries[0].translation.as_deref(), Some("熟\n铁剑"));
+        assert_eq!(
+            parsed.entries[1].skip_reason,
+            Some(WorkspaceBatchSkipReasonInput::SourceIsTarget)
+        );
+    }
+
+    #[test]
+    fn csv_submission_parser_rejects_unsupported_skip_reason() {
+        let submission = concat!(
+            "# stringer batch_id=b-test revision=7\n",
+            "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",
+            "e001,Iron Sword,,,,skip,,legacy\n",
+        );
+
+        let error =
+            parse_batch_submit_csv(&Utf8PathBuf::from("submission.csv"), submission).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported skip_reason `legacy`")
+        );
     }
 }

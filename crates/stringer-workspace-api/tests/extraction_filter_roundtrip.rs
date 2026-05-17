@@ -46,6 +46,7 @@ enabled = false
         workspace: utf8(&export_path),
         source_root: None,
         output: utf8(&output),
+        force: true,
     })
     .await
     .unwrap();

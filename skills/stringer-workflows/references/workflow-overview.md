@@ -15,9 +15,11 @@ Use Stringer MCP tools directly. They return structured JSON, so consume their f
 9. `workspace_batch_submit`: submit translate, skip, or pending actions for that exact batch revision.
 10. `knowledge_validate`: recompute diagnostics.
 11. `workspace_inspect_diagnostics`: review any remaining warnings or errors with entry context.
-12. `workspace_finalize`: write translated assets to a fresh output directory only after validation.
+12. `workspace_finalize`: write translated assets to a fresh output directory only after validation and completion checks.
 
 When the MCP host is already operating from the workspace directory, the optional `workspace` argument can be omitted. Otherwise pass it explicitly.
+
+Mutating tools use the workspace lock and wait up to a short bounded interval if another command is finishing. Do not delete `lock` manually; retry only if the tool reports that the workspace is still locked.
 
 ## Workspace Files
 

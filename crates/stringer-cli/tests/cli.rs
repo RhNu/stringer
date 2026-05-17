@@ -53,6 +53,7 @@ fn workspace_finalize_command_defaults_workspace_source_override_and_output() {
         "input",
         "--output",
         "override",
+        "--force",
     ]);
 
     let Command::Workspace { command } = cli.command else {
@@ -64,6 +65,7 @@ fn workspace_finalize_command_defaults_workspace_source_override_and_output() {
     assert_eq!(command.workspace.as_str(), ".");
     assert_eq!(command.source_root.as_deref(), Some("input".into()));
     assert_eq!(command.output.as_deref(), Some("override".into()));
+    assert!(command.force);
 }
 
 #[test]

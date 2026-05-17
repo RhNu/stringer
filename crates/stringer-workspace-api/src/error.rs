@@ -79,6 +79,17 @@ pub enum WorkspaceError {
     #[error("workspace is locked by `{path}`")]
     WorkspaceLocked { path: Utf8PathBuf },
 
+    #[error(
+        "workspace is incomplete: {claimable} claimable, {claimed} claimed, {diagnostics} with diagnostics; resolve workspace issues or pass --force to finalize anyway"
+    )]
+    WorkspaceIncomplete {
+        claimable: usize,
+        claimed: usize,
+        diagnostics: usize,
+        empty: usize,
+        memory_prefilled: usize,
+    },
+
     #[error("invalid translation package path `{path}`: {message}")]
     InvalidTranslationPackagePath { path: String, message: String },
 

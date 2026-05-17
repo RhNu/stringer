@@ -37,6 +37,8 @@ pub struct WorkspaceFinalizeRequest {
     pub source_root: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
+    #[serde(default)]
+    pub force: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

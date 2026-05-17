@@ -14,6 +14,13 @@ use stringer_workspace_core::{
 use crate::{WorkspaceOpsError, workspace_context_label};
 
 const BATCH_WORK_DIR: &str = "batch-work";
+const SKIP_REASONS: &[&str] = &[
+    "not_translatable",
+    "source_is_target",
+    "identifier_or_token",
+    "duplicate_or_obsolete",
+    "needs_manual_review",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReadBatchOptions {
@@ -62,6 +69,7 @@ pub struct BatchDetail {
     pub batch_id: String,
     pub revision: u64,
     pub entries: Vec<BatchDetailEntry>,
+    pub missing_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -239,17 +247,28 @@ pub fn read_batch_detail(
     }
     let batch = read_batch_file(&options.workspace, &options.batch_id)?;
     let entries = hydrate_batch_entries(&options.workspace, &batch)?;
-    let requested = options.keys.into_iter().collect::<BTreeSet<_>>();
+    let requested_keys = options.keys;
+    let requested = requested_keys.iter().cloned().collect::<BTreeSet<_>>();
     let details = entries
         .into_iter()
         .filter(|entry| requested.contains(&entry.key))
         .map(|entry| detail_entry(entry, &batch.batch_id))
+        .collect::<Vec<_>>();
+    let found = details
+        .iter()
+        .map(|entry| entry.key.clone())
+        .collect::<BTreeSet<_>>();
+    let mut seen_missing = BTreeSet::new();
+    let missing_keys = requested_keys
+        .into_iter()
+        .filter(|key| !found.contains(key) && seen_missing.insert(key.clone()))
         .collect();
     let revision = batch.revision;
     Ok(BatchDetail {
         batch_id: batch.batch_id,
         revision,
         entries: details,
+        missing_keys,
     })
 }
 
@@ -442,6 +461,12 @@ fn validate_submit_entry(entry: BatchSubmitEntry, id: String) -> SubmitValidatio
             SubmitValidation::Ignored(entry.key)
         }
         BatchSubmitAction::Translate => {
+            if entry.skip_reason.is_some() {
+                return SubmitValidation::Rejected {
+                    key: entry.key,
+                    message: "translate action must not include skip_reason",
+                };
+            }
             if entry
                 .translation
                 .as_deref()
@@ -467,12 +492,24 @@ fn validate_submit_entry(entry: BatchSubmitEntry, id: String) -> SubmitValidatio
                     message: "skip action must not include translation",
                 };
             }
+            let Some(skip_reason) = entry.skip_reason else {
+                return SubmitValidation::Rejected {
+                    key: entry.key,
+                    message: "skip action requires skip_reason",
+                };
+            };
+            if !SKIP_REASONS.contains(&skip_reason.as_str()) {
+                return SubmitValidation::Rejected {
+                    key: entry.key,
+                    message: "unsupported skip_reason",
+                };
+            }
             SubmitValidation::Valid(ValidSubmit {
                 key: entry.key,
                 id,
                 action: entry.action,
                 translation: None,
-                skip_reason: entry.skip_reason,
+                skip_reason: Some(skip_reason),
             })
         }
     }

@@ -1,7 +1,8 @@
-use std::fs;
+use std::{fs, thread, time::Duration};
 
 use stringer_workspace_api::{
-    ExportTranslationsOptions, ImportTranslationsOptions, export_translations, import_translations,
+    ClaimBatchOptions, ExportTranslationsOptions, ImportTranslationsOptions, claim_batch,
+    export_translations, import_translations,
 };
 
 #[allow(dead_code)]
@@ -155,7 +156,7 @@ async fn force_open_validates_source_before_replacing_generated_artifacts() {
 }
 
 #[tokio::test]
-async fn force_open_does_not_replace_generated_artifacts_when_workspace_is_locked() {
+async fn force_open_waits_for_workspace_lock_before_replacing_generated_artifacts() {
     let root = TempRoot::new("force-open-locked");
     let source_root = root.path().join("source");
     write_text(
@@ -166,22 +167,27 @@ async fn force_open_does_not_replace_generated_artifacts_when_workspace_is_locke
     write_text(&workspace.join("lock"), "{}");
     write_text(&workspace.join("workspace.json"), "{}");
     write_text(&workspace.join("entries/stale.jsonl"), "{}\n");
+    let lock_path = workspace.join("lock");
+    let release = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50));
+        fs::remove_file(lock_path).unwrap();
+    });
 
-    let error = export_translations(ExportTranslationsOptions {
+    export_translations(ExportTranslationsOptions {
         source_root: utf8(&source_root),
         workspace: utf8(&workspace),
         settings: settings(),
         force: true,
     })
     .await
-    .unwrap_err();
+    .unwrap();
 
-    assert!(matches!(
-        error,
-        stringer_workspace_api::WorkspaceError::WorkspaceLocked { .. }
-    ));
-    assert!(workspace.join("workspace.json").exists());
-    assert!(workspace.join("entries/stale.jsonl").exists());
+    release.join().unwrap();
+    assert_eq!(
+        json_file(&workspace.join("workspace.json"))["schema_version"],
+        4
+    );
+    assert!(!workspace.join("entries/stale.jsonl").exists());
 }
 
 #[tokio::test]
@@ -243,6 +249,7 @@ async fn import_uses_stored_source_root_and_allows_source_root_override() {
         workspace: utf8(&workspace),
         source_root: None,
         output: utf8(&stored_output),
+        force: true,
     })
     .await
     .unwrap();
@@ -255,10 +262,132 @@ async fn import_uses_stored_source_root_and_allows_source_root_override() {
         workspace: utf8(&workspace),
         source_root: Some(utf8(&override_source_root)),
         output: utf8(&override_output),
+        force: true,
     })
     .await
     .unwrap();
     let overridden =
         fs::read(override_output.join("Data/Interface/Translations/MyMod_English.txt")).unwrap();
     assert!(decode_utf16le_bom(&overridden).contains("$Desc\tSteel\n"));
+}
+
+#[tokio::test]
+async fn import_requires_completed_workspace_unless_forced() {
+    let root = TempRoot::new("import-requires-complete");
+    let source_root = root.path().join("source");
+    write_text(
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n$Desc\tSteel Sword\n",
+    );
+    let workspace = root.path().join("translations");
+    export_translations(ExportTranslationsOptions {
+        source_root: utf8(&source_root),
+        workspace: utf8(&workspace),
+        settings: settings(),
+        force: false,
+    })
+    .await
+    .unwrap();
+    write_entry_rows(
+        &workspace,
+        "scaleform",
+        concat!(
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Iron Sword\",\"translation\":\"铁剑\",\"translation_meta\":{\"origin\":\"agent\"}}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source\":\"Steel Sword\"}\n",
+        ),
+    );
+
+    let error = import_translations(ImportTranslationsOptions {
+        workspace: utf8(&workspace),
+        source_root: None,
+        output: utf8(&root.path().join("blocked-output")),
+        force: false,
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        stringer_workspace_api::WorkspaceError::WorkspaceIncomplete {
+            claimable: 1,
+            claimed: 0,
+            diagnostics: 0,
+            ..
+        }
+    ));
+
+    let claim = claim_batch(ClaimBatchOptions {
+        workspace: utf8(&workspace),
+        file: None,
+        limit: 1,
+    })
+    .unwrap();
+    assert_eq!(claim.claimed_entries, 1);
+    let error = import_translations(ImportTranslationsOptions {
+        workspace: utf8(&workspace),
+        source_root: None,
+        output: utf8(&root.path().join("claimed-output")),
+        force: false,
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        stringer_workspace_api::WorkspaceError::WorkspaceIncomplete {
+            claimable: 0,
+            claimed: 1,
+            diagnostics: 0,
+            ..
+        }
+    ));
+
+    let diagnostic_workspace = root.path().join("diagnostic-translations");
+    export_translations(ExportTranslationsOptions {
+        source_root: utf8(&source_root),
+        workspace: utf8(&diagnostic_workspace),
+        settings: settings(),
+        force: false,
+    })
+    .await
+    .unwrap();
+    write_entry_rows(
+        &diagnostic_workspace,
+        "scaleform",
+        concat!(
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Title\",\"source\":\"Iron Sword\",\"translation\":\"铁剑\",\"translation_meta\":{\"origin\":\"agent\"},\"diagnostics\":[{\"severity\":\"warning\",\"code\":\"review.note\",\"message\":\"check\"}]}\n",
+            "{\"id\":\"scaleform:Interface/Translations/MyMod_English.txt:$Desc\",\"source\":\"Steel Sword\",\"translation\":\"钢剑\",\"translation_meta\":{\"origin\":\"agent\"}}\n",
+        ),
+    );
+    let error = import_translations(ImportTranslationsOptions {
+        workspace: utf8(&diagnostic_workspace),
+        source_root: None,
+        output: utf8(&root.path().join("diagnostic-output")),
+        force: false,
+    })
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        error,
+        stringer_workspace_api::WorkspaceError::WorkspaceIncomplete {
+            claimable: 0,
+            claimed: 0,
+            diagnostics: 1,
+            ..
+        }
+    ));
+
+    let forced_output = root.path().join("forced-output");
+    let summary = import_translations(ImportTranslationsOptions {
+        workspace: utf8(&workspace),
+        source_root: None,
+        output: utf8(&forced_output),
+        force: true,
+    })
+    .await
+    .unwrap();
+    assert_eq!(summary.applied_entries, 1);
+    assert!(
+        forced_output
+            .join("Data/Interface/Translations/MyMod_English.txt")
+            .exists()
+    );
 }

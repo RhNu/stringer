@@ -83,6 +83,28 @@ fn batch_claim_read_detail_and_submit_use_stable_keys_and_revisions() {
     assert_eq!(detail.entries[0].key, "e002");
     assert_eq!(detail.entries[0].context["key"], "$Desc");
     assert_eq!(detail.entries[0].diagnostics.len(), 1);
+    assert!(detail.missing_keys.is_empty());
+
+    let mixed_detail = read_batch_detail(ReadBatchDetailOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: batch_id.clone(),
+        keys: vec![
+            "e002".to_string(),
+            "e999".to_string(),
+            "e001".to_string(),
+            "e999".to_string(),
+        ],
+    })
+    .unwrap();
+    assert_eq!(
+        mixed_detail
+            .entries
+            .iter()
+            .map(|entry| entry.key.as_str())
+            .collect::<Vec<_>>(),
+        vec!["e001", "e002"]
+    );
+    assert_eq!(mixed_detail.missing_keys, vec!["e999"]);
 
     let empty_detail_error = read_batch_detail(ReadBatchDetailOptions {
         workspace: utf8(fixture.workspace()),
@@ -235,6 +257,81 @@ fn batch_submit_rejects_empty_translation_and_pending_payload() {
     .unwrap();
     assert_eq!(remaining.revision, 1);
     assert_eq!(remaining.entries.len(), 2);
+}
+
+#[test]
+fn batch_submit_requires_supported_skip_reason_only_for_skip_actions() {
+    let fixture = workspace_with_rows("packet-skip-reason", rows());
+    let claim = claim_batch(ClaimBatchOptions {
+        workspace: utf8(fixture.workspace()),
+        file: Some(ENTRY_FILE.to_string()),
+        limit: 3,
+    })
+    .unwrap();
+    let batch_id = claim.batch_id.expect("batch id");
+
+    let summary = submit_batch(BatchSubmitOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id: batch_id.clone(),
+        revision: 1,
+        entries: vec![
+            BatchSubmitEntry {
+                key: "e001".to_string(),
+                action: BatchSubmitAction::Skip,
+                translation: None,
+                skip_reason: None,
+            },
+            BatchSubmitEntry {
+                key: "e002".to_string(),
+                action: BatchSubmitAction::Skip,
+                translation: None,
+                skip_reason: Some("legacy".to_string()),
+            },
+            BatchSubmitEntry {
+                key: "e003".to_string(),
+                action: BatchSubmitAction::Translate,
+                translation: Some("完成".to_string()),
+                skip_reason: Some("not_translatable".to_string()),
+            },
+        ],
+    })
+    .unwrap();
+
+    assert_eq!(summary.applied_entries, 0);
+    assert_eq!(summary.rejected_entries, 3);
+    assert_eq!(
+        summary.results[0].message.as_deref(),
+        Some("skip action requires skip_reason")
+    );
+    assert_eq!(
+        summary.results[1].message.as_deref(),
+        Some("unsupported skip_reason")
+    );
+    assert_eq!(
+        summary.results[2].message.as_deref(),
+        Some("translate action must not include skip_reason")
+    );
+
+    let summary = submit_batch(BatchSubmitOptions {
+        workspace: utf8(fixture.workspace()),
+        batch_id,
+        revision: 1,
+        entries: vec![BatchSubmitEntry {
+            key: "e001".to_string(),
+            action: BatchSubmitAction::Skip,
+            translation: None,
+            skip_reason: Some("not_translatable".to_string()),
+        }],
+    })
+    .unwrap();
+
+    assert_eq!(summary.applied_entries, 1);
+    let rows = jsonl_rows(&fixture.workspace().join(ENTRY_FILE));
+    assert_eq!(rows[0]["translation_meta"]["origin"], "skipped");
+    assert_eq!(
+        rows[0]["translation_meta"]["skip_reason"],
+        "not_translatable"
+    );
 }
 
 #[test]

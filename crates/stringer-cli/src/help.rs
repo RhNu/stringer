@@ -32,12 +32,12 @@ Common next step:
 
 The workspace defaults to the current directory. Source root settings are not read; use stringer.toml in the workspace or pass settings on the command line."#;
 
-pub(crate) const WORKSPACE_FINALIZE_LONG_ABOUT: &str = r#"Apply translated workspace rows to the stored source root and write changed files to an output directory."#;
+pub(crate) const WORKSPACE_FINALIZE_LONG_ABOUT: &str = r#"Apply translated workspace rows to the stored source root and write changed files to an output directory. By default, finalize requires no claimable rows, active claims, or diagnostics."#;
 
 pub(crate) const WORKSPACE_FINALIZE_AFTER_LONG_HELP: &str = r#"Example:
   stringer workspace finalize --output ./output
 
-Run knowledge validate first. The output defaults to <workspace>/output and must stay outside the source root. Use --source-root only to override the source_root stored in workspace.json."#;
+Run knowledge validate first. The output defaults to <workspace>/output and must stay outside the source root. Use --source-root only to override the source_root stored in workspace.json. Use --force only when intentionally finalizing with unfinished rows, active claims, or remaining diagnostics."#;
 
 pub(crate) const WORKSPACE_BATCH_LONG_ABOUT: &str =
     r#"Count, claim, read, submit, export, and release translation batches for agent work."#;
@@ -49,11 +49,9 @@ pub(crate) const WORKSPACE_BATCH_CLAIM_LONG_ABOUT: &str = r#"Claim eligible untr
 
 pub(crate) const WORKSPACE_BATCH_READ_LONG_ABOUT: &str = r#"Read compact source, current translation, context label, hint counts, and diagnostic codes for a claimed batch."#;
 
-pub(crate) const WORKSPACE_BATCH_DETAIL_LONG_ABOUT: &str =
-    r#"Read full context, hints, diagnostics, and metadata for one or more claimed batch keys."#;
+pub(crate) const WORKSPACE_BATCH_DETAIL_LONG_ABOUT: &str = r#"Read full context, hints, diagnostics, and metadata for one or more claimed batch keys. Missing requested keys are reported in missing_keys."#;
 
-pub(crate) const WORKSPACE_BATCH_SUBMIT_LONG_ABOUT: &str =
-    r#"Submit translate, skip, or pending actions for batch-local keys from JSON or CSV."#;
+pub(crate) const WORKSPACE_BATCH_SUBMIT_LONG_ABOUT: &str = r#"Submit translate, skip, or pending actions for batch-local keys from JSON or CSV. Skip actions require skip_reason: not_translatable, source_is_target, identifier_or_token, duplicate_or_obsolete, or needs_manual_review."#;
 
 pub(crate) const WORKSPACE_BATCH_EXPORT_LONG_ABOUT: &str = r#"Export a claimed batch to an editable JSON or CSV submission file under batch-work by default."#;
 

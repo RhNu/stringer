@@ -217,6 +217,38 @@ fn workspace_batch_claim_emits_json_and_submit_reads_stdin() {
     let key = read_json["entries"][0]["key"].as_str().unwrap();
     let revision = read_json["revision"].as_u64().unwrap();
 
+    let bad_patch = serde_json::json!({
+        "batch_id": batch_id,
+        "revision": revision,
+        "entries": [
+            { "key": key, "action": "skip", "skip_reason": "legacy" }
+        ]
+    })
+    .to_string();
+    let mut bad_submit = stringer_command()
+        .args([
+            "workspace",
+            "batch",
+            "submit",
+            "--workspace",
+            translations.as_str(),
+            "--input",
+            "-",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    bad_submit
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(bad_patch.as_bytes())
+        .unwrap();
+    let bad_submit = bad_submit.wait_with_output().unwrap();
+    assert!(!bad_submit.status.success());
+
     let patch = serde_json::json!({
         "batch_id": batch_id,
         "revision": revision,

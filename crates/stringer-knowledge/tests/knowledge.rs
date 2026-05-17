@@ -437,6 +437,7 @@ async fn import_ignores_annotations_and_diagnostics() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();

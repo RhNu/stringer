@@ -109,6 +109,7 @@ async fn import_rejects_legacy_manifest_only_workspace() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(&root.path().join("override")),
+        force: true,
     })
     .await
     .unwrap_err();
@@ -143,6 +144,7 @@ async fn import_writes_only_changed_override_files_and_leaves_source_unchanged()
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();
@@ -192,6 +194,7 @@ async fn import_uses_asset_language_from_manifest() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();
@@ -237,6 +240,7 @@ async fn import_rejects_duplicate_translated_ids() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(&root.path().join("override")),
+        force: true,
     })
     .await
     .unwrap_err();
@@ -274,6 +278,7 @@ async fn import_rejects_duplicate_ids_even_when_only_one_row_has_translation() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(&root.path().join("override")),
+        force: true,
     })
     .await
     .unwrap_err();
@@ -308,6 +313,7 @@ async fn import_rejects_output_that_is_the_source_root() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(&source_root),
+        force: true,
     })
     .await
     .unwrap_err();
@@ -347,6 +353,7 @@ async fn import_rejects_unknown_translation_ids() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(&root.path().join("override")),
+        force: true,
     })
     .await
     .unwrap_err();
@@ -386,6 +393,7 @@ async fn import_rejects_unsupported_translation_package_schema_version() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(&root.path().join("override")),
+        force: true,
     })
     .await
     .unwrap_err();
@@ -425,6 +433,7 @@ async fn import_rejects_manifest_entry_paths_that_escape_package_root() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(&root.path().join("override")),
+        force: true,
     })
     .await
     .unwrap_err();
@@ -463,6 +472,7 @@ async fn import_ignores_unlisted_translation_package_entry_files() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();
@@ -502,6 +512,7 @@ async fn import_skips_missing_and_null_translation_without_writing_files() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();
@@ -539,6 +550,7 @@ async fn import_applies_empty_string_translations() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();
@@ -582,6 +594,7 @@ async fn import_same_text_translation_does_not_write_override_files() {
         workspace: utf8(&translations),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();
@@ -685,6 +698,7 @@ async fn import_updates_localized_plugin_strings_without_copying_unchanged_plugi
         workspace: utf8(&export_path),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();
@@ -806,6 +820,7 @@ async fn import_updates_pex_literals_into_override_script() {
         workspace: utf8(&export_path),
         source_root: None,
         output: utf8(override_root.path()),
+        force: true,
     })
     .await
     .unwrap();

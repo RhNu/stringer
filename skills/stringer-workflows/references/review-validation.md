@@ -21,6 +21,6 @@ Review entries with `workspace_inspect_diagnostics`, `workspace_inspect_entry`, 
 
 ## Finalize
 
-Finalize only after validation and review with `workspace_finalize`.
+Finalize only after validation and review with `workspace_finalize`. Non-forced finalize fails if the workspace still has claimable rows, active batch claims, or diagnostics.
 
-Use a fresh output directory outside the source root. When the MCP host is already operating from the workspace directory, the optional `workspace` argument can be omitted; otherwise pass it explicitly.
+Use a fresh output directory outside the source root. Use `force: true` only when the user explicitly accepts finalizing with unfinished rows, active claims, or remaining diagnostics. When the MCP host is already operating from the workspace directory, the optional `workspace` argument can be omitted; otherwise pass it explicitly.

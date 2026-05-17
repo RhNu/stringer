@@ -24,4 +24,4 @@ Tell each worker:
 
 The coordinator opens and annotates the workspace, organizes terminology before formal translation, creates claims, assigns work, validates after workers finish, and handles finalization.
 
-Run `workspace_batch_count` between rounds to see remaining empty, claimed, translated, and diagnostic counts.
+Run `workspace_batch_count` between rounds to see remaining empty, claimed, translated, and diagnostic counts. Release abandoned claims before finalization; non-forced finalize rejects active claims.

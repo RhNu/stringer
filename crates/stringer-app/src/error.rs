@@ -84,6 +84,7 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
             "workspace.legacy_translation_workspace"
         }
         WorkspaceError::WorkspaceLocked { .. } => "workspace.locked",
+        WorkspaceError::WorkspaceIncomplete { .. } => "workspace.incomplete",
         WorkspaceError::InvalidTranslationPackagePath { .. } => {
             "workspace.invalid_translation_package_path"
         }
@@ -154,6 +155,20 @@ fn workspace_error_details(error: &WorkspaceError) -> Value {
         WorkspaceError::InvalidSetting { name, value } => {
             json!({ "name": name, "value": value })
         }
+        WorkspaceError::WorkspaceIncomplete {
+            claimable,
+            claimed,
+            diagnostics,
+            empty,
+            memory_prefilled,
+        } => json!({
+            "claimable": claimable,
+            "claimed": claimed,
+            "diagnostics": diagnostics,
+            "empty": empty,
+            "memory_prefilled": memory_prefilled,
+            "recovery": "resolve_workspace_or_finalize_with_force",
+        }),
         WorkspaceError::ExtractionFilter(error) => json!({ "message": error.to_string() }),
         WorkspaceError::UnsupportedTranslationSchema { path, version } => {
             json!({ "path": json_path(path), "version": version })

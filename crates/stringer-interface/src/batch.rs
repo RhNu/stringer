@@ -112,6 +112,7 @@ pub struct WorkspaceBatchDetailResponse {
     pub batch_id: String,
     pub revision: u64,
     pub entries: Vec<WorkspaceBatchDetailEntryResponse>,
+    pub missing_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -147,7 +148,7 @@ pub struct WorkspaceBatchSubmitEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub translation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub skip_reason: Option<String>,
+    pub skip_reason: Option<WorkspaceBatchSkipReasonInput>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -156,6 +157,16 @@ pub enum WorkspaceBatchSubmitActionInput {
     Translate,
     Skip,
     Pending,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceBatchSkipReasonInput {
+    NotTranslatable,
+    SourceIsTarget,
+    IdentifierOrToken,
+    DuplicateOrObsolete,
+    NeedsManualReview,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

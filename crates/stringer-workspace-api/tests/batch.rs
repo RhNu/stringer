@@ -1,3 +1,5 @@
+use std::{fs, thread, time::Duration};
+
 use stringer_workspace_api::{
     BatchSubmitAction, BatchSubmitEntry, BatchSubmitOptions, ClaimBatchOptions, CountBatchOptions,
     ExportTranslationsOptions, ReadBatchOptions, ReleaseBatchOptions, claim_batch, count_batch,
@@ -281,7 +283,7 @@ async fn release_rejects_batch_id_paths() {
 }
 
 #[tokio::test]
-async fn workspace_lock_blocks_second_mutating_command() {
+async fn workspace_lock_waits_for_second_mutating_command() {
     let root = TempRoot::new("workspace-lock");
     let source_root = root.path().join("source");
     write_text(
@@ -301,14 +303,19 @@ async fn workspace_lock_blocks_second_mutating_command() {
         &translations.join("lock"),
         "{\"pid\":1,\"created_at_unix_ms\":1}\n",
     );
+    let lock_path = translations.join("lock");
+    let release = thread::spawn(move || {
+        thread::sleep(Duration::from_millis(50));
+        fs::remove_file(lock_path).unwrap();
+    });
 
-    let error = claim_batch(ClaimBatchOptions {
+    let claim = claim_batch(ClaimBatchOptions {
         workspace: utf8(&translations),
         file: None,
         limit: 1,
     })
-    .unwrap_err();
+    .unwrap();
 
-    assert!(error.to_string().contains("workspace is locked"));
-    assert!(translations.join("lock").exists());
+    release.join().unwrap();
+    assert_eq!(claim.claimed_entries, 1);
 }

@@ -15,6 +15,7 @@ use stringer_workspace_core::{
     PackagedTranslationRecord, WorkspaceLock, WorkspaceSettings, external_entry_id,
     packaged_record_from_entry, read_translation_package, write_translation_package,
 };
+use stringer_workspace_ops::{CountBatchOptions, count_batch};
 use tracing::{debug, info};
 
 use crate::WorkspaceError;
@@ -36,6 +37,7 @@ pub struct ImportTranslationsOptions {
     pub workspace: Utf8PathBuf,
     pub source_root: Option<Utf8PathBuf>,
     pub output: Utf8PathBuf,
+    pub force: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -156,6 +158,10 @@ pub async fn import_translations(
         source_root_override = options.source_root.is_some(),
         "starting workspace import"
     );
+    let _lock = WorkspaceLock::acquire(&options.workspace)?;
+    if !options.force {
+        ensure_workspace_complete_for_import(&options.workspace)?;
+    }
     let (settings, stored_source_root, mut translations) =
         read_translation_package(&options.workspace)?;
     let source_root = options.source_root.unwrap_or(stored_source_root);
@@ -184,6 +190,23 @@ pub async fn import_translations(
     Ok(ImportSummary {
         applied_entries,
         written_files,
+    })
+}
+
+fn ensure_workspace_complete_for_import(workspace: &Utf8Path) -> Result<(), WorkspaceError> {
+    let count = count_batch(CountBatchOptions {
+        workspace: workspace.to_owned(),
+        file: None,
+    })?;
+    if count.claimable == 0 && count.claimed == 0 && count.diagnostics == 0 {
+        return Ok(());
+    }
+    Err(WorkspaceError::WorkspaceIncomplete {
+        claimable: count.claimable,
+        claimed: count.claimed,
+        diagnostics: count.diagnostics,
+        empty: count.empty,
+        memory_prefilled: count.memory_prefilled,
     })
 }
 

@@ -129,6 +129,11 @@ pub struct WorkspaceFinalizeCommand {
         long_help = "Output directory outside the source root; defaults to <workspace>/output."
     )]
     pub output: Option<Utf8PathBuf>,
+    #[arg(
+        long,
+        help = "Finalize even if the workspace has unfinished rows, claims, or diagnostics"
+    )]
+    pub force: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -425,6 +430,7 @@ pub async fn run_workspace(command: WorkspaceCommand, feedback: &Feedback) -> Re
                 workspace: Some(command.workspace.to_string()),
                 source_root: command.source_root.map(|path| path.to_string()),
                 output: command.output.map(|path| path.to_string()),
+                force: command.force,
             })
             .await?;
             status.finish();

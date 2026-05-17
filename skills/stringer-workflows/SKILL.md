@@ -9,12 +9,13 @@ description: Use when an agent needs to operate Stringer MCP tools for Bethesda 
 
 - Use Stringer MCP tools for workspace operations. Do not read `workspace.json`, `entries/**/*.jsonl`, `batches/*.json`, or knowledge TOML directly unless the user explicitly asks for raw-file debugging.
 - Use inspect tools for read-only review, batch tools for translation edits, and knowledge tools for terminology, memory, annotation, validation, and index work.
-- Preserve `id`, `source`, `context`, `hints`, and `diagnostics`. Write translated text through `translation`; use `skip: true` only for entries that do not need translation.
+- Preserve `id`, `source`, `context`, `hints`, and `diagnostics`. Write translated text through `translation`; use `action: "skip"` with a supported `skip_reason` only for entries that do not need translation.
 - Use `knowledge_lookup` before choosing translations for suspected terms, uncertain names, repeated phrases, or diagnostic review.
 - Use `knowledge_term_upsert` and `knowledge_term_delete` for workspace terminology edits; do not hand-edit term TOML.
 - Only write terminology that has been verified through lookup evidence and entry context. Do not create or update terms from knowledge-base intuition or memory alone.
-- Run `knowledge_validate` before `workspace_finalize`.
+- Run `knowledge_validate` before `workspace_finalize`. Finalize requires no claimable rows, active claims, or diagnostics unless `force: true` is explicitly requested.
 - Treat diagnostics as review inputs. Resolve real risks; do not delete diagnostics manually.
+- Mutating workspace tools wait briefly for an existing workspace lock before failing; do not manually remove lock files.
 
 ## Default Workflow
 

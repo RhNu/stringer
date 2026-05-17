@@ -81,7 +81,7 @@ async fn mcp_workspace_batch_claim_read_detail_and_submit_use_compact_packets() 
             CallToolRequestParams::new("workspace_batch_detail").with_arguments(args(json!({
                 "workspace": path_string(workspace.path()),
                 "batch_id": batch_id,
-                "keys": [key]
+                "keys": [key, "e999"]
             }))),
         )
         .await
@@ -95,6 +95,7 @@ async fn mcp_workspace_batch_claim_read_detail_and_submit_use_compact_packets() 
             .unwrap()
             .contains("scaleform:")
     );
+    assert_eq!(detail["missing_keys"], json!(["e999"]));
 
     let applied = client
         .call_tool(

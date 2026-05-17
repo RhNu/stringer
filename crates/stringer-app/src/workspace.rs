@@ -25,7 +25,7 @@ use stringer_interface::{
     WorkspaceBatchExportFormatInput, WorkspaceBatchExportRequest, WorkspaceBatchExportResponse,
     WorkspaceBatchReadEntryResponse, WorkspaceBatchReadRequest, WorkspaceBatchReadResponse,
     WorkspaceBatchReleaseRequest, WorkspaceBatchReleaseResponse, WorkspaceBatchScope,
-    WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry,
+    WorkspaceBatchSkipReasonInput, WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry,
     WorkspaceBatchSubmitEntryResultResponse, WorkspaceBatchSubmitRequest,
     WorkspaceBatchSubmitResponse, WorkspaceBatchSubmitStatusResponse, WorkspaceFinalizeRequest,
     WorkspaceFinalizeResponse, WorkspaceInspectDiagnosticResponse,
@@ -74,6 +74,7 @@ pub async fn workspace_finalize(
         workspace,
         source_root: request.source_root.map(path),
         output,
+        force: request.force,
     })
     .await?;
     Ok(WorkspaceFinalizeResponse {
@@ -153,6 +154,7 @@ pub fn workspace_batch_detail(
             .into_iter()
             .map(batch_detail_entry_response)
             .collect::<Result<_, _>>()?,
+        missing_keys: detail.missing_keys,
     })
 }
 
@@ -346,7 +348,7 @@ fn batch_submit_entry(entry: WorkspaceBatchSubmitEntry) -> BatchSubmitEntry {
         key: entry.key,
         action: batch_submit_action(entry.action),
         translation: entry.translation,
-        skip_reason: entry.skip_reason,
+        skip_reason: entry.skip_reason.map(skip_reason),
     }
 }
 
@@ -529,6 +531,17 @@ fn batch_submit_action(value: WorkspaceBatchSubmitActionInput) -> BatchSubmitAct
         WorkspaceBatchSubmitActionInput::Skip => BatchSubmitAction::Skip,
         WorkspaceBatchSubmitActionInput::Pending => BatchSubmitAction::Pending,
     }
+}
+
+fn skip_reason(value: WorkspaceBatchSkipReasonInput) -> String {
+    match value {
+        WorkspaceBatchSkipReasonInput::NotTranslatable => "not_translatable",
+        WorkspaceBatchSkipReasonInput::SourceIsTarget => "source_is_target",
+        WorkspaceBatchSkipReasonInput::IdentifierOrToken => "identifier_or_token",
+        WorkspaceBatchSkipReasonInput::DuplicateOrObsolete => "duplicate_or_obsolete",
+        WorkspaceBatchSkipReasonInput::NeedsManualReview => "needs_manual_review",
+    }
+    .to_string()
 }
 
 fn batch_submit_status_response(value: BatchSubmitStatus) -> WorkspaceBatchSubmitStatusResponse {

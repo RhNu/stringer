@@ -122,6 +122,7 @@ fn mcp_params_ignore_removed_workspace_path_fields() {
     }))
     .unwrap();
     assert!(finalize_override.output.is_none());
+    assert!(!finalize_override.force);
 
     let lookup_project = serde_json::from_value::<KnowledgeLookupRequest>(json!({
         "text": "Iron Sword",

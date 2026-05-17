@@ -28,6 +28,8 @@ Read claimed entries with `workspace_batch_read`:
 
 The result contains compact rows with `key`, `source`, optional `current_translation`, optional `origin`, `context_label`, hint and diagnostic counts, and diagnostic codes. It intentionally omits full `id`, `context`, `hints`, and `diagnostics` to keep tool output short.
 
+`workspace_batch_detail` returns full rows for found keys and reports unknown requested keys in `missing_keys`. Treat missing keys as a request or stale-batch mistake and re-read the batch before submitting.
+
 Fetch full detail only for keys that need it:
 
 ```json
@@ -50,7 +52,7 @@ For each entry:
 - Treat suspected terminology as lookup-required. Before choosing a translation for an uncertain name, proper noun, repeated phrase, or domain term, run `knowledge_lookup` and use the returned evidence with the entry context.
 - Do not write a canonical term into the workspace unless it has been verified by lookup evidence and context. Memory hits and prior knowledge are evidence to inspect, not permission to upsert terms by intuition.
 - Keep names consistent across entries in the same asset and record type.
-- Use `action: "skip"` when an entry does not need translation. Do not repeat `source` as `translation` just to complete the batch.
+- Use `action: "skip"` when an entry does not need translation. A skip must include one `skip_reason`: `not_translatable`, `source_is_target`, `identifier_or_token`, `duplicate_or_obsolete`, or `needs_manual_review`. Do not repeat `source` as `translation` just to complete the batch.
 - Use `action: "pending"` when no safe translation or skip decision can be made yet.
 - Work from entries returned by batch tools. Do not open raw `entries/**/*.jsonl` files to translate.
 
