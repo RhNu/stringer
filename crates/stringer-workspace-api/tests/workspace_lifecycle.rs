@@ -50,7 +50,7 @@ target = "铁剑"
 }
 
 #[tokio::test]
-async fn open_rejects_generated_artifacts_and_unknown_paths_without_force() {
+async fn open_rejects_generated_artifacts_without_force() {
     let root = TempRoot::new("open-rejects-existing");
     let source_root = root.path().join("source");
     write_text(
@@ -69,17 +69,49 @@ async fn open_rejects_generated_artifacts_and_unknown_paths_without_force() {
     .unwrap_err();
     assert!(error.to_string().contains("generated artifact"));
 
-    let unknown = root.path().join("unknown-workspace");
-    write_text(&unknown.join("notes.txt"), "keep");
+    let entries = root.path().join("entries-workspace");
+    write_text(&entries.join("entries/stale.jsonl"), "{}\n");
     let error = export_translations(ExportTranslationsOptions {
         source_root: utf8(&source_root),
-        workspace: utf8(&unknown),
+        workspace: utf8(&entries),
         settings: settings(),
         force: false,
     })
     .await
     .unwrap_err();
-    assert!(error.to_string().contains("unknown existing path"));
+    assert!(error.to_string().contains("generated artifact"));
+}
+
+#[tokio::test]
+async fn open_allows_unrelated_existing_paths_without_force() {
+    let root = TempRoot::new("open-allows-unrelated-existing");
+    let source_root = root.path().join("source");
+    write_text(
+        &source_root.join("Data/Interface/Translations/MyMod_English.txt"),
+        "$Title\tIron Sword\n",
+    );
+    let workspace = root.path().join("workspace");
+    write_text(&workspace.join("notes.txt"), "keep");
+    write_text(&workspace.join("assets/readme.md"), "keep too");
+
+    export_translations(ExportTranslationsOptions {
+        source_root: utf8(&source_root),
+        workspace: utf8(&workspace),
+        settings: settings(),
+        force: false,
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(
+        fs::read_to_string(workspace.join("notes.txt")).unwrap(),
+        "keep"
+    );
+    assert_eq!(
+        fs::read_to_string(workspace.join("assets/readme.md")).unwrap(),
+        "keep too"
+    );
+    assert!(workspace.join("workspace.json").exists());
 }
 
 #[tokio::test]

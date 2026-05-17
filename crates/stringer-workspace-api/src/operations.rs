@@ -247,14 +247,7 @@ fn prepare_workspace_for_export(workspace: &Utf8Path, force: bool) -> Result<(),
                     ),
                 });
             }
-            _ => {
-                return Err(WorkspaceError::InvalidTranslationPackagePath {
-                    path: workspace.to_string(),
-                    message: format!(
-                        "workspace directory contains unknown existing path `{name}`; use --force to initialize anyway"
-                    ),
-                });
-            }
+            _ => {}
         }
     }
     Ok(())
