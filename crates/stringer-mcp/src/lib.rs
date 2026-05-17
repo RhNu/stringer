@@ -119,7 +119,7 @@ impl StringerMcp {
 
     #[tool(
         name = "workspace_batch_submit",
-        description = "Submit translate, skip, or pending actions for a claimed batch.",
+        description = "Submit translate, skip, or pending actions inline, or from an exported patch.json/patch.csv input file.",
         input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchSubmitRequest>>(),
         output_schema = compatible_output_schema_for_type::<WorkspaceBatchSubmitResponse>()
     )]

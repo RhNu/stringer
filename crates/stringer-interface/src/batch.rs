@@ -136,9 +136,14 @@ pub struct WorkspaceBatchDetailEntryResponse {
 pub struct WorkspaceBatchSubmitRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace: Option<String>,
-    pub batch_id: String,
-    pub revision: u64,
-    pub entries: Vec<WorkspaceBatchSubmitEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entries: Option<Vec<WorkspaceBatchSubmitEntry>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

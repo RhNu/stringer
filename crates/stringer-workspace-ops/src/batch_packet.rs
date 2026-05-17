@@ -14,7 +14,7 @@ use stringer_workspace_core::{
 use crate::{WorkspaceOpsError, workspace_context_label};
 
 const BATCH_WORK_DIR: &str = "batch-work";
-const SKIP_REASONS: &[&str] = &[
+pub(crate) const SKIP_REASONS: &[&str] = &[
     "not_translatable",
     "source_is_target",
     "identifier_or_token",
@@ -95,37 +95,6 @@ pub struct BatchSubmitOptions {
     pub batch_id: String,
     pub revision: u64,
     pub entries: Vec<BatchSubmitEntry>,
-}
-
-impl BatchSubmitOptions {
-    pub fn from_json_file(workspace: Utf8PathBuf, path: String) -> Result<Self, WorkspaceOpsError> {
-        let path = Utf8PathBuf::from(path);
-        let text = fs::read_to_string(&path).map_err(|source| {
-            stringer_workspace_core::WorkspaceCoreError::ReadFile {
-                path: path.clone(),
-                source,
-            }
-        })?;
-        let submission: BatchSubmitInput = serde_json::from_str(&text).map_err(|source| {
-            stringer_workspace_core::WorkspaceCoreError::Json {
-                path: path.clone(),
-                source,
-            }
-        })?;
-        Ok(Self {
-            workspace,
-            batch_id: submission.batch_id,
-            revision: submission.revision,
-            entries: submission.entries,
-        })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-struct BatchSubmitInput {
-    batch_id: String,
-    revision: u64,
-    entries: Vec<BatchSubmitEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -469,8 +469,11 @@ fn batch_export_json_and_csv_submission_files_can_be_submitted() {
     );
 
     let summary = submit_batch(
-        BatchSubmitOptions::from_json_file(utf8(fixture.workspace()), exported.path.clone())
-            .unwrap(),
+        BatchSubmitOptions::from_submission_file(
+            utf8(fixture.workspace()),
+            camino::Utf8PathBuf::from(exported.path.clone()),
+        )
+        .unwrap(),
     )
     .unwrap();
     assert_eq!(summary.applied_entries, 1);
@@ -488,6 +491,63 @@ fn batch_export_json_and_csv_submission_files_can_be_submitted() {
     assert!(csv_text.contains(
         "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason"
     ));
+}
+
+#[test]
+fn batch_submit_options_parse_csv_submission_text() {
+    let workspace = camino::Utf8PathBuf::from("workspace");
+    let input = camino::Utf8PathBuf::from("patch.csv");
+    let submission = concat!(
+        "# stringer batch_id=b-test revision=7\n",
+        "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",
+        "e001,\"Iron\nSword\",,,memory.conflict,translate,\"熟\n铁剑\",\n",
+        "e002,Done,,,,skip,,source_is_target\n",
+    );
+
+    let options =
+        BatchSubmitOptions::from_submission_text(workspace.clone(), &input, submission).unwrap();
+
+    assert_eq!(options.workspace, workspace);
+    assert_eq!(options.batch_id, "b-test");
+    assert_eq!(options.revision, 7);
+    assert_eq!(options.entries.len(), 2);
+    assert_eq!(options.entries[0].key, "e001");
+    assert_eq!(options.entries[0].action, BatchSubmitAction::Translate);
+    assert_eq!(options.entries[0].translation.as_deref(), Some("熟\n铁剑"));
+    assert_eq!(options.entries[1].action, BatchSubmitAction::Skip);
+    assert_eq!(
+        options.entries[1].skip_reason.as_deref(),
+        Some("source_is_target")
+    );
+}
+
+#[test]
+fn batch_submit_options_reject_invalid_csv_submission_text() {
+    let workspace = camino::Utf8PathBuf::from("workspace");
+    let input = camino::Utf8PathBuf::from("patch.csv");
+    let unsupported_reason = concat!(
+        "# stringer batch_id=b-test revision=7\n",
+        "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",
+        "e001,Iron Sword,,,,skip,,legacy\n",
+    );
+
+    let error =
+        BatchSubmitOptions::from_submission_text(workspace.clone(), &input, unsupported_reason)
+            .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported skip_reason `legacy`")
+    );
+
+    let missing_metadata = concat!(
+        "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",
+        "e001,Iron Sword,,,,translate,熟铁剑,\n",
+    );
+
+    let error =
+        BatchSubmitOptions::from_submission_text(workspace, &input, missing_metadata).unwrap_err();
+    assert!(error.to_string().contains("missing batch_id metadata"));
 }
 
 #[test]

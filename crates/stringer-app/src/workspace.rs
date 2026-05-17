@@ -6,17 +6,18 @@ use stringer_workspace_api::{
     InspectEntryStatus, InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
     InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, NormalizeRuleEncoding,
     NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary, ReadBatchDetailOptions,
-    ReadBatchOptions, ReleaseBatchOptions, ReleaseBatchSummary, WorkspaceInspectDiagnostic,
-    WorkspaceInspectEntry, WorkspaceInspectFiles, WorkspaceNormalizeChange, count_batch,
-    export_batch_submission, export_translations, import_translations,
-    inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
-    inspect_workspace_files, normalize_workspace as normalize_workspace_api, read_batch,
-    read_batch_detail, release_batch, submit_batch, workspace_context_label,
+    ReadBatchOptions, ReleaseBatchOptions, ReleaseBatchSummary, WorkspaceError,
+    WorkspaceInspectDiagnostic, WorkspaceInspectEntry, WorkspaceInspectFiles,
+    WorkspaceNormalizeChange, count_batch, export_batch_submission, export_translations,
+    import_translations, inspect_workspace_diagnostics, inspect_workspace_entries,
+    inspect_workspace_entry, inspect_workspace_files,
+    normalize_workspace as normalize_workspace_api, read_batch, read_batch_detail, release_batch,
+    submit_batch, workspace_context_label,
 };
 use stringer_workspace_core::GlobalConfigSource;
 
 use crate::error::{AppError, serialize_value};
-use crate::paths::{default_output_path, path, workspace_or_current};
+use crate::paths::{default_output_path, path, workspace_input_path, workspace_or_current};
 use crate::settings::load_settings_for_workspace;
 use stringer_interface::{
     InspectDiagnosticSeverityInput, InspectEntryStatusInput, WorkspaceBatchClaimRequest,
@@ -161,16 +162,8 @@ pub fn workspace_batch_detail(
 pub fn workspace_batch_submit(
     request: WorkspaceBatchSubmitRequest,
 ) -> Result<WorkspaceBatchSubmitResponse, AppError> {
-    let summary = submit_batch(BatchSubmitOptions {
-        workspace: workspace_or_current(request.workspace)?,
-        batch_id: request.batch_id,
-        revision: request.revision,
-        entries: request
-            .entries
-            .into_iter()
-            .map(batch_submit_entry)
-            .collect(),
-    })?;
+    let workspace = workspace_or_current(request.workspace.clone())?;
+    let summary = submit_batch(batch_submit_options(workspace, request)?)?;
     Ok(WorkspaceBatchSubmitResponse {
         batch_id: summary.batch_id,
         revision: summary.revision,
@@ -185,6 +178,53 @@ pub fn workspace_batch_submit(
             .map(batch_submit_result_response)
             .collect(),
     })
+}
+
+fn batch_submit_options(
+    workspace: camino::Utf8PathBuf,
+    request: WorkspaceBatchSubmitRequest,
+) -> Result<BatchSubmitOptions, AppError> {
+    let has_input = request.input.is_some();
+    let has_inline =
+        request.batch_id.is_some() || request.revision.is_some() || request.entries.is_some();
+    match (has_input, has_inline) {
+        (true, false) => {
+            let input = workspace_input_path(&workspace, request.input.expect("checked input"))?;
+            BatchSubmitOptions::from_submission_file(workspace, input)
+                .map_err(WorkspaceError::from)
+                .map_err(AppError::from)
+        }
+        (false, true) => inline_batch_submit_options(workspace, request),
+        (true, true) => Err(invalid_batch_submit_request()),
+        (false, false) => Err(invalid_batch_submit_request()),
+    }
+}
+
+fn inline_batch_submit_options(
+    workspace: camino::Utf8PathBuf,
+    request: WorkspaceBatchSubmitRequest,
+) -> Result<BatchSubmitOptions, AppError> {
+    let Some(batch_id) = request.batch_id else {
+        return Err(invalid_batch_submit_request());
+    };
+    let Some(revision) = request.revision else {
+        return Err(invalid_batch_submit_request());
+    };
+    let Some(entries) = request.entries else {
+        return Err(invalid_batch_submit_request());
+    };
+    Ok(BatchSubmitOptions {
+        workspace,
+        batch_id,
+        revision,
+        entries: entries.into_iter().map(batch_submit_entry).collect(),
+    })
+}
+
+fn invalid_batch_submit_request() -> AppError {
+    AppError::InvalidRequest {
+        message: "workspace_batch_submit accepts either input or inline entries with batch_id, revision, and entries".to_string(),
+    }
 }
 
 pub fn workspace_batch_export(

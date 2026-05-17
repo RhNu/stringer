@@ -58,7 +58,7 @@ For each entry:
 
 ## Submit
 
-Submit one request for the claimed batch through `workspace_batch_submit`:
+For small batches, submit one inline request for the claimed batch through `workspace_batch_submit`:
 
 ```json
 {
@@ -86,4 +86,13 @@ Submit one request for the claimed batch through `workspace_batch_submit`:
 
 The submit result reports `applied`, `ignored`, or `rejected` per key. If the batch revision is stale, re-read the batch and resubmit against the current revision. If stopping early, release the batch so remaining undecided entries can be claimed again.
 
-For long work or tool-output limits, use `workspace_batch_export` to create an editable JSON submission file under `batch-work/<batch_id>/patch.json`, then submit that file through the CLI. The `patch.json` filename is retained for compatibility with existing exported batch files; `workspace_batch_submit` is the only supported mutation API.
+For long work or tool-output limits, use `workspace_batch_export` to create an editable JSON or CSV submission file under `batch-work/<batch_id>/patch.json` or `patch.csv`. Agents may edit the exported patch directly or use Python and other scripts to fill `action`, `translation`, and `skip_reason`, then submit the file through MCP:
+
+```json
+{
+  "workspace": "<WORKSPACE>",
+  "input": "batch-work/<BATCH_ID>/patch.json"
+}
+```
+
+The CLI equivalent is `stringer workspace batch submit --workspace <WORKSPACE> --input <PATCH_JSON_OR_CSV>`. File-based submit is only for exported patch files; do not edit raw `entries/**/*.jsonl`, `batches/*.json`, or `workspace.json`.

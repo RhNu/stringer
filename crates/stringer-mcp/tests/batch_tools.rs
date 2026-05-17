@@ -172,6 +172,196 @@ async fn mcp_workspace_batch_claim_read_detail_and_submit_use_compact_packets() 
 }
 
 #[tokio::test]
+async fn mcp_workspace_batch_submit_accepts_exported_json_and_csv_inputs() {
+    let root = TempRoot::new("mcp-batch-file-root");
+    let workspace = TempRoot::new("mcp-batch-file-workspace");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n$Desc\tSteel Sword\n");
+
+    let (client, server_handle) = connect().await;
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
+                "source_root": path_string(root.path()),
+                "workspace": path_string(workspace.path()),
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+
+    let claim = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_claim").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "limit": 2
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let batch_id = claim["batch_id"].as_str().unwrap();
+
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_export").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id
+            }))),
+        )
+        .await
+        .unwrap();
+    let json_input = format!("batch-work/{batch_id}/patch.json");
+    let json_patch_path = workspace.path().join(&json_input);
+    let mut patch: Value =
+        serde_json::from_str(&fs::read_to_string(&json_patch_path).unwrap()).unwrap();
+    patch["entries"][0]["action"] = Value::String("translate".to_string());
+    patch["entries"][0]["translation"] = Value::String("熟铁剑".to_string());
+    write_text(
+        &json_patch_path,
+        &serde_json::to_string_pretty(&patch).unwrap(),
+    );
+
+    let json_submit = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_submit").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "input": json_input
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(json_submit["applied_entries"], 1);
+    assert_eq!(json_submit["remaining_entries"], 1);
+
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_export").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "batch_id": batch_id,
+                "format": "csv"
+            }))),
+        )
+        .await
+        .unwrap();
+    let csv_input = format!("batch-work/{batch_id}/patch.csv");
+    let csv_patch_path = workspace.path().join(&csv_input);
+    let csv_patch = fs::read_to_string(&csv_patch_path)
+        .unwrap()
+        .replace(",pending,,", ",skip,,not_translatable");
+    write_text(&csv_patch_path, &csv_patch);
+
+    let csv_submit = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_submit").with_arguments(args(json!({
+                "workspace": path_string(workspace.path()),
+                "input": csv_input
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    assert_eq!(csv_submit["applied_entries"], 1);
+    assert_eq!(csv_submit["remaining_entries"], 0);
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn mcp_workspace_batch_submit_accepts_export_returned_path_for_relative_workspace() {
+    let case = RelativeRoot::new("mcp-batch-relative-workspace");
+    let root = case.path().join("root");
+    let workspace = case.path().join("translations");
+    let asset = root
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n");
+
+    let (client, server_handle) = connect().await;
+    client
+        .call_tool(
+            CallToolRequestParams::new("workspace_open").with_arguments(args(json!({
+                "source_root": path_string(&root),
+                "workspace": path_string(&workspace),
+                "settings": {
+                    "game_release": "SkyrimSe",
+                    "asset_language": "English",
+                    "source_locale": "en",
+                    "target_locale": "zh-Hans"
+                }
+            }))),
+        )
+        .await
+        .unwrap();
+
+    let claim = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_claim").with_arguments(args(json!({
+                "workspace": path_string(&workspace),
+                "limit": 1
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let batch_id = claim["batch_id"].as_str().unwrap();
+    let exported = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_export").with_arguments(args(json!({
+                "workspace": path_string(&workspace),
+                "batch_id": batch_id
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+    let input = exported["path"].as_str().unwrap();
+    assert!(input.starts_with("target/"));
+    let patch_path = std::path::PathBuf::from(input);
+    let mut patch: Value = serde_json::from_str(&fs::read_to_string(&patch_path).unwrap()).unwrap();
+    patch["entries"][0]["action"] = Value::String("translate".to_string());
+    patch["entries"][0]["translation"] = Value::String("熟铁剑".to_string());
+    write_text(&patch_path, &serde_json::to_string_pretty(&patch).unwrap());
+
+    let submitted = client
+        .call_tool(
+            CallToolRequestParams::new("workspace_batch_submit").with_arguments(args(json!({
+                "workspace": path_string(&workspace),
+                "input": input
+            }))),
+        )
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
+
+    assert_eq!(submitted["applied_entries"], 1);
+    assert_eq!(submitted["remaining_entries"], 0);
+
+    client.cancel().await.unwrap();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
 async fn mcp_workspace_batch_submit_errors_explain_stale_revisions() {
     let root = TempRoot::new("mcp-batch-stale-id-root");
     let workspace = TempRoot::new("mcp-batch-stale-id-workspace");
@@ -448,6 +638,35 @@ impl TempRoot {
 }
 
 impl Drop for TempRoot {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct RelativeRoot {
+    path: std::path::PathBuf,
+}
+
+impl RelativeRoot {
+    fn new(label: &str) -> Self {
+        let path = std::path::PathBuf::from("target").join(format!(
+            "stringer_mcp_{label}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        Self { path }
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl Drop for RelativeRoot {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

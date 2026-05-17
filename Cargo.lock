@@ -1300,13 +1300,13 @@ version = "0.1.0"
 dependencies = [
  "camino",
  "clap",
- "csv",
  "indicatif",
  "miette",
  "serde",
  "serde_json",
  "stringer-app",
  "stringer-interface",
+ "stringer-workspace-api",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -1488,6 +1488,7 @@ name = "stringer-workspace-ops"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "csv",
  "encoding_rs",
  "serde",
  "serde_json",

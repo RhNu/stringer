@@ -18,6 +18,9 @@ pub enum AppError {
     #[error(transparent)]
     Adapt(#[from] AdaptError),
 
+    #[error("{message}")]
+    InvalidRequest { message: String },
+
     #[error("failed to serialize `{message}`: {source}")]
     Serialize {
         message: &'static str,
@@ -44,6 +47,11 @@ impl AppError {
             Self::Adapt(error) => {
                 app_error_payload(adapt_error_code(error), message, adapt_error_details(error))
             }
+            Self::InvalidRequest { message } => app_error_payload(
+                "app.invalid_request",
+                message.clone(),
+                json!({ "message": message }),
+            ),
             Self::Serialize { message: label, .. } => {
                 app_error_payload("app.serialize", message, json!({ "message": label }))
             }

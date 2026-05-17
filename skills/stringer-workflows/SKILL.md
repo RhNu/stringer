@@ -24,9 +24,10 @@ description: Use when an agent needs to operate Stringer MCP tools for Bethesda 
 3. Inspect files, remaining work, and diagnostics with `workspace_inspect_*` and `workspace_batch_count`; do not read raw workspace files.
 4. Organize terminology before formal translation: use `hints`, diagnostics, and `knowledge_lookup` to identify repeated or risky terms, then update workspace terminology with `knowledge_term_upsert` or `knowledge_term_delete`.
 5. Re-run `knowledge_annotate` after terminology changes so later batches carry the updated hints.
-6. Start formal batch translation with `workspace_batch_claim`, read compact rows with `workspace_batch_read`, fetch full rows with `workspace_batch_detail` only when needed, and write through `workspace_batch_submit`.
-7. Validate with `knowledge_validate`, review diagnostics with inspect tools, and repeat focused fixes if needed.
-8. Finalize with `workspace_finalize` only after validation and diagnostic review.
+6. Start formal batch translation with `workspace_batch_claim`, read compact rows with `workspace_batch_read`, fetch full rows with `workspace_batch_detail` only when needed, and write small batches inline through `workspace_batch_submit`.
+7. For large batches or tool-output limits, use `workspace_batch_export` to create `patch.json` or `patch.csv`, edit the patch file directly or with scripts, then submit it through `workspace_batch_submit` with `input` or through the CLI with `workspace batch submit --input`.
+8. Validate with `knowledge_validate`, review diagnostics with inspect tools, and repeat focused fixes if needed.
+9. Finalize with `workspace_finalize` only after validation and diagnostic review.
 
 If `stringer.toml` does not contain explicit settings, use explicit game, asset language, and locale settings in `workspace_open.settings` whenever they are known:
 

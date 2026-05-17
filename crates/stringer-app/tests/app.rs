@@ -4,18 +4,19 @@ use std::fs;
 use serde_json::Value;
 use stringer_app::{
     AppError, StringerApp, adapt_import, knowledge_term_upsert, workspace_batch_claim,
-    workspace_batch_count, workspace_batch_detail, workspace_batch_read, workspace_batch_submit,
-    workspace_finalize, workspace_inspect_diagnostics, workspace_inspect_entries,
-    workspace_normalize,
+    workspace_batch_count, workspace_batch_detail, workspace_batch_export, workspace_batch_read,
+    workspace_batch_submit, workspace_finalize, workspace_inspect_diagnostics,
+    workspace_inspect_entries, workspace_normalize,
 };
 use stringer_interface::{
     AdaptFormatInput, AdaptImportRequest, InspectDiagnosticSeverityInput, InspectEntryStatusInput,
     KnowledgeTermInput, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest, SettingsInput,
     WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest,
-    WorkspaceBatchReadRequest, WorkspaceBatchSkipReasonInput, WorkspaceBatchSubmitActionInput,
-    WorkspaceBatchSubmitEntry, WorkspaceBatchSubmitRequest, WorkspaceFinalizeRequest,
-    WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
-    WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest, WorkspaceOpenRequest,
+    WorkspaceBatchExportFormatInput, WorkspaceBatchExportRequest, WorkspaceBatchReadRequest,
+    WorkspaceBatchSkipReasonInput, WorkspaceBatchSubmitActionInput, WorkspaceBatchSubmitEntry,
+    WorkspaceBatchSubmitRequest, WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectEntriesRequest, WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest,
+    WorkspaceOpenRequest,
 };
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceCoreError};
 
@@ -85,14 +86,15 @@ async fn app_workspace_batch_flow_matches_agent_cli_semantics() {
 
     let summary = workspace_batch_submit(WorkspaceBatchSubmitRequest {
         workspace: Some(path_string(workspace.path())),
-        batch_id,
-        revision,
-        entries: vec![WorkspaceBatchSubmitEntry {
+        input: None,
+        batch_id: Some(batch_id),
+        revision: Some(revision),
+        entries: Some(vec![WorkspaceBatchSubmitEntry {
             key,
             action: WorkspaceBatchSubmitActionInput::Translate,
             translation: Some("熟铁剑".to_string()),
             skip_reason: None,
-        }],
+        }]),
     })
     .unwrap();
     assert_eq!(summary.applied_entries, 1);
@@ -185,20 +187,125 @@ fn app_workspace_batch_submit_rejects_unknown_skip_reason_before_submit() {
 
     let request = WorkspaceBatchSubmitRequest {
         workspace: None,
-        batch_id: "b-test".to_string(),
-        revision: 1,
-        entries: vec![WorkspaceBatchSubmitEntry {
+        input: None,
+        batch_id: Some("b-test".to_string()),
+        revision: Some(1),
+        entries: Some(vec![WorkspaceBatchSubmitEntry {
             key: "e001".to_string(),
             action: WorkspaceBatchSubmitActionInput::Skip,
             translation: None,
             skip_reason: Some(WorkspaceBatchSkipReasonInput::NotTranslatable),
-        }],
+        }]),
     };
 
     assert_eq!(
         serde_json::to_value(request).unwrap()["entries"][0]["skip_reason"],
         "not_translatable"
     );
+}
+
+#[tokio::test]
+async fn app_workspace_batch_submit_accepts_workspace_relative_input_file() {
+    let root = TempRoot::new("workspace-input-file-root");
+    let workspace = TempRoot::new("workspace-input-file-output");
+    let asset = root
+        .path()
+        .join("Data")
+        .join("Interface")
+        .join("Translations")
+        .join("MyMod_English.txt");
+    write_text(&asset, "$Title\tIron Sword\n");
+
+    test_app()
+        .workspace_open(WorkspaceOpenRequest {
+            source_root: path_string(root.path()),
+            workspace: Some(path_string(workspace.path())),
+            force: false,
+            settings: settings(),
+        })
+        .await
+        .unwrap();
+    let claim = workspace_batch_claim(WorkspaceBatchClaimRequest {
+        workspace: Some(path_string(workspace.path())),
+        file: None,
+        limit: 1,
+    })
+    .unwrap();
+    let batch_id = claim.batch_id.expect("batch id");
+    workspace_batch_export(WorkspaceBatchExportRequest {
+        workspace: Some(path_string(workspace.path())),
+        batch_id: batch_id.clone(),
+        out: None,
+        format: WorkspaceBatchExportFormatInput::Json,
+    })
+    .unwrap();
+    let input = format!("batch-work/{batch_id}/patch.json");
+    let patch_path = workspace.path().join(&input);
+    let mut patch: Value = serde_json::from_str(&fs::read_to_string(&patch_path).unwrap()).unwrap();
+    patch["entries"][0]["action"] = Value::String("translate".to_string());
+    patch["entries"][0]["translation"] = Value::String("熟铁剑".to_string());
+    write_text(&patch_path, &serde_json::to_string_pretty(&patch).unwrap());
+
+    let request: WorkspaceBatchSubmitRequest = serde_json::from_value(serde_json::json!({
+        "workspace": path_string(workspace.path()),
+        "input": input
+    }))
+    .unwrap();
+    let summary = workspace_batch_submit(request).unwrap();
+
+    assert_eq!(summary.applied_entries, 1);
+    assert_eq!(summary.remaining_entries, 0);
+}
+
+#[test]
+fn app_workspace_batch_submit_rejects_mixed_input_and_inline_payload() {
+    let workspace = TempRoot::new("workspace-mixed-submit");
+    write_text(
+        &workspace
+            .path()
+            .join("batch-work")
+            .join("b-test")
+            .join("patch.json"),
+        r#"{"batch_id":"b-test","revision":1,"entries":[]}"#,
+    );
+    let request: WorkspaceBatchSubmitRequest = serde_json::from_value(serde_json::json!({
+        "workspace": path_string(workspace.path()),
+        "input": "batch-work/b-test/patch.json",
+        "batch_id": "b-test",
+        "revision": 1,
+        "entries": []
+    }))
+    .unwrap();
+
+    let payload = workspace_batch_submit(request).unwrap_err().payload();
+
+    assert_eq!(payload.code, "app.invalid_request");
+    assert!(
+        payload
+            .message
+            .contains("workspace_batch_submit accepts either input or inline entries")
+    );
+}
+
+#[test]
+fn app_workspace_batch_submit_rejects_input_outside_workspace() {
+    let workspace = TempRoot::new("workspace-safe-input");
+    let outside = TempRoot::new("workspace-outside-input");
+    let outside_patch = outside.path().join("patch.json");
+    write_text(
+        &outside_patch,
+        r#"{"batch_id":"b-test","revision":1,"entries":[]}"#,
+    );
+    let request: WorkspaceBatchSubmitRequest = serde_json::from_value(serde_json::json!({
+        "workspace": path_string(workspace.path()),
+        "input": path_string(&outside_patch)
+    }))
+    .unwrap();
+
+    let payload = workspace_batch_submit(request).unwrap_err().payload();
+
+    assert_eq!(payload.code, "workspace.invalid_translation_package_path");
+    assert!(payload.message.contains("must be inside the workspace"));
 }
 
 #[tokio::test]

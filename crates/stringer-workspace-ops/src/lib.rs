@@ -2,6 +2,7 @@
 
 mod batch;
 mod batch_packet;
+mod batch_submission;
 mod error;
 mod inspect;
 mod labels;

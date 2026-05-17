@@ -426,6 +426,12 @@ impl From<AppError> for CliError {
     }
 }
 
+impl From<stringer_workspace_api::WorkspaceError> for CliError {
+    fn from(source: stringer_workspace_api::WorkspaceError) -> Self {
+        Self::App(Box::new(AppError::from(source)))
+    }
+}
+
 pub async fn run(cli: Cli) -> Result<(), CliError> {
     validate_feedback_args(&cli)?;
     init_tracing(cli.verbose, cli.quiet);

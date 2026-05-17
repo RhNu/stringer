@@ -2,7 +2,7 @@ use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 use stringer_app::{
     workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
-    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
+    workspace_batch_read, workspace_batch_release, workspace_finalize,
     workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
     workspace_inspect_files, workspace_normalize, workspace_open,
 };
@@ -10,11 +10,12 @@ use stringer_interface::{
     InspectDiagnosticSeverityInput, InspectEntryStatusInput, SettingsInput,
     WorkspaceBatchClaimRequest, WorkspaceBatchCountRequest, WorkspaceBatchDetailRequest,
     WorkspaceBatchExportFormatInput, WorkspaceBatchExportRequest, WorkspaceBatchReadRequest,
-    WorkspaceBatchReleaseRequest, WorkspaceBatchSubmitEntry, WorkspaceBatchSubmitRequest,
-    WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest, WorkspaceInspectEntriesRequest,
-    WorkspaceInspectEntryRequest, WorkspaceInspectFilesRequest, WorkspaceNormalizeEncodingInput,
-    WorkspaceNormalizeRequest, WorkspaceNormalizeResponse, WorkspaceOpenRequest,
+    WorkspaceBatchReleaseRequest, WorkspaceFinalizeRequest, WorkspaceInspectDiagnosticsRequest,
+    WorkspaceInspectEntriesRequest, WorkspaceInspectEntryRequest, WorkspaceInspectFilesRequest,
+    WorkspaceNormalizeEncodingInput, WorkspaceNormalizeRequest, WorkspaceNormalizeResponse,
+    WorkspaceOpenRequest,
 };
+use stringer_workspace_api::submit_batch;
 
 use crate::app::{CliError, print_json};
 use crate::feedback::Feedback;
@@ -578,22 +579,8 @@ fn run_workspace_batch(
         }
         WorkspaceBatchCommand::Submit(command) => {
             let status = feedback.command("workspace batch submit");
-            let submission = read_batch_submit_input(&command.input)?;
-            let summary = workspace_batch_submit(WorkspaceBatchSubmitRequest {
-                workspace: Some(command.workspace.to_string()),
-                batch_id: submission.batch_id,
-                revision: submission.revision,
-                entries: submission
-                    .entries
-                    .into_iter()
-                    .map(|entry| WorkspaceBatchSubmitEntry {
-                        key: entry.key,
-                        action: entry.action,
-                        translation: entry.translation,
-                        skip_reason: entry.skip_reason,
-                    })
-                    .collect(),
-            })?;
+            let submission = read_batch_submit_input(&command.workspace, &command.input)?;
+            let summary = submit_batch(submission)?;
             status.finish();
             print_json(&summary)
         }
