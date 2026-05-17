@@ -11,7 +11,7 @@ use stringer_workspace_core::{
     read_translation_package_records, unix_ms, write_translation_package_records,
 };
 
-use crate::WorkspaceOpsError;
+use crate::{WorkspaceOpsError, workspace_context_label};
 
 const BATCH_FORMAT_VERSION: u32 = 2;
 const BATCH_WORK_DIR: &str = "batch-work";
@@ -490,7 +490,7 @@ fn compact_entry(entry: &HydratedBatchEntry) -> BatchReadEntry {
             .translation_meta
             .as_ref()
             .and_then(|meta| meta.origin.clone()),
-        context_label: context_label(&entry.file, &entry.record),
+        context_label: workspace_context_label(&entry.file, &entry.record.context),
         hint_count: entry.record.hints.len(),
         diagnostic_count: entry.record.diagnostics.len(),
         diagnostic_codes: entry
@@ -540,45 +540,6 @@ fn hydrate_batch_entries(
         });
     }
     Ok(hydrated)
-}
-
-fn context_label(file: &str, record: &TranslationRecord) -> String {
-    if file.starts_with("entries/plugin/") {
-        return label_from_keys(
-            "plugin",
-            &record.context,
-            &["record_type", "subrecord", "form_id"],
-        );
-    }
-    if file.starts_with("entries/pex/") {
-        return label_from_keys(
-            "pex",
-            &record.context,
-            &["object", "state", "function", "opcode", "operand"],
-        );
-    }
-    if file.starts_with("entries/scaleform/") {
-        return label_from_keys("scaleform", &record.context, &["key"]);
-    }
-    label_from_keys(
-        "entry",
-        &record.context,
-        &["record_type", "subrecord", "key"],
-    )
-}
-
-fn label_from_keys(prefix: &str, context: &BTreeMap<String, String>, keys: &[&str]) -> String {
-    let parts = keys
-        .iter()
-        .filter_map(|key| context.get(*key))
-        .filter(|value| !value.is_empty())
-        .cloned()
-        .collect::<Vec<_>>();
-    if parts.is_empty() {
-        prefix.to_string()
-    } else {
-        format!("{prefix} {}", parts.join(" "))
-    }
 }
 
 fn rejected_result(key: String, message: impl Into<String>) -> BatchSubmitEntryResult {

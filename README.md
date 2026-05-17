@@ -137,7 +137,7 @@ translations/
   output/
 ```
 
-`workspace.json` 记录 schema、只读 `source_root`、游戏版本、资产语言、locale 和条目文件列表。旧版 `manifest.json` 工作区不会被 Workspace v4 命令读取；当前 `workspace upgrade` 只报告迁移尚未实现，旧工作区需要用 `workspace open` 重建。`entries/**/*.jsonl` 每行一个记录，常见字段如下：
+`workspace.json` 记录 schema、只读 `source_root`、游戏版本、资产语言、locale 和条目文件列表。旧版 `manifest.json` 工作区不会被 Workspace v4 命令读取；旧工作区需要用 `workspace open` 重建。`entries/**/*.jsonl` 每行一个记录，常见字段如下：
 
 - `id`：稳定条目 ID，完成工作区时用它定位源文本。
 - `source`：源文本，不建议改。
@@ -367,7 +367,6 @@ cargo run -p stringer-cli -- --help
 ```powershell
 cargo run -p stringer-cli -- workspace open --help
 cargo run -p stringer-cli -- workspace finalize --help
-cargo run -p stringer-cli -- workspace upgrade --help
 cargo run -p stringer-cli -- adapt import --help
 cargo run -p stringer-cli -- knowledge annotate --help
 cargo run -p stringer-cli -- knowledge validate --help
@@ -381,7 +380,6 @@ cargo run -p stringer-cli -- knowledge term delete --help
 
 - `workspace open`：从只读 source root 扫描资产，打开翻译工作区。
 - `workspace finalize`：读取翻译工作区，把译文写到输出目录。
-- `workspace upgrade`：当前仅报告旧 `manifest.json` 工作区迁移未实现；需要重建旧工作区。
 - `workspace inspect`：只读查看 entry files、条目和 diagnostics，默认输出 JSON。
 - `adapt import`：把 EET、EET XML、EET JSON 或 xTranslator SST 转成翻译记忆 JSONL。
 - `knowledge annotate`：给翻译工作区写入术语、记忆和知识提示，默认自动填充高置信记忆；需要只写提示时加 `--skip-fill-memory`。

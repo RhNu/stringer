@@ -1,4 +1,5 @@
 use camino::Utf8PathBuf;
+use serde::Serialize;
 use serde_json::{Value, json};
 use stringer_adapt::AdaptError;
 use stringer_knowledge::KnowledgeError;
@@ -25,22 +26,27 @@ pub enum AppError {
     },
 }
 
-impl AppError {
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::Workspace(error) => workspace_error_code(error),
-            Self::Knowledge(error) => knowledge_error_code(error),
-            Self::Adapt(error) => adapt_error_code(error),
-            Self::Serialize { .. } => "app.serialize",
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct AppErrorPayload {
+    pub code: &'static str,
+    pub message: String,
+    pub details: Value,
+}
 
-    pub fn details(&self) -> Value {
+impl AppError {
+    pub fn payload(&self) -> AppErrorPayload {
+        let message = self.to_string();
         match self {
-            Self::Workspace(error) => workspace_error_details(error),
-            Self::Knowledge(error) => knowledge_error_details(error),
-            Self::Adapt(error) => adapt_error_details(error),
-            Self::Serialize { message, .. } => json!({ "message": message }),
+            Self::Workspace(error) => {
+                workspace_error_payload(WorkspaceErrorView::Api(error), message)
+            }
+            Self::Knowledge(error) => knowledge_error_payload(error, message),
+            Self::Adapt(error) => {
+                app_error_payload(adapt_error_code(error), message, adapt_error_details(error))
+            }
+            Self::Serialize { message: label, .. } => {
+                app_error_payload("app.serialize", message, json!({ "message": label }))
+            }
         }
     }
 }
@@ -95,6 +101,39 @@ fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::Pex(_) => "workspace.pex",
         WorkspaceError::Scaleform(_) => "workspace.scaleform",
         WorkspaceError::Bundle(_) => "workspace.bundle",
+    }
+}
+
+enum WorkspaceErrorView<'a> {
+    Api(&'a WorkspaceError),
+    Core(&'a WorkspaceCoreError),
+}
+
+fn app_error_payload(code: &'static str, message: String, details: Value) -> AppErrorPayload {
+    AppErrorPayload {
+        code,
+        message,
+        details,
+    }
+}
+
+fn workspace_error_payload(error: WorkspaceErrorView<'_>, message: String) -> AppErrorPayload {
+    app_error_payload(error.code(), message, error.details())
+}
+
+impl WorkspaceErrorView<'_> {
+    fn code(&self) -> &'static str {
+        match self {
+            Self::Api(error) => workspace_error_code(error),
+            Self::Core(error) => workspace_core_error_code(error),
+        }
+    }
+
+    fn details(&self) -> Value {
+        match self {
+            Self::Api(error) => workspace_error_details(error),
+            Self::Core(error) => workspace_core_error_details(error),
+        }
     }
 }
 
@@ -183,6 +222,19 @@ fn knowledge_error_code(error: &KnowledgeError) -> &'static str {
         KnowledgeError::Sqlite { .. } => "workspace.sqlite",
         KnowledgeError::CandidateIndex { .. } => "workspace.candidate_index",
         KnowledgeError::Pipeline(_) => "workspace.pipeline",
+    }
+}
+
+fn knowledge_error_payload(error: &KnowledgeError, message: String) -> AppErrorPayload {
+    match error {
+        KnowledgeError::Core(error) => {
+            workspace_error_payload(WorkspaceErrorView::Core(error), message)
+        }
+        _ => app_error_payload(
+            knowledge_error_code(error),
+            message,
+            knowledge_error_details(error),
+        ),
     }
 }
 

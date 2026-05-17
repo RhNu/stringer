@@ -69,7 +69,7 @@ pub enum WorkspaceError {
     UnsupportedTranslationSchema { path: Utf8PathBuf, version: u32 },
 
     #[error(
-        "legacy translation workspace `{path}` uses manifest.json; recreate or upgrade it to workspace.json"
+        "legacy translation workspace `{path}` uses manifest.json; recreate it with workspace open"
     )]
     LegacyTranslationWorkspace { path: Utf8PathBuf },
 

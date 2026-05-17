@@ -11,16 +11,16 @@ use stringer_knowledge::{
 use stringer_workspace_api::WorkspaceError;
 use stringer_workspace_core::{GlobalConfigSource, WorkspaceSettings, read_workspace_settings};
 
-use crate::dto::{
+use crate::error::{AppError, serialize_value};
+use crate::paths::{initialized_workspace_or_current, path, workspace_or_current};
+use crate::settings::{knowledge_kind, lookup_field, lookup_source};
+use stringer_interface::{
     KnowledgeAnnotateRequest, KnowledgeIndexRebuildRequest, KnowledgeIndexRebuildResponse,
     KnowledgeKindInput, KnowledgeLookupRequest, KnowledgeLookupResponse,
     KnowledgeLookupResultResponse, KnowledgeOperationResponse, KnowledgeTermDeleteRequest,
     KnowledgeTermEditResponse, KnowledgeTermStatusInput, KnowledgeTermUpsertRequest,
     KnowledgeTermsEditResponse, KnowledgeValidateRequest,
 };
-use crate::error::{AppError, serialize_value};
-use crate::paths::{initialized_workspace_or_current, path, workspace_or_current};
-use crate::settings::{knowledge_kind, lookup_field, lookup_source};
 
 pub fn knowledge_annotate(
     request: KnowledgeAnnotateRequest,
@@ -296,7 +296,7 @@ fn knowledge_terms_edit_response(summary: KnowledgeTermsEditSummary) -> Knowledg
     }
 }
 
-fn workspace_term_input(term: crate::dto::KnowledgeTermInput) -> WorkspaceTermInput {
+fn workspace_term_input(term: stringer_interface::KnowledgeTermInput) -> WorkspaceTermInput {
     WorkspaceTermInput {
         id: term.id,
         source: term.source,

@@ -7,10 +7,10 @@ use stringer_workspace_api::{
 use stringer_workspace_core::GlobalConfigSource;
 use tracing::info;
 
-use crate::dto::{AdaptImportRequest, AdaptImportResponse, AdaptImportSummary};
 use crate::error::AppError;
 use crate::paths::{default_adapt_memory_path, path};
 use crate::settings::adapt_format;
+use stringer_interface::{AdaptImportRequest, AdaptImportResponse, AdaptImportSummary};
 
 pub async fn adapt_import(request: AdaptImportRequest) -> Result<AdaptImportResponse, AppError> {
     adapt_import_with_global_config_source(request, &GlobalConfigSource::Production).await

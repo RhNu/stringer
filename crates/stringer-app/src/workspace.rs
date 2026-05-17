@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use stringer_workspace_api::{
     BatchCount, BatchDetailEntry, BatchExportFormat, BatchExportOptions, BatchExportSummary,
     BatchReadEntry, BatchSubmitAction, BatchSubmitEntry, BatchSubmitEntryResult,
@@ -8,17 +6,19 @@ use stringer_workspace_api::{
     InspectEntryStatus, InspectWorkspaceDiagnosticsOptions, InspectWorkspaceEntriesOptions,
     InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions, NormalizeRuleEncoding,
     NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary, ReadBatchDetailOptions,
-    ReadBatchOptions, ReleaseBatchOptions, ReleaseBatchSummary, WorkspaceError,
-    WorkspaceInspectDiagnostic, WorkspaceInspectEntry, WorkspaceInspectFiles,
-    WorkspaceNormalizeChange, count_batch, export_batch_submission, export_translations,
-    import_translations, inspect_workspace_diagnostics, inspect_workspace_entries,
-    inspect_workspace_entry, inspect_workspace_files,
-    normalize_workspace as normalize_workspace_api, read_batch, read_batch_detail, release_batch,
-    submit_batch,
+    ReadBatchOptions, ReleaseBatchOptions, ReleaseBatchSummary, WorkspaceInspectDiagnostic,
+    WorkspaceInspectEntry, WorkspaceInspectFiles, WorkspaceNormalizeChange, count_batch,
+    export_batch_submission, export_translations, import_translations,
+    inspect_workspace_diagnostics, inspect_workspace_entries, inspect_workspace_entry,
+    inspect_workspace_files, normalize_workspace as normalize_workspace_api, read_batch,
+    read_batch_detail, release_batch, submit_batch, workspace_context_label,
 };
 use stringer_workspace_core::GlobalConfigSource;
 
-use crate::dto::{
+use crate::error::{AppError, serialize_value};
+use crate::paths::{default_output_path, path, workspace_or_current};
+use crate::settings::load_settings_for_workspace;
+use stringer_interface::{
     InspectDiagnosticSeverityInput, InspectEntryStatusInput, WorkspaceBatchClaimRequest,
     WorkspaceBatchClaimResponse, WorkspaceBatchCountRequest, WorkspaceBatchCountResponse,
     WorkspaceBatchDetailEntryResponse, WorkspaceBatchDetailRequest, WorkspaceBatchDetailResponse,
@@ -37,9 +37,6 @@ use crate::dto::{
     WorkspaceNormalizeResponse, WorkspaceNormalizeWarningResponse, WorkspaceOpenRequest,
     WorkspaceOpenResponse,
 };
-use crate::error::{AppError, serialize_value};
-use crate::paths::{default_output_path, path, workspace_or_current};
-use crate::settings::load_settings_for_workspace;
 
 pub async fn workspace_open(
     request: WorkspaceOpenRequest,
@@ -272,15 +269,6 @@ pub fn workspace_inspect_diagnostics(
     })
 }
 
-pub fn workspace_upgrade_unsupported(workspace: String) -> AppError {
-    WorkspaceError::InvalidTranslationPackagePath {
-        path: workspace,
-        message: "workspace upgrade is not implemented; recreate/open a v3 workspace instead"
-            .to_string(),
-    }
-    .into()
-}
-
 fn batch_count_response(count: BatchCount) -> WorkspaceBatchCountResponse {
     WorkspaceBatchCountResponse {
         total: count.total,
@@ -479,7 +467,7 @@ fn inspect_entry_summary_response(
             .translation_meta
             .as_ref()
             .and_then(|meta| meta.origin.clone()),
-        context_label: context_label(&entry.file, &entry.context),
+        context_label: workspace_context_label(&entry.file, &entry.context),
         hint_count: entry.hints.len(),
         diagnostic_count: entry.diagnostics.len(),
         diagnostic_codes: entry
@@ -499,42 +487,11 @@ fn inspect_diagnostic_response(
         file: entry.file.clone(),
         source: entry.source,
         current_translation: entry.translation,
-        context_label: context_label(&entry.file, &entry.context),
+        context_label: workspace_context_label(&entry.file, &entry.context),
         code: entry.diagnostic.code().to_string(),
         severity: entry.diagnostic.severity().as_str().to_string(),
         message: entry.diagnostic.message().to_string(),
     })
-}
-
-fn context_label(file: &str, context: &BTreeMap<String, String>) -> String {
-    if file.starts_with("entries/plugin/") {
-        return label_from_keys("plugin", context, &["record_type", "subrecord", "form_id"]);
-    }
-    if file.starts_with("entries/pex/") {
-        return label_from_keys(
-            "pex",
-            context,
-            &["object", "state", "function", "opcode", "operand"],
-        );
-    }
-    if file.starts_with("entries/scaleform/") {
-        return label_from_keys("scaleform", context, &["key"]);
-    }
-    label_from_keys("entry", context, &["record_type", "subrecord", "key"])
-}
-
-fn label_from_keys(prefix: &str, context: &BTreeMap<String, String>, keys: &[&str]) -> String {
-    let parts = keys
-        .iter()
-        .filter_map(|key| context.get(*key))
-        .filter(|value| !value.is_empty())
-        .cloned()
-        .collect::<Vec<_>>();
-    if parts.is_empty() {
-        prefix.to_string()
-    } else {
-        format!("{prefix} {}", parts.join(" "))
-    }
 }
 
 fn inspect_entry_status(value: InspectEntryStatusInput) -> InspectEntryStatus {

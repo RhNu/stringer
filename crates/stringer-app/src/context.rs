@@ -1,7 +1,19 @@
 use stringer_workspace_core::GlobalConfigSource;
 
 use crate::adapt::adapt_import_with_global_config_source;
-use crate::dto::{
+use crate::error::AppError;
+use crate::knowledge::{
+    knowledge_annotate_with_global_config_source,
+    knowledge_index_rebuild_with_global_config_source, knowledge_lookup_with_global_config_source,
+    knowledge_term_delete, knowledge_term_upsert, knowledge_validate_with_global_config_source,
+};
+use crate::workspace::{
+    workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
+    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
+    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
+    workspace_inspect_files, workspace_normalize, workspace_open_with_global_config_source,
+};
+use stringer_interface::{
     AdaptImportRequest, AdaptImportResponse, KnowledgeAnnotateRequest,
     KnowledgeIndexRebuildRequest, KnowledgeIndexRebuildResponse, KnowledgeLookupRequest,
     KnowledgeLookupResponse, KnowledgeOperationResponse, KnowledgeTermDeleteRequest,
@@ -16,18 +28,6 @@ use crate::dto::{
     WorkspaceInspectEntriesResponse, WorkspaceInspectEntryRequest, WorkspaceInspectEntryResponse,
     WorkspaceInspectFilesRequest, WorkspaceInspectFilesResponse, WorkspaceNormalizeRequest,
     WorkspaceNormalizeResponse, WorkspaceOpenRequest, WorkspaceOpenResponse,
-};
-use crate::error::AppError;
-use crate::knowledge::{
-    knowledge_annotate_with_global_config_source,
-    knowledge_index_rebuild_with_global_config_source, knowledge_lookup_with_global_config_source,
-    knowledge_term_delete, knowledge_term_upsert, knowledge_validate_with_global_config_source,
-};
-use crate::workspace::{
-    workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
-    workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
-    workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
-    workspace_inspect_files, workspace_normalize, workspace_open_with_global_config_source,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

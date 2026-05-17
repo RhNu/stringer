@@ -6,10 +6,11 @@ use rmcp::{
     model::{CallToolRequestParams, ClientInfo},
 };
 use serde_json::{Value, json};
-use stringer_mcp::{
-    KnowledgeLookupParams, StringerMcp, WorkspaceFinalizeParams, WorkspaceNormalizeParams,
-    WorkspaceOpenParams,
+use stringer_interface::{
+    KnowledgeLookupRequest, WorkspaceFinalizeRequest, WorkspaceNormalizeRequest,
+    WorkspaceOpenRequest,
 };
+use stringer_mcp::StringerMcp;
 
 #[test]
 fn mcp_workspace_open_params_share_interface_contract_type() {
@@ -25,7 +26,7 @@ fn mcp_workspace_open_params_share_interface_contract_type() {
         },
     };
 
-    let params: WorkspaceOpenParams = request;
+    let params: WorkspaceOpenRequest = request;
 
     assert_eq!(params.workspace.as_deref(), Some("translations"));
     assert_workspace_open_interface(params.clone());
@@ -103,14 +104,14 @@ async fn mcp_lists_cli_equivalent_tools_with_object_output_schemas() {
 
 #[test]
 fn mcp_params_reject_removed_workspace_path_fields() {
-    let open_root = serde_json::from_value::<WorkspaceOpenParams>(json!({
+    let open_root = serde_json::from_value::<WorkspaceOpenRequest>(json!({
         "source_root": "input",
         "root": "old-workspace"
     }))
     .unwrap_err();
     assert!(open_root.to_string().contains("unknown field `root`"));
 
-    let open_project = serde_json::from_value::<WorkspaceOpenParams>(json!({
+    let open_project = serde_json::from_value::<WorkspaceOpenRequest>(json!({
         "source_root": "input",
         "project_root": "old-workspace"
     }))
@@ -121,7 +122,7 @@ fn mcp_params_reject_removed_workspace_path_fields() {
             .contains("unknown field `project_root`")
     );
 
-    let finalize_override = serde_json::from_value::<WorkspaceFinalizeParams>(json!({
+    let finalize_override = serde_json::from_value::<WorkspaceFinalizeRequest>(json!({
         "override_root": "old-output"
     }))
     .unwrap_err();
@@ -131,7 +132,7 @@ fn mcp_params_reject_removed_workspace_path_fields() {
             .contains("unknown field `override_root`")
     );
 
-    let lookup_project = serde_json::from_value::<KnowledgeLookupParams>(json!({
+    let lookup_project = serde_json::from_value::<KnowledgeLookupRequest>(json!({
         "text": "Iron Sword",
         "project_root": "old-workspace"
     }))
@@ -142,7 +143,7 @@ fn mcp_params_reject_removed_workspace_path_fields() {
             .contains("unknown field `project_root`")
     );
 
-    let normalize_old_path = serde_json::from_value::<WorkspaceNormalizeParams>(json!({
+    let normalize_old_path = serde_json::from_value::<WorkspaceNormalizeRequest>(json!({
         "workspace": "translations",
         "rule_path": "rules.txt"
     }))

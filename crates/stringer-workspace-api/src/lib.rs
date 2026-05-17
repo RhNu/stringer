@@ -22,6 +22,7 @@ pub use inspect::{
     WorkspaceInspectDiagnostic, WorkspaceInspectDiagnostics, WorkspaceInspectEntries,
     WorkspaceInspectEntry, WorkspaceInspectFiles, inspect_workspace_diagnostics,
     inspect_workspace_entries, inspect_workspace_entry, inspect_workspace_files,
+    workspace_context_label,
 };
 pub use normalize::{
     NormalizeRuleEncoding, NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary,

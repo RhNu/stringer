@@ -120,8 +120,14 @@ fn workspace_commands_reject_removed_path_flags() {
 }
 
 #[test]
-fn workspace_upgrade_command_is_placeholder() {
-    let cli = Cli::parse_from([
+fn workspace_upgrade_command_is_removed() {
+    let mut command = Cli::command();
+    let workspace = command
+        .find_subcommand_mut("workspace")
+        .expect("workspace subcommand exists");
+    assert!(workspace.find_subcommand_mut("upgrade").is_none());
+
+    let result = Cli::try_parse_from([
         "stringer",
         "workspace",
         "upgrade",
@@ -129,13 +135,7 @@ fn workspace_upgrade_command_is_placeholder() {
         "translations",
     ]);
 
-    let Command::Workspace { command } = cli.command else {
-        panic!("expected workspace command");
-    };
-    let WorkspaceCommand::Upgrade(command) = command else {
-        panic!("expected workspace upgrade command");
-    };
-    assert_eq!(command.workspace.as_str(), "translations");
+    assert!(result.is_err());
 }
 
 #[test]

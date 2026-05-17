@@ -22,5 +22,4 @@ pub use workspace::{
     WorkspaceFinalizeCommand, WorkspaceInspectCommand, WorkspaceInspectDiagnosticsCommand,
     WorkspaceInspectEntriesCommand, WorkspaceInspectEntryCommand, WorkspaceInspectFilesCommand,
     WorkspaceNormalizeCommand, WorkspaceNormalizeEncodingArg, WorkspaceOpenCommand,
-    WorkspaceUpgradeCommand,
 };

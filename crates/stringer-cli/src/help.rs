@@ -20,7 +20,7 @@ pub(crate) const SETTINGS_LONG_HELP: &str =
     r#"Use explicit settings for reproducible agent runs, or configure them in stringer.toml."#;
 
 pub(crate) const WORKSPACE_LONG_ABOUT: &str =
-    r#"Manage translation workspace open, batch, finalize, and upgrade commands."#;
+    r#"Manage translation workspace open, batch, inspect, normalize, and finalize commands."#;
 
 pub(crate) const WORKSPACE_OPEN_LONG_ABOUT: &str = r#"Scan a read-only source root and write an editable workspace with workspace.json, batches/, and entries/**/*.jsonl."#;
 
@@ -59,12 +59,6 @@ pub(crate) const WORKSPACE_BATCH_EXPORT_LONG_ABOUT: &str = r#"Export a claimed b
 
 pub(crate) const WORKSPACE_BATCH_RELEASE_LONG_ABOUT: &str =
     r#"Release a claimed batch so its remaining entries can be claimed again."#;
-
-pub(crate) const WORKSPACE_UPGRADE_LONG_ABOUT: &str =
-    r#"Report that legacy manifest.json workspace upgrades are not implemented yet."#;
-
-pub(crate) const WORKSPACE_UPGRADE_AFTER_LONG_HELP: &str =
-    r#"Recreate legacy workspaces with workspace open until upgrade support exists."#;
 
 pub(crate) const ADAPT_LONG_ABOUT: &str =
     r#"Convert external translation resources into Stringer translation memory."#;

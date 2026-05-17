@@ -9,11 +9,11 @@ use stringer_workspace_core::{
     parse_language_name,
 };
 
-use crate::dto::{
+use crate::paths::workspace_config_path;
+use stringer_interface::{
     AdaptFormatInput, KnowledgeKindInput, KnowledgeLookupFieldInput, KnowledgeLookupSourceInput,
     SettingsInput,
 };
-use crate::paths::workspace_config_path;
 
 pub(crate) fn load_settings_for_workspace(
     workspace: &Utf8PathBuf,

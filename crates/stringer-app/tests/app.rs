@@ -422,15 +422,18 @@ async fn app_error_codes_preserve_core_and_knowledge_failures() {
         })
         .await
         .unwrap_err();
-    assert_eq!(core_error.code(), "workspace.missing_setting");
-    assert_eq!(core_error.details()["name"], "game_release");
+    let core_payload = core_error.payload();
+    assert_eq!(core_payload.code, "workspace.missing_setting");
+    assert!(core_payload.message.contains("missing workspace setting"));
+    assert_eq!(core_payload.details["name"], "game_release");
 
     let logical_path_error = AppError::from(WorkspaceCoreError::InvalidLogicalPath {
         path: "bad".to_string(),
         message: "bad logical path".to_string(),
     });
-    assert_eq!(logical_path_error.code(), "workspace.invalid_logical_path");
-    assert_eq!(logical_path_error.details()["path"], "bad");
+    let logical_path_payload = logical_path_error.payload();
+    assert_eq!(logical_path_payload.code, "workspace.invalid_logical_path");
+    assert_eq!(logical_path_payload.details["path"], "bad");
 
     let knowledge_error = knowledge_term_upsert(KnowledgeTermUpsertRequest {
         workspace: Some(path_string(workspace.path())),
@@ -449,11 +452,12 @@ async fn app_error_codes_preserve_core_and_knowledge_failures() {
         rebuild_index: false,
     })
     .unwrap_err();
+    let knowledge_payload = knowledge_error.payload();
     assert_eq!(
-        knowledge_error.code(),
+        knowledge_payload.code,
         "workspace.invalid_knowledge_term_scope"
     );
-    assert_eq!(knowledge_error.details()["key"], "subrecord");
+    assert_eq!(knowledge_payload.details["key"], "subrecord");
 }
 
 #[tokio::test]

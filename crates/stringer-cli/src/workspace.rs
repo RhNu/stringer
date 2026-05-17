@@ -11,7 +11,7 @@ use stringer_app::{
     workspace_batch_claim, workspace_batch_count, workspace_batch_detail, workspace_batch_export,
     workspace_batch_read, workspace_batch_release, workspace_batch_submit, workspace_finalize,
     workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
-    workspace_inspect_files, workspace_normalize, workspace_open, workspace_upgrade_unsupported,
+    workspace_inspect_files, workspace_normalize, workspace_open,
 };
 
 use crate::app::{CliError, print_json};
@@ -52,12 +52,6 @@ pub enum WorkspaceCommand {
         #[command(subcommand)]
         command: WorkspaceInspectCommand,
     },
-    #[command(
-        about = "Upgrade a legacy workspace to the current schema",
-        long_about = WORKSPACE_UPGRADE_LONG_ABOUT,
-        after_long_help = WORKSPACE_UPGRADE_AFTER_LONG_HELP
-    )]
-    Upgrade(WorkspaceUpgradeCommand),
 }
 
 #[derive(Debug, Parser)]
@@ -403,17 +397,6 @@ pub struct WorkspaceBatchReleaseCommand {
     pub batch_id: String,
 }
 
-#[derive(Debug, Parser)]
-pub struct WorkspaceUpgradeCommand {
-    #[arg(
-        long,
-        default_value = ".",
-        value_name = "WORKSPACE",
-        help = "Legacy translation workspace directory"
-    )]
-    pub workspace: Utf8PathBuf,
-}
-
 pub async fn run_workspace(command: WorkspaceCommand, feedback: &Feedback) -> Result<(), CliError> {
     match command {
         WorkspaceCommand::Open(command) => {
@@ -452,9 +435,6 @@ pub async fn run_workspace(command: WorkspaceCommand, feedback: &Feedback) -> Re
         WorkspaceCommand::Normalize(command) => run_workspace_normalize(command, feedback),
         WorkspaceCommand::Batch { command } => run_workspace_batch(command, feedback),
         WorkspaceCommand::Inspect { command } => run_workspace_inspect(command, feedback),
-        WorkspaceCommand::Upgrade(command) => {
-            Err(workspace_upgrade_unsupported(command.workspace.to_string()).into())
-        }
     }
 }
 

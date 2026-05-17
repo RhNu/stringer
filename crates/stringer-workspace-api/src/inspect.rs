@@ -2,7 +2,7 @@ pub use stringer_workspace_ops::{
     InspectDiagnosticSeverity, InspectEntryStatus, InspectWorkspaceDiagnosticsOptions,
     InspectWorkspaceEntriesOptions, InspectWorkspaceEntryOptions, InspectWorkspaceFilesOptions,
     WorkspaceInspectDiagnostic, WorkspaceInspectDiagnostics, WorkspaceInspectEntries,
-    WorkspaceInspectEntry, WorkspaceInspectFiles,
+    WorkspaceInspectEntry, WorkspaceInspectFiles, workspace_context_label,
 };
 
 use crate::WorkspaceError;

@@ -1,7 +1,5 @@
 #![forbid(unsafe_code)]
 
-mod schema;
-
 use std::{any::Any, sync::Arc};
 
 use rmcp::{
@@ -21,8 +19,7 @@ use stringer_app::{
     workspace_inspect_diagnostics, workspace_inspect_entries, workspace_inspect_entry,
     workspace_inspect_files, workspace_normalize, workspace_open,
 };
-
-pub use schema::*;
+use stringer_interface::*;
 
 #[derive(Debug, Clone, Default)]
 pub struct StringerMcp;
@@ -32,273 +29,273 @@ impl StringerMcp {
     #[tool(
         name = "workspace_open",
         description = "Open a translation workspace from a read-only source root.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceOpenParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceOpenResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceOpenRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceOpenResponse>()
     )]
     pub async fn workspace_open(
         &self,
-        Parameters(request): Parameters<WorkspaceOpenParams>,
-    ) -> Result<Json<WorkspaceOpenResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceOpenRequest>,
+    ) -> Result<Json<WorkspaceOpenResponse>, ErrorData> {
         app_json(workspace_open(request).await)
     }
 
     #[tool(
         name = "workspace_finalize",
         description = "Finalize a translation workspace into an output directory.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceFinalizeParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceFinalizeResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceFinalizeRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceFinalizeResponse>()
     )]
     pub async fn workspace_finalize(
         &self,
-        Parameters(request): Parameters<WorkspaceFinalizeParams>,
-    ) -> Result<Json<WorkspaceFinalizeResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceFinalizeRequest>,
+    ) -> Result<Json<WorkspaceFinalizeResponse>, ErrorData> {
         app_json(workspace_finalize(request).await)
     }
 
     #[tool(
         name = "workspace_batch_count",
         description = "Count translation rows, claims, and diagnostics in a workspace.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchCountParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchCountResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchCountRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchCountResponse>()
     )]
     pub async fn workspace_batch_count(
         &self,
-        Parameters(request): Parameters<WorkspaceBatchCountParams>,
-    ) -> Result<Json<WorkspaceBatchCountResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceBatchCountRequest>,
+    ) -> Result<Json<WorkspaceBatchCountResponse>, ErrorData> {
         app_json(workspace_batch_count(request))
     }
 
     #[tool(
         name = "workspace_batch_claim",
         description = "Claim eligible translation rows for agent work.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchClaimParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchClaimResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchClaimRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchClaimResponse>()
     )]
     pub async fn workspace_batch_claim(
         &self,
-        Parameters(request): Parameters<WorkspaceBatchClaimParams>,
-    ) -> Result<Json<WorkspaceBatchClaimResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceBatchClaimRequest>,
+    ) -> Result<Json<WorkspaceBatchClaimResponse>, ErrorData> {
         app_json(workspace_batch_claim(request))
     }
 
     #[tool(
         name = "workspace_batch_release",
         description = "Release a claimed batch without submitting translations.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReleaseParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchReleaseResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReleaseRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchReleaseResponse>()
     )]
     pub async fn workspace_batch_release(
         &self,
-        Parameters(request): Parameters<WorkspaceBatchReleaseParams>,
-    ) -> Result<Json<WorkspaceBatchReleaseResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceBatchReleaseRequest>,
+    ) -> Result<Json<WorkspaceBatchReleaseResponse>, ErrorData> {
         app_json(workspace_batch_release(request))
     }
 
     #[tool(
         name = "workspace_batch_read",
         description = "Read compact entries from a claimed batch.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReadParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchReadResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchReadRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchReadResponse>()
     )]
     pub async fn workspace_batch_read(
         &self,
-        Parameters(request): Parameters<WorkspaceBatchReadParams>,
-    ) -> Result<Json<WorkspaceBatchReadResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceBatchReadRequest>,
+    ) -> Result<Json<WorkspaceBatchReadResponse>, ErrorData> {
         app_json(workspace_batch_read(request))
     }
 
     #[tool(
         name = "workspace_batch_detail",
         description = "Read full detail for one or more claimed batch keys.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchDetailParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchDetailResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchDetailRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchDetailResponse>()
     )]
     pub async fn workspace_batch_detail(
         &self,
-        Parameters(request): Parameters<WorkspaceBatchDetailParams>,
-    ) -> Result<Json<WorkspaceBatchDetailResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceBatchDetailRequest>,
+    ) -> Result<Json<WorkspaceBatchDetailResponse>, ErrorData> {
         app_json(workspace_batch_detail(request))
     }
 
     #[tool(
         name = "workspace_batch_submit",
         description = "Submit translate, skip, or pending actions for a claimed batch.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchSubmitParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchSubmitResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchSubmitRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchSubmitResponse>()
     )]
     pub async fn workspace_batch_submit(
         &self,
-        Parameters(request): Parameters<WorkspaceBatchSubmitParams>,
-    ) -> Result<Json<WorkspaceBatchSubmitResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceBatchSubmitRequest>,
+    ) -> Result<Json<WorkspaceBatchSubmitResponse>, ErrorData> {
         app_json(workspace_batch_submit(request))
     }
 
     #[tool(
         name = "workspace_batch_export",
         description = "Export a claimed batch to an editable JSON or CSV submission file.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchExportParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceBatchExportResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceBatchExportRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceBatchExportResponse>()
     )]
     pub async fn workspace_batch_export(
         &self,
-        Parameters(request): Parameters<WorkspaceBatchExportParams>,
-    ) -> Result<Json<WorkspaceBatchExportResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceBatchExportRequest>,
+    ) -> Result<Json<WorkspaceBatchExportResponse>, ErrorData> {
         app_json(workspace_batch_export(request))
     }
 
     #[tool(
         name = "workspace_normalize",
         description = "Normalize existing translations with xTranslator Search/Replace rules.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceNormalizeParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceNormalizeResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceNormalizeRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceNormalizeResponse>()
     )]
     pub async fn workspace_normalize(
         &self,
-        Parameters(request): Parameters<WorkspaceNormalizeParams>,
-    ) -> Result<Json<WorkspaceNormalizeResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceNormalizeRequest>,
+    ) -> Result<Json<WorkspaceNormalizeResponse>, ErrorData> {
         app_json(workspace_normalize(request))
     }
 
     #[tool(
         name = "workspace_inspect_files",
         description = "List workspace entry files without reading raw workspace files directly.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectFilesParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceInspectFilesResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectFilesRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectFilesResponse>()
     )]
     pub async fn workspace_inspect_files(
         &self,
-        Parameters(request): Parameters<WorkspaceInspectFilesParams>,
-    ) -> Result<Json<WorkspaceInspectFilesResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceInspectFilesRequest>,
+    ) -> Result<Json<WorkspaceInspectFilesResponse>, ErrorData> {
         app_json(workspace_inspect_files(request))
     }
 
     #[tool(
         name = "workspace_inspect_entries",
         description = "List workspace entries without creating a translation claim.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectEntriesParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceInspectEntriesResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectEntriesRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectEntriesResponse>()
     )]
     pub async fn workspace_inspect_entries(
         &self,
-        Parameters(request): Parameters<WorkspaceInspectEntriesParams>,
-    ) -> Result<Json<WorkspaceInspectEntriesResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceInspectEntriesRequest>,
+    ) -> Result<Json<WorkspaceInspectEntriesResponse>, ErrorData> {
         app_json(workspace_inspect_entries(request))
     }
 
     #[tool(
         name = "workspace_inspect_entry",
         description = "Read one workspace entry by id without editing the workspace.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectEntryParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceInspectEntry>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectEntryRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectEntryResponse>()
     )]
     pub async fn workspace_inspect_entry(
         &self,
-        Parameters(request): Parameters<WorkspaceInspectEntryParams>,
-    ) -> Result<Json<WorkspaceInspectEntry>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceInspectEntryRequest>,
+    ) -> Result<Json<WorkspaceInspectEntryResponse>, ErrorData> {
         app_json(workspace_inspect_entry(request))
     }
 
     #[tool(
         name = "workspace_inspect_diagnostics",
         description = "List workspace diagnostics expanded with entry context for review.",
-        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectDiagnosticsParams>>(),
-        output_schema = compatible_output_schema_for_type::<WorkspaceInspectDiagnosticsResult>()
+        input_schema = compatible_schema_for_type::<Parameters<WorkspaceInspectDiagnosticsRequest>>(),
+        output_schema = compatible_output_schema_for_type::<WorkspaceInspectDiagnosticsResponse>()
     )]
     pub async fn workspace_inspect_diagnostics(
         &self,
-        Parameters(request): Parameters<WorkspaceInspectDiagnosticsParams>,
-    ) -> Result<Json<WorkspaceInspectDiagnosticsResult>, ErrorData> {
+        Parameters(request): Parameters<WorkspaceInspectDiagnosticsRequest>,
+    ) -> Result<Json<WorkspaceInspectDiagnosticsResponse>, ErrorData> {
         app_json(workspace_inspect_diagnostics(request))
     }
 
     #[tool(
         name = "adapt_import",
         description = "Import an external translation resource as memory JSONL.",
-        input_schema = compatible_schema_for_type::<Parameters<AdaptImportParams>>(),
-        output_schema = compatible_output_schema_for_type::<AdaptImportResult>()
+        input_schema = compatible_schema_for_type::<Parameters<AdaptImportRequest>>(),
+        output_schema = compatible_output_schema_for_type::<AdaptImportResponse>()
     )]
     pub async fn adapt_import(
         &self,
-        Parameters(request): Parameters<AdaptImportParams>,
-    ) -> Result<Json<AdaptImportResult>, ErrorData> {
+        Parameters(request): Parameters<AdaptImportRequest>,
+    ) -> Result<Json<AdaptImportResponse>, ErrorData> {
         app_json(adapt_import(request).await)
     }
 
     #[tool(
         name = "knowledge_annotate",
         description = "Annotate workspace rows with terminology, memory, and diagnostics.",
-        input_schema = compatible_schema_for_type::<Parameters<KnowledgeAnnotateParams>>(),
-        output_schema = compatible_output_schema_for_type::<KnowledgeOperationResult>()
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeAnnotateRequest>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeOperationResponse>()
     )]
     pub async fn knowledge_annotate(
         &self,
-        Parameters(request): Parameters<KnowledgeAnnotateParams>,
-    ) -> Result<Json<KnowledgeOperationResult>, ErrorData> {
+        Parameters(request): Parameters<KnowledgeAnnotateRequest>,
+    ) -> Result<Json<KnowledgeOperationResponse>, ErrorData> {
         app_json(knowledge_annotate(request))
     }
 
     #[tool(
         name = "knowledge_validate",
         description = "Validate workspace translations and rewrite diagnostics.",
-        input_schema = compatible_schema_for_type::<Parameters<KnowledgeValidateParams>>(),
-        output_schema = compatible_output_schema_for_type::<KnowledgeOperationResult>()
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeValidateRequest>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeOperationResponse>()
     )]
     pub async fn knowledge_validate(
         &self,
-        Parameters(request): Parameters<KnowledgeValidateParams>,
-    ) -> Result<Json<KnowledgeOperationResult>, ErrorData> {
+        Parameters(request): Parameters<KnowledgeValidateRequest>,
+    ) -> Result<Json<KnowledgeOperationResponse>, ErrorData> {
         app_json(knowledge_validate(request))
     }
 
     #[tool(
         name = "knowledge_lookup",
         description = "Search terminology and translation memory.",
-        input_schema = compatible_schema_for_type::<Parameters<KnowledgeLookupParams>>(),
-        output_schema = compatible_output_schema_for_type::<KnowledgeLookupResult>()
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeLookupRequest>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeLookupResponse>()
     )]
     pub async fn knowledge_lookup(
         &self,
-        Parameters(request): Parameters<KnowledgeLookupParams>,
-    ) -> Result<Json<KnowledgeLookupResult>, ErrorData> {
+        Parameters(request): Parameters<KnowledgeLookupRequest>,
+    ) -> Result<Json<KnowledgeLookupResponse>, ErrorData> {
         app_json(knowledge_lookup(request))
     }
 
     #[tool(
         name = "knowledge_index_rebuild",
         description = "Rebuild the derived knowledge index for a workspace.",
-        input_schema = compatible_schema_for_type::<Parameters<KnowledgeIndexRebuildParams>>(),
-        output_schema = compatible_output_schema_for_type::<KnowledgeIndexRebuildResult>()
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeIndexRebuildRequest>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeIndexRebuildResponse>()
     )]
     pub async fn knowledge_index_rebuild(
         &self,
-        Parameters(request): Parameters<KnowledgeIndexRebuildParams>,
-    ) -> Result<Json<KnowledgeIndexRebuildResult>, ErrorData> {
+        Parameters(request): Parameters<KnowledgeIndexRebuildRequest>,
+    ) -> Result<Json<KnowledgeIndexRebuildResponse>, ErrorData> {
         app_json(knowledge_index_rebuild(request))
     }
 
     #[tool(
         name = "knowledge_term_upsert",
         description = "Create or replace workspace terminology entries.",
-        input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermUpsertParams>>(),
-        output_schema = compatible_output_schema_for_type::<KnowledgeTermsEditResult>()
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermUpsertRequest>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeTermsEditResponse>()
     )]
     pub async fn knowledge_term_upsert(
         &self,
-        Parameters(request): Parameters<KnowledgeTermUpsertParams>,
-    ) -> Result<Json<KnowledgeTermsEditResult>, ErrorData> {
+        Parameters(request): Parameters<KnowledgeTermUpsertRequest>,
+    ) -> Result<Json<KnowledgeTermsEditResponse>, ErrorData> {
         app_json(knowledge_term_upsert(request))
     }
 
     #[tool(
         name = "knowledge_term_delete",
         description = "Delete a workspace terminology entry by id.",
-        input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermDeleteParams>>(),
-        output_schema = compatible_output_schema_for_type::<KnowledgeTermEditResult>()
+        input_schema = compatible_schema_for_type::<Parameters<KnowledgeTermDeleteRequest>>(),
+        output_schema = compatible_output_schema_for_type::<KnowledgeTermEditResponse>()
     )]
     pub async fn knowledge_term_delete(
         &self,
-        Parameters(request): Parameters<KnowledgeTermDeleteParams>,
-    ) -> Result<Json<KnowledgeTermEditResult>, ErrorData> {
+        Parameters(request): Parameters<KnowledgeTermDeleteRequest>,
+    ) -> Result<Json<KnowledgeTermEditResponse>, ErrorData> {
         app_json(knowledge_term_delete(request))
     }
 }
@@ -349,13 +346,6 @@ where
 }
 
 fn app_error(error: AppError) -> ErrorData {
-    let message = error.to_string();
-    ErrorData::internal_error(
-        message.clone(),
-        Some(json!({
-            "code": error.code(),
-            "message": message,
-            "details": error.details(),
-        })),
-    )
+    let payload = error.payload();
+    ErrorData::internal_error(payload.message.clone(), Some(json!(payload)))
 }

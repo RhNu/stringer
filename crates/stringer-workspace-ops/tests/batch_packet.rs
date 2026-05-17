@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 
 use serde_json::Value;
@@ -6,12 +7,26 @@ use stringer_workspace_ops::{
     BatchExportFormat, BatchExportOptions, BatchSubmitAction, BatchSubmitEntry, BatchSubmitOptions,
     BatchSubmitStatus, ClaimBatchOptions, CountBatchOptions, ReadBatchDetailOptions,
     ReadBatchOptions, WorkspaceOpsError, claim_batch, count_batch, export_batch_submission,
-    read_batch, read_batch_detail, submit_batch,
+    read_batch, read_batch_detail, submit_batch, workspace_context_label,
 };
 
 mod support;
 
 use support::*;
+
+#[test]
+fn workspace_context_label_formats_agent_entry_context() {
+    let context = BTreeMap::from([
+        ("record_type".to_string(), "WEAP".to_string()),
+        ("subrecord".to_string(), "FULL".to_string()),
+        ("form_id".to_string(), "0x00001234".to_string()),
+    ]);
+
+    assert_eq!(
+        workspace_context_label("entries/plugin/Example.esp/WEAP.jsonl", &context),
+        "plugin WEAP FULL 0x00001234"
+    );
+}
 
 #[test]
 fn batch_claim_read_detail_and_submit_use_stable_keys_and_revisions() {

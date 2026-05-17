@@ -4,6 +4,7 @@ mod batch;
 mod batch_packet;
 mod error;
 mod inspect;
+mod labels;
 mod normalize;
 
 pub use batch::{
@@ -24,6 +25,7 @@ pub use inspect::{
     WorkspaceInspectEntry, WorkspaceInspectFiles, inspect_workspace_diagnostics,
     inspect_workspace_entries, inspect_workspace_entry, inspect_workspace_files,
 };
+pub use labels::workspace_context_label;
 pub use normalize::{
     NormalizeRuleEncoding, NormalizeWarning, NormalizeWorkspaceOptions, NormalizeWorkspaceSummary,
     WorkspaceNormalizeChange, normalize_workspace,

@@ -114,7 +114,7 @@ async fn import_rejects_legacy_manifest_only_workspace() {
     .unwrap_err();
 
     assert!(error.to_string().contains("legacy translation workspace"));
-    assert!(error.to_string().contains("workspace.json"));
+    assert!(error.to_string().contains("workspace open"));
 }
 
 #[tokio::test]
