@@ -522,6 +522,31 @@ fn batch_submit_options_parse_csv_submission_text() {
 }
 
 #[test]
+fn batch_submit_options_default_missing_submission_revision_to_one() {
+    let workspace = camino::Utf8PathBuf::from("workspace");
+
+    let json_input = camino::Utf8PathBuf::from("patch.json");
+    let json_options = BatchSubmitOptions::from_submission_text(
+        workspace.clone(),
+        &json_input,
+        r#"{"batch_id":"b-test","entries":[]}"#,
+    )
+    .unwrap();
+    assert_eq!(json_options.batch_id, "b-test");
+    assert_eq!(json_options.revision, 1);
+
+    let csv_input = camino::Utf8PathBuf::from("patch.csv");
+    let csv_submission = concat!(
+        "# stringer batch_id=b-test\n",
+        "key,source,current_translation,context_label,diagnostic_codes,action,translation,skip_reason\n",
+    );
+    let csv_options =
+        BatchSubmitOptions::from_submission_text(workspace, &csv_input, csv_submission).unwrap();
+    assert_eq!(csv_options.batch_id, "b-test");
+    assert_eq!(csv_options.revision, 1);
+}
+
+#[test]
 fn batch_submit_options_reject_invalid_csv_submission_text() {
     let workspace = camino::Utf8PathBuf::from("workspace");
     let input = camino::Utf8PathBuf::from("patch.csv");

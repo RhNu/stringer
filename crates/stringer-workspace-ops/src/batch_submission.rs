@@ -6,6 +6,8 @@ use serde::Deserialize;
 use crate::WorkspaceOpsError;
 use crate::batch_packet::{BatchSubmitAction, BatchSubmitEntry, BatchSubmitOptions, SKIP_REASONS};
 
+const DEFAULT_SUBMISSION_REVISION: u64 = 1;
+
 impl BatchSubmitOptions {
     pub fn from_submission_file(
         workspace: Utf8PathBuf,
@@ -51,8 +53,13 @@ impl BatchSubmitOptions {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 struct BatchSubmitInput {
     batch_id: String,
+    #[serde(default = "default_submission_revision")]
     revision: u64,
     entries: Vec<BatchSubmitEntry>,
+}
+
+fn default_submission_revision() -> u64 {
+    DEFAULT_SUBMISSION_REVISION
 }
 
 fn parse_batch_submit_csv(
@@ -114,12 +121,7 @@ fn parse_batch_submit_csv(
                 format!("CSV submission `{path}` is missing batch_id metadata"),
             )
         })?,
-        revision: revision.ok_or_else(|| {
-            invalid_submission(
-                path,
-                format!("CSV submission `{path}` is missing revision metadata"),
-            )
-        })?,
+        revision: revision.unwrap_or(DEFAULT_SUBMISSION_REVISION),
         entries,
     })
 }
